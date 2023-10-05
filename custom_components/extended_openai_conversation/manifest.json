@@ -1,0 +1,18 @@
+{
+  "domain": "extended_openai_conversation",
+  "name": "Extended OpenAI Conversation",
+  "codeowners": [
+    "@jekalmin"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "conversation"
+  ],
+  "documentation": "https://github.com/jekalmin/extended_openai_conversation",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [
+    "openai==0.27.2"
+  ],
+  "version": "0.0.1"
+}
