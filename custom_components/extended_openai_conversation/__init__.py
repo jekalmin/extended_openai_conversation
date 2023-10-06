@@ -235,14 +235,12 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         return message
 
     def execute_function_call(self, user, messages, message, exposed_entities):
-        if message["function_call"]["name"] == "call_services":
-            return self.call_services(user, messages, message, exposed_entities)
-        elif message["function_call"]["name"] == "get_states":
-            return self.get_states(user, messages, message, exposed_entities)
+        if message["function_call"]["name"] == "execute_services":
+            return self.execute_services(user, messages, message, exposed_entities)
         else:
             raise FunctionNotFound(message["function_call"]["name"])
 
-    async def call_services(self, user, messages, message, exposed_entities):
+    async def execute_services(self, user, messages, message, exposed_entities):
         arguments = json.loads(message["function_call"]["arguments"])
 
         result = []
@@ -253,16 +251,19 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 "service_data", service_argument.get("data", {})
             )
             entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
+            if isinstance(entity_id, str):
+                entity_id = entity_id.split(",")
             service_data["entity_id"] = entity_id
 
             if entity_id is None:
                 raise CallServiceError(domain, service, service_data)
             if not self.hass.services.has_service(domain, service):
                 raise ServiceNotFound(domain, service)
-            if self.hass.states.get(entity_id) is None:
+            if any(self.hass.states.get(entity) is None for entity in entity_id):
                 raise EntityNotFound(entity_id)
-            if not any(entity["entity_id"] == entity_id for entity in exposed_entities):
-                raise EntityNotExposed(entity_id)
+            exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
+            if not set(entity_id).issubset(exposed_entity_ids):
+                raise EntityNotExposed(str(entity_id))
 
             try:
                 await self.hass.services.async_call(
@@ -274,31 +275,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             except HomeAssistantError:
                 _LOGGER.error(e)
                 result.append(False)
-
-        messages.append(
-            {
-                "role": "function",
-                "name": message["function_call"]["name"],
-                "content": str(result),
-            }
-        )
-        return await self.query(user, messages, exposed_entities)
-
-    async def get_states(self, user, messages, message, exposed_entities):
-        arguments = json.loads(message["function_call"]["arguments"])
-
-        result = []
-
-        for service_argument in arguments.get("list", []):
-            entity_id = service_argument["entity_id"]
-            entity = self.hass.states.get(entity_id)
-
-            if entity is None:
-                raise EntityNotFound(entity_id)
-            if not any(entity["entity_id"] == entity_id for entity in exposed_entities):
-                raise EntityNotExposed(entity_id)
-
-            result.append({"entity_id": entity_id, "state": entity.state})
 
         messages.append(
             {

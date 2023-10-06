@@ -10,14 +10,15 @@ A list of available devices in this smart home:
 {% for entity in exposed_entities -%}
 - entity_id: {{ entity.entity_id }}
   name: {{ entity.name }}
-  state: {{entity.state}}
-  aliases: {{entity.aliases | join(', ')}}
+  state: {{ entity.state }}
+  {{- "\n  aliases" + entity.aliases | join(',') if entity.aliases }}
 {% endfor -%}
 ```
 
 If user asks for devices that are not available, answer the user's question about the world truthfully.
 If the query requires the current state of device, answer the user's question using current state from the list of available devices. If device is not present in the list, reject the request.
 If the query requires a call service, look for the device from the list. If device is not present in the list, reject the request.
+If multiple devices are requested, answer at most five devices at a time.
 """
 CONF_CHAT_MODEL = "chat_model"
 DEFAULT_CHAT_MODEL = "gpt-3.5-turbo"
@@ -31,8 +32,8 @@ DEFAULT_TEMPERATURE = 0.5
 CONF_FUNCTION_CALLS = "auto"
 CONF_FUNCTIONS = [
     {
-        "name": "call_services",
-        "description": "Use this function to call service of devices in Home Assistant.",
+        "name": "execute_services",
+        "description": "Use this function to execute service of devices in Home Assistant.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -59,27 +60,5 @@ CONF_FUNCTIONS = [
                 }
             },
         },
-    },
-    {
-        "name": "get_states",
-        "description": "Use this function to get current state of devices in Home Assistant.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "list": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "entity_id": {
-                                "type": "string",
-                                "description": "The entity id to get current state",
-                            }
-                        },
-                        "required": ["entity_id"],
-                    },
-                }
-            },
-        },
-    },
+    }
 ]
