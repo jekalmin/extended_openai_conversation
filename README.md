@@ -28,8 +28,10 @@ After installed, you need to expose entities from "http://{your-home-assistant}/
 
 ## Examples
 ### 1. Turn on single entity
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/938dee95-8907-44fd-9fb8-dc8cd559fea2
 
 ### 2. Turn on multiple entities
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965-94a7-4cbe-908a-e24f7bbb0a93
 
 ## Customize
 ### Prompt
