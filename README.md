@@ -35,6 +35,12 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/938dee95
 ### 2. Turn on multiple entities
 https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965-94a7-4cbe-908a-e24f7bbb0a93
 
+### 3. Hook with custom notify function
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7-0188-41eb-b2db-6eab61499a99
+
+
+
+
 ## Services
 ### extended_openai_conversation.reload
 - reload configuration file `<config directory>/extended_openai_conversation/functions.yaml`
