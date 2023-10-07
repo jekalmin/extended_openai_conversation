@@ -6,6 +6,8 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 ## How it works
 Extended OpenAI Conversation uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/gpt/function-calling) to call service of Home Assistant.
 
+Since "gpt-3.5-turbo" model already knows how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/jekalmin/extended_openai_conversation#preparation)
+
 ## Installation
 1. Copy `extended_openai_conversation` folder into `<config directory>/custom_components`
 2. Restart Home Assistant
@@ -33,9 +35,80 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/938dee95
 ### 2. Turn on multiple entities
 https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965-94a7-4cbe-908a-e24f7bbb0a93
 
-## Customize
-### Prompt
-- TBD
-### Function
-- TBD
+## Services
+### extended_openai_conversation.reload
+- reload configuration file `<config directory>/extended_openai_conversation/functions.yaml`
 
+| service data  | attribute |	required |	dataType |	description |
+|---------------|-----------|-----------|-----------|---------------|
+
+
+## Customize
+### Options
+By clicking a button from Edit Assist, Options can be customized.<br/>
+Options are same as [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options except for "Maximum function calls per conversation"
+
+"Maximum function calls per conversation" is added to limit the number of function calls in a single conversation.<br/>
+(Sometimes function is called over and over again, possibly running into infinite calls)
+
+| Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |
+|----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="602" alt="스크린샷 2023-10-07 오후 7 38 52" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/c878255b-19f5-422c-b4e1-318fef2feeaa"> |
+
+
+### Function
+Custom functions can be added by editing `functions.yaml` file
+  - `<config directory>/extended_openai_conversation/functions.yaml`
+
+This is an example of configuration.
+
+```yaml
+- spec:
+    name: get_current_weather
+    description: Get the current weather in a given location
+    parameters:
+      type: object
+      properties:
+        location:
+          type: string
+          description: The city and state, e.g. San Francisco, CA
+        unit:
+          type: string
+          enum:
+          - celcius
+          - farenheit
+      required:
+      - location
+  function:
+    type: template
+    value_template: The temperature in {{ location }} is 25 {{unit}}
+- spec:
+    name: add_item_to_shopping_cart
+    description: Add item to shopping cart
+    parameters:
+      type: object
+      properties:
+        item:
+          type: string
+          description: The item to be added to cart
+      required:
+      - item
+  function:
+    type: script
+    sequence:
+    - service: shopping_list.add_item
+      data:
+        name: '{{item}}'
+```
+
+Copy and paste above configuration into `functions.yaml`, then either call `extended_openai_conversation.reload()` or restart Home Assistant.
+
+Then you will be able to let OpenAI call your function.
+
+| get_current_weather                                                                                                                                                           | add_item_to_shopping_cart                                                                                                                                                     | 
+|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img width="391" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8"> | <img width="341" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee"> |
+
+Supported function types are following:
+  - script
+  - template

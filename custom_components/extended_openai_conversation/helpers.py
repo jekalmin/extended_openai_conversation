@@ -24,7 +24,7 @@ class FileSettingLoader:
     def __init__(
         self,
         file_path: str,
-        initial_settings: str,
+        initial_settings: str = "",
         encoding: str = "utf-8",
         template_keys=["data", "event_data", "target", "service"],
     ) -> None:
@@ -55,9 +55,10 @@ class FileSettingLoader:
     def load(self):
         with open(self.file_path, encoding=self.encoding) as f:
             settings = yaml.load(f, Loader=yaml.FullLoader)
-            for setting in settings:
-                for function in setting["function"].values():
-                    self.convert_to_template(function, [])
+            if settings:
+                for setting in settings:
+                    for function in setting["function"].values():
+                        self.convert_to_template(function, [])
             self.settings = settings
             _LOGGER.debug("setting loaded: " + str(self.settings))
 

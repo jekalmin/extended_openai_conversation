@@ -50,7 +50,6 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DOMAIN,
     SERVICE_RELOAD,
-    SAMPLE_FUNCTIONS,
 )
 
 from .exceptions import (
@@ -78,13 +77,16 @@ FUNCTION_EXECUTORS: dict[str, CustomFunctionExecutor] = {
     "template": TemplateCustomFunctionExecutor(),
 }
 
+# hass.data key for logging information.
+DATA_AGENT = "agent"
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up OpenAI Conversation."""
 
     async def reload(serviceCall: ServiceCall):
         for data in hass.data.get(DOMAIN, {}).values():
-            data["agent"].reload()
+            data[DATA_AGENT].reload()
 
     hass.services.async_register(DOMAIN, SERVICE_RELOAD, reload, schema=vol.Schema({}))
     return True
@@ -107,15 +109,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except error.OpenAIError as err:
         raise ConfigEntryNotReady(err) from err
 
-    fileSettingLoader = FileSettingLoader(
-        os.path.join(DOMAIN, "functions.yaml"),
-        yaml.dump(SAMPLE_FUNCTIONS, sort_keys=False),
-    )
-
+    fileSettingLoader = FileSettingLoader(os.path.join(DOMAIN, "functions.yaml"))
     agent = OpenAIAgent(hass, entry, fileSettingLoader)
+
     data = hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
     data[CONF_API_KEY] = entry.data[CONF_API_KEY]
-    data["agent"] = agent
+    data[DATA_AGENT] = agent
 
     conversation.async_set_agent(hass, entry, agent)
     return True
@@ -139,7 +138,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
         self.loader = loader
-        self.custom_setting = loader.get_setting()
+        self.custom_setting = loader.get_setting() or []
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -222,7 +221,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
     def reload(self):
         self.loader.load()
-        self.custom_setting = self.loader.get_setting()
+        self.custom_setting = self.loader.get_setting() or []
 
     def get_exposed_entities(self):
         states = [
