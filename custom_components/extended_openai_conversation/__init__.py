@@ -5,6 +5,8 @@ from functools import partial
 import logging
 from typing import Literal
 import json
+import os
+import yaml
 
 import openai
 from openai import error
@@ -21,6 +23,8 @@ from homeassistant.exceptions import (
     TemplateError,
     ServiceNotFound,
 )
+from homeassistant.helpers.script import Script, async_validate_actions_config
+
 from homeassistant.helpers import (
     config_validation as cv,
     intent,
@@ -50,6 +54,8 @@ from .exceptions import (
     FunctionNotFound,
 )
 
+from .helpers import FileSettingLoader
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,8 +80,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(err) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data[CONF_API_KEY]
+    test = [
+        {
+            "spec": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA",
+                        },
+                        "unit": {"type": "string", "enum": ["celcius", "farenheit"]},
+                    },
+                },
+            },
+            "function": [
+                {
+                    "platform": "template",
+                    "value_template": "The temperature in {{ location }} is {{unit}}",
+                }
+            ],
+        }
+    ]
 
-    conversation.async_set_agent(hass, entry, OpenAIAgent(hass, entry))
+    fileSettingLoader = FileSettingLoader(
+        os.path.join(DOMAIN, "functions.yaml"), yaml.dump(test)
+    )
+
+    conversation.async_set_agent(
+        hass, entry, OpenAIAgent(hass, entry, fileSettingLoader.get_setting())
+    )
     return True
 
 
@@ -89,11 +125,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class OpenAIAgent(conversation.AbstractConversationAgent):
     """OpenAI conversation agent."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, custom_setting) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
+        self.custom_setting = custom_setting
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -111,6 +148,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             messages = self.history[conversation_id]
         else:
             conversation_id = ulid.ulid()
+            user_input.conversation_id = conversation_id
             try:
                 prompt = self._async_generate_prompt(raw_prompt, exposed_entities)
             except TemplateError as err:
@@ -128,7 +166,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages.append({"role": "user", "content": user_input.text})
 
         try:
-            response = await self.query(conversation_id, messages, exposed_entities)
+            response = await self.query(user_input, messages, exposed_entities, 0)
         except error.OpenAIError as err:
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
@@ -205,12 +243,20 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             )
         return exposed_entities
 
-    async def query(self, user, messages, exposed_entities):
+    async def query(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        exposed_entities,
+        n_calls,
+    ):
         """Process a sentence."""
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
+        functions = CONF_FUNCTIONS + list(map(lambda s: s["spec"], self.custom_setting))
+        function_call = CONF_FUNCTION_CALLS if n_calls < 3 else "none"
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
@@ -221,26 +267,56 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             max_tokens=max_tokens,
             top_p=top_p,
             temperature=temperature,
-            user=user,
-            functions=CONF_FUNCTIONS,
-            function_call=CONF_FUNCTION_CALLS,
+            user=user_input.conversation_id,
+            functions=functions,
+            function_call=function_call,
         )
 
         _LOGGER.info("Response %s", response)
         message = response["choices"][0]["message"]
         if message.get("function_call"):
             message = await self.execute_function_call(
-                user, messages, message, exposed_entities
+                user_input, messages, message, exposed_entities, n_calls + 1
             )
         return message
 
-    def execute_function_call(self, user, messages, message, exposed_entities):
-        if message["function_call"]["name"] == "execute_services":
-            return self.execute_services(user, messages, message, exposed_entities)
+    def execute_function_call(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        message,
+        exposed_entities,
+        n_calls,
+    ):
+        function_name = message["function_call"]["name"]
+        custom_function = next(
+            (s for s in self.custom_setting if s["spec"]["name"] == function_name),
+            None,
+        )
+        if function_name == "execute_services":
+            return self.execute_services(
+                user_input, messages, message, exposed_entities, n_calls
+            )
+        if custom_function is not None:
+            return self.execute_custom_function(
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_calls,
+                custom_function,
+            )
         else:
             raise FunctionNotFound(message["function_call"]["name"])
 
-    async def execute_services(self, user, messages, message, exposed_entities):
+    async def execute_services(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        message,
+        exposed_entities,
+        n_calls,
+    ):
         arguments = json.loads(message["function_call"]["arguments"])
 
         result = []
@@ -263,7 +339,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 raise EntityNotFound(entity_id)
             exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
             if not set(entity_id).issubset(exposed_entity_ids):
-                raise EntityNotExposed(str(entity_id))
+                raise EntityNotExposed(entity_id)
 
             try:
                 await self.hass.services.async_call(
@@ -283,4 +359,39 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 "content": str(result),
             }
         )
-        return await self.query(user, messages, exposed_entities)
+        return await self.query(user_input, messages, exposed_entities, n_calls)
+
+    async def execute_custom_function(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        message,
+        exposed_entities,
+        n_calls,
+        custom_function,
+    ):
+        sequence = custom_function["function"]
+        arguments = json.loads(message["function_call"]["arguments"])
+
+        script = Script(
+            self.hass,
+            sequence,
+            "extended_openai_conversation",
+            DOMAIN,
+            running_description=f"""[extended_openai_conversation] custom function {custom_function.get("spec", {}).get("name")}""",
+            # script_mode=config_block[CONF_MODE],
+            # max_runs=config_block[CONF_MAX],
+            # max_exceeded=config_block[CONF_MAX_EXCEEDED],
+            logger=_LOGGER,
+        )
+
+        await script.async_run(run_variables=arguments, context=user_input.context)
+
+        messages.append(
+            {
+                "role": "function",
+                "name": message["function_call"]["name"],
+                "content": "Success",
+            }
+        )
+        return await self.query(user_input, messages, exposed_entities, n_calls)
