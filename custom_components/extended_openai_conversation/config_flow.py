@@ -12,7 +12,7 @@ from openai import error
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_API_KEY
+from homeassistant.const import CONF_NAME, CONF_API_KEY
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
@@ -27,18 +27,22 @@ from .const import (
     CONF_PROMPT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
+    DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DOMAIN,
+    DEFAULT_NAME,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_NAME): str,
         vol.Required(CONF_API_KEY): str,
     }
 )
@@ -48,6 +52,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_PROMPT: DEFAULT_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
+        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
     }
@@ -90,7 +95,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         else:
             return self.async_create_entry(
-                title="Extended OpenAI Conversation", data=user_input
+                title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input
             )
 
         return self.async_show_form(
@@ -118,7 +123,7 @@ class OptionsFlow(config_entries.OptionsFlow):
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(
-                title="Extended OpenAI Conversation", data=user_input
+                title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input
             )
         schema = openai_config_option_schema(self.config_entry.options)
         return self.async_show_form(
@@ -160,4 +165,11 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
             description={"suggested_value": options[CONF_TEMPERATURE]},
             default=DEFAULT_TEMPERATURE,
         ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
+        vol.Optional(
+            CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+            description={
+                "suggested_value": options[CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION]
+            },
+            default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+        ): int,
     }
