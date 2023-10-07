@@ -311,7 +311,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             (s for s in self.custom_setting if s["spec"]["name"] == function_name),
             None,
         )
-        print("custom_function", custom_function)
         if function_name == "execute_services":
             return self.execute_services(
                 user_input, messages, message, exposed_entities, n_requests

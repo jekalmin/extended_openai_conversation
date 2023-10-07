@@ -128,9 +128,6 @@ class TemplateCustomFunctionExecutor(CustomFunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
     ) -> str:
-        print("TemplateCustomFunctionExecutor", TemplateCustomFunctionExecutor)
-        print("custom_function", custom_function)
-        print("arguments", arguments)
         return template.Template(
             custom_function["function"]["value_template"], hass
         ).async_render(
