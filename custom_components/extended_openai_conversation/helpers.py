@@ -1,8 +1,5 @@
 from abc import ABC, abstractmethod
-import yaml
-import os
 import logging
-import re
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import template

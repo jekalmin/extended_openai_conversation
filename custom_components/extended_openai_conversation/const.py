@@ -8,13 +8,10 @@ DEFAULT_PROMPT = """This is smart home is controlled by Home Assistant.
 Answer the user's question using a list of available devices in a sentence.
 A list of available devices in this smart home:
 
-```yaml
+```csv
+entity_id,name,state,aliases
 {% for entity in exposed_entities -%}
-- entity_id: {{ entity.entity_id }}
-  name: {{ entity.name }}
-  state: {{entity.state}}
-  {{-"
-  aliases: " + entity.aliases | join(',') if entity.aliases}}
+{{ entity.entity_id }},{{ entity.name }},{{entity.state}},{{entity.aliases | join('/')}}
 {% endfor -%}
 ```
 

@@ -5,9 +5,7 @@ from functools import partial
 import logging
 from typing import Literal
 import json
-import os
 import yaml
-import voluptuous as vol
 
 import openai
 from openai import error
@@ -216,22 +214,16 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             entity_id = state.entity_id
             entity = entity_registry.async_get(entity_id)
 
-            if not entity:
-                exposed_entities.append(
-                    {
-                        "entity_id": entity_id,
-                        "name": state.name,
-                        "state": self.hass.states.get(entity_id).state,
-                    }
-                )
-                continue
+            aliases = []
+            if entity and entity.aliases:
+                aliases = entity.aliases
 
             exposed_entities.append(
                 {
                     "entity_id": entity_id,
                     "name": state.name,
                     "state": self.hass.states.get(entity_id).state,
-                    "aliases": entity.aliases,
+                    "aliases": aliases,
                 }
             )
         return exposed_entities
