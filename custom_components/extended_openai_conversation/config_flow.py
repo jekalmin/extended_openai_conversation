@@ -28,6 +28,7 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    CONF_CUSTOM_FUNCTIONS,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -172,4 +173,8 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
             },
             default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ): int,
+        vol.Optional(
+            CONF_CUSTOM_FUNCTIONS,
+            description={"suggested_value": options.get(CONF_CUSTOM_FUNCTIONS)},
+        ): TemplateSelector(),
     }

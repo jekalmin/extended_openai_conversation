@@ -42,6 +42,7 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_CUSTOM_FUNCTIONS,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -60,10 +61,10 @@ from .exceptions import (
 )
 
 from .helpers import (
-    FileSettingLoader,
     CustomFunctionExecutor,
     ScriptCustomFunctionExecutor,
     TemplateCustomFunctionExecutor,
+    convert_to_template,
 )
 
 
@@ -79,17 +80,6 @@ FUNCTION_EXECUTORS: dict[str, CustomFunctionExecutor] = {
 
 # hass.data key for logging information.
 DATA_AGENT = "agent"
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up OpenAI Conversation."""
-
-    async def reload(serviceCall: ServiceCall):
-        for data in hass.data.get(DOMAIN, {}).values():
-            data[DATA_AGENT].reload()
-
-    hass.services.async_register(DOMAIN, SERVICE_RELOAD, reload, schema=vol.Schema({}))
-    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -109,8 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except error.OpenAIError as err:
         raise ConfigEntryNotReady(err) from err
 
-    fileSettingLoader = FileSettingLoader(os.path.join(DOMAIN, "functions.yaml"))
-    agent = OpenAIAgent(hass, entry, fileSettingLoader)
+    agent = OpenAIAgent(hass, entry)
 
     data = hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
     data[CONF_API_KEY] = entry.data[CONF_API_KEY]
@@ -130,15 +119,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class OpenAIAgent(conversation.AbstractConversationAgent):
     """OpenAI conversation agent."""
 
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, loader: FileSettingLoader
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
-        self.loader = loader
-        self.custom_setting = loader.get_setting() or []
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -219,10 +204,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             parse_result=False,
         )
 
-    def reload(self):
-        self.loader.load()
-        self.custom_setting = self.loader.get_setting() or []
-
     def get_exposed_entities(self):
         states = [
             state
@@ -255,6 +236,21 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             )
         return exposed_entities
 
+    def get_custom_functions(self):
+        try:
+            custom_functions = self.entry.options.get(CONF_CUSTOM_FUNCTIONS)
+            if not custom_functions:
+                return []
+            result = yaml.safe_load(custom_functions)
+            if result:
+                for setting in result:
+                    for function in setting["function"].values():
+                        convert_to_template(function)
+            return result
+        except:
+            _LOGGER.error("failed to load custom functions")
+            return []
+
     async def query(
         self,
         user_input: conversation.ConversationInput,
@@ -267,7 +263,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
-        functions = CONF_FUNCTIONS + list(map(lambda s: s["spec"], self.custom_setting))
+        custom_functions = self.get_custom_functions()
+        functions = CONF_FUNCTIONS + list(map(lambda s: s["spec"], custom_functions))
         function_call = "auto"
         if n_requests == self.entry.options.get(
             CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -305,9 +302,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
     ):
+        custom_functions = self.get_custom_functions()
         function_name = message["function_call"]["name"]
         custom_function = next(
-            (s for s in self.custom_setting if s["spec"]["name"] == function_name),
+            (s for s in custom_functions if s["spec"]["name"] == function_name),
             None,
         )
         if function_name == "execute_services":

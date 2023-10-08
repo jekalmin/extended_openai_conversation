@@ -59,14 +59,11 @@ Options are same as [OpenAI Conversation](https://www.home-assistant.io/integrat
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |
 |----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="602" alt="스크린샷 2023-10-07 오후 7 38 52" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/c878255b-19f5-422c-b4e1-318fef2feeaa"> |
+| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="590" alt="스크린샷 2023-10-08 오후 2 15 17" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/2d686958-7a9a-4107-9904-eac7c2ffbbb4"> |
 
 
-### Function
-Custom functions can be added by editing `functions.yaml` file
-  - `<config directory>/extended_openai_conversation/functions.yaml`
-
-This is an example of configuration.
+### Custom Functions
+This is an example of configuration of custom functions.
 
 ```yaml
 - spec:
@@ -107,7 +104,7 @@ This is an example of configuration.
         name: '{{item}}'
 ```
 
-Copy and paste above configuration into `functions.yaml`, then either call `extended_openai_conversation.reload()` or restart Home Assistant.
+Copy and paste above configuration into "Custom Functions" .
 
 Then you will be able to let OpenAI call your function.
 
@@ -118,3 +115,12 @@ Then you will be able to let OpenAI call your function.
 Supported function types are following:
   - script
   - template
+
+## DEBUG
+In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
+
+```yaml
+logger:
+  logs:
+    custom_components.extended_openai_conversation: info
+```

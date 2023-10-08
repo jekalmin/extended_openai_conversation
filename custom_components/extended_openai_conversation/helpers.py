@@ -20,63 +20,26 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-class FileSettingLoader:
-    def __init__(
-        self,
-        file_path: str,
-        initial_settings: str = "",
-        encoding: str = "utf-8",
-        template_keys=["data", "event_data", "target", "service"],
-    ) -> None:
-        self.file_path = file_path
-        self.initial_settings = initial_settings
-        self.encoding = encoding
-        self.settings = None
-        self._create_file_if_not_exists()
-        self.template_keys = template_keys
+def convert_to_template(
+    settings, template_keys=["data", "event_data", "target", "service"]
+):
+    _convert_to_template(settings, template_keys, [])
 
-    def _create_file_if_not_exists(self):
-        match = re.search(f"(.*?)([^{os.sep}]+)$", self.file_path)
-        directory = match.group(1)
-        file_name = match.group(2)
-        assert file_name, f"파일({file_name})을 찾을 수 없습니다."
 
-        if os.path.isdir(directory) == False:
-            os.makedirs(directory)
-        if os.path.isfile(self.file_path) == False:
-            with open(self.file_path, "w", encoding=self.encoding) as f:
-                f.write(self.initial_settings)
-
-    def get_setting(self):
-        if not self.settings:
-            self.load()
-        return self.settings
-
-    def load(self):
-        with open(self.file_path, encoding=self.encoding) as f:
-            settings = yaml.load(f, Loader=yaml.FullLoader)
-            if settings:
-                for setting in settings:
-                    for function in setting["function"].values():
-                        self.convert_to_template(function, [])
-            self.settings = settings
-            _LOGGER.debug("setting loaded: " + str(self.settings))
-
-    def convert_to_template(self, settings, parents: list[str]):
-        if isinstance(settings, dict):
-            for key, value in settings.items():
-                if isinstance(value, str) and (
-                    key in self.template_keys
-                    or set(parents).intersection(self.template_keys)
-                ):
-                    settings[key] = template.Template(value)
-                if isinstance(value, dict):
-                    parents.append(key)
-                    self.convert_to_template(value, parents)
-                    parents.pop()
-        if isinstance(settings, list):
-            for setting in settings:
-                self.convert_to_template(setting, parents)
+def _convert_to_template(settings, template_keys, parents: list[str]):
+    if isinstance(settings, dict):
+        for key, value in settings.items():
+            if isinstance(value, str) and (
+                key in template_keys or set(parents).intersection(template_keys)
+            ):
+                settings[key] = template.Template(value)
+            if isinstance(value, dict):
+                parents.append(key)
+                _convert_to_template(value, template_keys, parents)
+                parents.pop()
+    if isinstance(settings, list):
+        for setting in settings:
+            _convert_to_template(setting, template_keys, parents)
 
 
 class CustomFunctionExecutor(ABC):
@@ -105,6 +68,8 @@ class ScriptCustomFunctionExecutor(CustomFunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
     ) -> str:
+        _LOGGER.info("function", custom_function)
+        _LOGGER.info("arguments", arguments)
         script = Script(
             hass,
             custom_function["function"]["sequence"],
