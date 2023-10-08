@@ -39,16 +39,6 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965
 https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7-0188-41eb-b2db-6eab61499a99
 
 
-
-
-## Services
-### extended_openai_conversation.reload
-- reload configuration file `<config directory>/extended_openai_conversation/functions.yaml`
-
-| service data  | attribute |	required |	dataType |	description |
-|---------------|-----------|-----------|-----------|---------------|
-
-
 ## Customize
 ### Options
 By clicking a button from Edit Assist, Options can be customized.<br/>
@@ -65,6 +55,7 @@ Options are same as [OpenAI Conversation](https://www.home-assistant.io/integrat
 ### Custom Functions
 This is an example of configuration of custom functions.
 
+#### Example 1.
 ```yaml
 - spec:
     name: get_current_weather
@@ -111,6 +102,30 @@ Then you will be able to let OpenAI call your function.
 | get_current_weather                                                                                                                                                           | add_item_to_shopping_cart                                                                                                                                                     | 
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | <img width="391" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8"> | <img width="341" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee"> |
+
+#### Example 2.
+
+In order to accomplish "send it to Line" like [example3](https://github.com/jekalmin/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.  
+
+```yaml
+- spec:
+    name: send_message_to_line
+    description: Use this function to send message to Line.
+    parameters:
+      type: object
+      properties:
+        message:
+          type: string
+          description: message you want to send
+      required:
+      - message
+  function:
+    type: script
+    sequence:
+    - service: script.notify_all
+      data:
+        message: "{{ message }}"
+```
 
 Supported function types are following:
   - script
