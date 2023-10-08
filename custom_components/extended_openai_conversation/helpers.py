@@ -65,8 +65,6 @@ class ScriptCustomFunctionExecutor(CustomFunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
     ) -> str:
-        _LOGGER.info("function", custom_function)
-        _LOGGER.info("arguments", arguments)
         script = Script(
             hass,
             custom_function["function"]["sequence"],
