@@ -334,8 +334,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 "service_data", service_argument.get("data", {})
             )
             entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
+
             if isinstance(entity_id, str):
-                entity_id = entity_id.split(",")
+                entity_id = [e.strip() for e in entity_id.split(',')]
             service_data["entity_id"] = entity_id
 
             if entity_id is None:
