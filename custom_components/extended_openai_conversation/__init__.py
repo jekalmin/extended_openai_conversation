@@ -40,7 +40,6 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
-    CONF_CUSTOM_FUNCTIONS,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -56,12 +55,14 @@ from .exceptions import (
     EntityNotExposed,
     CallServiceError,
     FunctionNotFound,
+    PredefinedNotFound,
 )
 
 from .helpers import (
-    CustomFunctionExecutor,
-    ScriptCustomFunctionExecutor,
-    TemplateCustomFunctionExecutor,
+    FunctionExecutor,
+    PredefinedFunctionExecutor,
+    ScriptFunctionExecutor,
+    TemplateFunctionExecutor,
     convert_to_template,
 )
 
@@ -71,12 +72,13 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
-FUNCTION_EXECUTORS: dict[str, CustomFunctionExecutor] = {
-    "script": ScriptCustomFunctionExecutor(),
-    "template": TemplateCustomFunctionExecutor(),
+FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
+    "predefined": PredefinedFunctionExecutor(),
+    "script": ScriptFunctionExecutor(),
+    "template": TemplateFunctionExecutor(),
 }
 
-# hass.data key for logging information.
+# hass.data key for agent.
 DATA_AGENT = "agent"
 
 
@@ -173,6 +175,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             CallServiceError,
             EntityNotExposed,
             FunctionNotFound,
+            PredefinedNotFound,
         ) as err:
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
@@ -228,19 +231,19 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             )
         return exposed_entities
 
-    def get_custom_functions(self):
+    def get_functions(self):
         try:
-            custom_functions = self.entry.options.get(CONF_CUSTOM_FUNCTIONS)
-            if not custom_functions:
+            function = self.entry.options.get(CONF_FUNCTIONS)
+            if not function:
                 return []
-            result = yaml.safe_load(custom_functions)
+            result = yaml.safe_load(function)
             if result:
                 for setting in result:
                     for function in setting["function"].values():
                         convert_to_template(function)
             return result
         except:
-            _LOGGER.error("failed to load custom functions")
+            _LOGGER.error("Failed to load functions")
             return []
 
     async def query(
@@ -255,8 +258,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
-        custom_functions = self.get_custom_functions()
-        functions = CONF_FUNCTIONS + list(map(lambda s: s["spec"], custom_functions))
+        functions = list(map(lambda s: s["spec"], self.get_functions()))
         function_call = "auto"
         if n_requests == self.entry.options.get(
             CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -294,104 +296,43 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
     ):
-        custom_functions = self.get_custom_functions()
         function_name = message["function_call"]["name"]
-        custom_function = next(
-            (s for s in custom_functions if s["spec"]["name"] == function_name),
+        function = next(
+            (s for s in self.get_functions() if s["spec"]["name"] == function_name),
             None,
         )
-        if function_name == "execute_services":
-            return self.execute_services(
-                user_input, messages, message, exposed_entities, n_requests
-            )
-        if custom_function is not None:
-            return self.execute_custom_function(
+        if function is not None:
+            return self.execute_function(
                 user_input,
                 messages,
                 message,
                 exposed_entities,
                 n_requests,
-                custom_function,
+                function,
             )
-        else:
-            raise FunctionNotFound(message["function_call"]["name"])
+        raise FunctionNotFound(message["function_call"]["name"])
 
-    async def execute_services(
+    async def execute_function(
         self,
         user_input: conversation.ConversationInput,
         messages,
         message,
         exposed_entities,
         n_requests,
+        function,
     ):
+        function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
         arguments = json.loads(message["function_call"]["arguments"])
 
-        result = []
-        for service_argument in arguments.get("list", []):
-            domain = service_argument["domain"]
-            service = service_argument["service"]
-            service_data = service_argument.get(
-                "service_data", service_argument.get("data", {})
-            )
-            entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
-
-            if isinstance(entity_id, str):
-                entity_id = [e.strip() for e in entity_id.split(',')]
-            service_data["entity_id"] = entity_id
-
-            if entity_id is None:
-                raise CallServiceError(domain, service, service_data)
-            if not self.hass.services.has_service(domain, service):
-                raise ServiceNotFound(domain, service)
-            if any(self.hass.states.get(entity) is None for entity in entity_id):
-                raise EntityNotFound(entity_id)
-            exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
-            if not set(entity_id).issubset(exposed_entity_ids):
-                raise EntityNotExposed(entity_id)
-
-            try:
-                await self.hass.services.async_call(
-                    domain=domain,
-                    service=service,
-                    service_data=service_data,
-                )
-                result.append(True)
-            except HomeAssistantError:
-                _LOGGER.error(e)
-                result.append(False)
+        result = await function_executor.execute(
+            self.hass, function, arguments, user_input, exposed_entities
+        )
 
         messages.append(
             {
                 "role": "function",
                 "name": message["function_call"]["name"],
                 "content": str(result),
-            }
-        )
-        return await self.query(user_input, messages, exposed_entities, n_requests)
-
-    async def execute_custom_function(
-        self,
-        user_input: conversation.ConversationInput,
-        messages,
-        message,
-        exposed_entities,
-        n_requests,
-        custom_function,
-    ):
-        custom_function_executor = FUNCTION_EXECUTORS[
-            custom_function["function"]["type"]
-        ]
-        arguments = json.loads(message["function_call"]["arguments"])
-
-        result = await custom_function_executor.execute(
-            self.hass, custom_function, arguments, user_input
-        )
-
-        messages.append(
-            {
-                "role": "function",
-                "name": message["function_call"]["name"],
-                "content": result,
             }
         )
         return await self.query(user_input, messages, exposed_entities, n_requests)

@@ -42,18 +42,56 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7
 ## Customize
 ### Options
 By clicking a button from Edit Assist, Options can be customized.<br/>
-Options are same as [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options except for "Maximum function calls per conversation"
+Options include [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options and two new options. 
 
-"Maximum function calls per conversation" is added to limit the number of function calls in a single conversation.<br/>
-(Sometimes function is called over and over again, possibly running into infinite calls)
+
+- `Maximum Function Calls Per Conversation`: limit the number of function calls in a single conversation.
+(Sometimes function is called over and over again, possibly running into infinite loop) 
+- `Functions`: A list of mappings of function spec to function.
+  - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat/create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
+  - `function`: function that will be called.
+
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |
 |----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="590" alt="스크린샷 2023-10-08 오후 2 15 17" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/2d686958-7a9a-4107-9904-eac7c2ffbbb4"> |
+| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="591" alt="스크린샷 2023-10-10 오후 10 53 57" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/431e4bc5-87a0-4d7b-8da0-6273f955877f"> |
 
 
-### Custom Functions
-This is an example of configuration of custom functions.
+### Functions
+Below is a default configuration of functions.
+
+```yaml
+- spec:
+    name: execute_services
+    description: Use this function to execute service of devices in Home Assistant.
+    parameters:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            type: object
+            properties:
+              domain:
+                type: string
+                description: The domain of the service
+              service:
+                type: string
+                description: The service to be called
+              service_data:
+                type: object
+                description: The service data object to indicate what to control.
+                  The key "entity_id" is required. The value of "entity_id" should be retrieved from a list of available devices.
+            required:
+            - domain
+            - service
+            - service_data
+  function:
+    type: predefined
+    name: execute_service
+```
+
+This is an example of configuration of functions.
 
 #### Example 1.
 ```yaml
@@ -95,7 +133,7 @@ This is an example of configuration of custom functions.
         name: '{{item}}'
 ```
 
-Copy and paste above configuration into "Custom Functions" .
+Copy and paste above configuration into "Functions".
 
 Then you will be able to let OpenAI call your function.
 
@@ -128,10 +166,13 @@ In order to accomplish "send it to Line" like [example3](https://github.com/jeka
 ```
 
 Supported function types are following:
-  - script
-  - template
 
-## DEBUG
+  - `predefined`: Pre-defined function that is provided by "extended_openai_conversation".
+    - Currently `name: execute_service` is only supported.
+  - `script`: A list of services that will be called
+  - `template`: The value to be returned from function.
+
+## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
 
 ```yaml
