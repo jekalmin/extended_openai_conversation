@@ -4,6 +4,7 @@ from __future__ import annotations
 from functools import partial
 import logging
 import types
+import yaml
 from types import MappingProxyType
 from typing import Any
 
@@ -19,6 +20,7 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     TemplateSelector,
+    AttributeSelector,
 )
 
 from .const import (
@@ -28,13 +30,14 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-    CONF_CUSTOM_FUNCTIONS,
+    CONF_FUNCTIONS,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    DEFAULT_CONF_FUNCTIONS,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -48,6 +51,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
+DEFAULT_CONF_FUNCTIONS_STR = yaml.dump(DEFAULT_CONF_FUNCTIONS, sort_keys=False)
+
 DEFAULT_OPTIONS = types.MappingProxyType(
     {
         CONF_PROMPT: DEFAULT_PROMPT,
@@ -56,6 +61,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
+        CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
     }
 )
 
@@ -174,7 +180,8 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
             default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ): int,
         vol.Optional(
-            CONF_CUSTOM_FUNCTIONS,
-            description={"suggested_value": options.get(CONF_CUSTOM_FUNCTIONS)},
+            CONF_FUNCTIONS,
+            description={"suggested_value": options.get(CONF_FUNCTIONS)},
+            default=DEFAULT_CONF_FUNCTIONS_STR,
         ): TemplateSelector(),
     }
