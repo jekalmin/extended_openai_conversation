@@ -58,14 +58,15 @@ class FunctionNotFound(HomeAssistantError):
         """Return string representation."""
         return f"function '{self.function}' does not exist"
 
-class PredefinedNotFound(HomeAssistantError):
-    """When predefined not found."""
+
+class NativeNotFound(HomeAssistantError):
+    """When native function not found."""
 
     def __init__(self, name: str) -> None:
         """Initialize error."""
-        super().__init__(self, f"predefined '{name}' does not exist")
+        super().__init__(self, f"native function '{name}' does not exist")
         self.name = name
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f"predefined '{self.name}' does not exist"
+        return f"native function '{self.name}' does not exist"

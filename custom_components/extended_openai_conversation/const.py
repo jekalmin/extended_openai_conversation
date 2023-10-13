@@ -2,10 +2,10 @@
 
 DOMAIN = "extended_openai_conversation"
 DEFAULT_NAME = "Extended OpenAI Conversation"
-SERVICE_RELOAD = "reload"
+EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
 CONF_PROMPT = "prompt"
 DEFAULT_PROMPT = """This is smart home is controlled by Home Assistant.
-Answer the user's question using a list of available devices in one or two sentences, at most three sentences in everyday language.
+Answer the user's question using a list of available devices in one or two sentences in everyday language.
 A list of available devices in this smart home:
 
 ```csv
@@ -29,7 +29,7 @@ DEFAULT_TOP_P = 1
 CONF_TEMPERATURE = "temperature"
 DEFAULT_TEMPERATURE = 0.5
 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION = "max_function_calls_per_conversation"
-DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION = 3
+DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION = 1
 CONF_FUNCTIONS = "functions"
 DEFAULT_CONF_FUNCTIONS = [
     {
@@ -63,6 +63,6 @@ DEFAULT_CONF_FUNCTIONS = [
                 },
             },
         },
-        "function": {"type": "predefined", "name": "execute_service"},
+        "function": {"type": "native", "name": "execute_service"},
     }
 ]

@@ -10,7 +10,6 @@ import yaml
 import openai
 from openai import error
 
-
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, MATCH_ALL
@@ -23,7 +22,6 @@ from homeassistant.exceptions import (
     TemplateError,
     ServiceNotFound,
 )
-
 
 from homeassistant.helpers import (
     config_validation as cv,
@@ -47,7 +45,6 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DOMAIN,
-    SERVICE_RELOAD,
 )
 
 from .exceptions import (
@@ -55,12 +52,12 @@ from .exceptions import (
     EntityNotExposed,
     CallServiceError,
     FunctionNotFound,
-    PredefinedNotFound,
+    NativeNotFound,
 )
 
 from .helpers import (
     FunctionExecutor,
-    PredefinedFunctionExecutor,
+    NativeFunctionExecutor,
     ScriptFunctionExecutor,
     TemplateFunctionExecutor,
     convert_to_template,
@@ -73,7 +70,8 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
-    "predefined": PredefinedFunctionExecutor(),
+    "predefined": NativeFunctionExecutor(),
+    "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
     "template": TemplateFunctionExecutor(),
 }
@@ -175,7 +173,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             CallServiceError,
             EntityNotExposed,
             FunctionNotFound,
-            PredefinedNotFound,
+            NativeNotFound,
         ) as err:
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
