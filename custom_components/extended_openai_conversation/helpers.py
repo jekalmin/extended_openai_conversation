@@ -1,6 +1,13 @@
 from abc import ABC, abstractmethod
 import logging
+import os
+import yaml
+import time
 
+from homeassistant.components import automation
+from homeassistant.components.automation.config import _async_validate_config_item
+from homeassistant.const import SERVICE_RELOAD
+from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import template
@@ -18,10 +25,10 @@ from .exceptions import (
     EntityNotFound,
     EntityNotExposed,
     CallServiceError,
-    PredefinedNotFound,
+    NativeNotFound,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,9 +72,9 @@ class FunctionExecutor(ABC):
         """execute function"""
 
 
-class PredefinedFunctionExecutor(FunctionExecutor):
+class NativeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
-        """initialize predefined function"""
+        """initialize native function"""
 
     async def execute(
         self,
@@ -82,8 +89,12 @@ class PredefinedFunctionExecutor(FunctionExecutor):
             return await self.execute_service(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "add_automation":
+            return await self.add_automation(
+                hass, function, arguments, user_input, exposed_entities
+            )
 
-        raise PredefinedNotFound(name)
+        raise NativeNotFound(name)
 
     async def execute_service(
         self,
@@ -128,6 +139,46 @@ class PredefinedFunctionExecutor(FunctionExecutor):
                 result.append(False)
 
         return str(result)
+
+    async def add_automation(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ) -> str:
+        automation_config = yaml.safe_load(arguments["automation_config"])
+        config = {"id": str(round(time.time() * 1000))}
+        if isinstance(automation_config, list):
+            config.update(automation_config[0])
+        if isinstance(automation_config, dict):
+            config.update(automation_config)
+
+        await _async_validate_config_item(hass, config, True, False)
+
+        automations = [config]
+        with open(
+            os.path.join(hass.config.config_dir, AUTOMATION_CONFIG_PATH),
+            "r",
+            encoding="utf-8",
+        ) as f:
+            current_automations = yaml.safe_load(f.read())
+
+        with open(
+            os.path.join(hass.config.config_dir, AUTOMATION_CONFIG_PATH),
+            "a" if current_automations else "w",
+            encoding="utf-8",
+        ) as f:
+            raw_config = yaml.dump(automations, allow_unicode=True, sort_keys=False)
+            f.write("\n" + raw_config)
+
+        await hass.services.async_call(automation.config.DOMAIN, SERVICE_RELOAD)
+        hass.bus.async_fire(
+            EVENT_AUTOMATION_REGISTERED,
+            {"automation_config": config, "raw_config": raw_config},
+        )
+        return "Success"
 
 
 class ScriptFunctionExecutor(FunctionExecutor):

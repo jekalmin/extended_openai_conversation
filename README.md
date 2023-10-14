@@ -58,6 +58,19 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 
 
 ### Functions
+
+#### Supported function types
+- `native`: function that is provided by "extended_openai_conversation".
+  - Currently supported native functions and parameters are:
+    - `execute_service`
+      - `domain`(string): domain to be passed to `hass.services.async_call`
+      - `service`(string): service to be passed to `hass.services.async_call`
+      - `service_data`(string): service_data to be passed to `hass.services.async_call`
+    - `add_automation`
+      - `automation_config`(string): An automation configuration in a yaml format
+- `script`: A list of services that will be called
+- `template`: The value to be returned from function.
+
 Below is a default configuration of functions.
 
 ```yaml
@@ -87,13 +100,13 @@ Below is a default configuration of functions.
             - service
             - service_data
   function:
-    type: predefined
+    type: native
     name: execute_service
 ```
 
 This is an example of configuration of functions.
 
-#### Example 1.
+#### Example 1. Get weather, Add to cart
 ```yaml
 - spec:
     name: get_current_weather
@@ -141,7 +154,7 @@ Then you will be able to let OpenAI call your function.
 |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | <img width="391" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8"> | <img width="341" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee"> |
 
-#### Example 2.
+#### Example 2. Send messages to another messenger
 
 In order to accomplish "send it to Line" like [example3](https://github.com/jekalmin/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.  
 
@@ -165,12 +178,35 @@ In order to accomplish "send it to Line" like [example3](https://github.com/jeka
         message: "{{ message }}"
 ```
 
-Supported function types are following:
+#### Example 3. Add Automation
 
-  - `predefined`: Pre-defined function that is provided by "extended_openai_conversation".
-    - Currently `name: execute_service` is only supported.
-  - `script`: A list of services that will be called
-  - `template`: The value to be returned from function.
+Before adding automation, I highly recommend set notification on `automation_registered_via_extended_openai_conversation` event and create separate "Extended OpenAI Assistant" and "Assistant"
+
+(Automation can be added even if conversation fails because of failure to get response message, not automation)
+
+| Create Assistant                                                                                                                             | Notify on created                                                                                                                                                              |
+|----------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img width="830" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/b7030a46-9a4e-4ea8-a4ed-03d2eb3af0a9"> | <img width="1116" alt="스크린샷 2023-10-13 오후 6 01 40" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7afa3709-1c1d-41d0-8847-70f2102d824f"> |
+
+
+Copy and paste below configuration into "Functions"
+
+```yaml
+- spec:
+    name: add_automation
+    description: Use this function to add an automation in Home Assistant.
+    parameters:
+      type: object
+      properties:
+        automation_config:
+          type: string
+          description: A configuration for automation in a valid yaml format. Next line character should be \\n, not \n. Use devices from the list.
+      required:
+      - automation_config
+  function:
+    type: native
+    name: add_automation
+```
 
 ## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
