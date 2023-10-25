@@ -4,21 +4,23 @@ DOMAIN = "extended_openai_conversation"
 DEFAULT_NAME = "Extended OpenAI Conversation"
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
 CONF_PROMPT = "prompt"
-DEFAULT_PROMPT = """This is smart home is controlled by Home Assistant.
-Answer the user's question using a list of available devices in one or two sentences in everyday language.
-A list of available devices in this smart home:
+DEFAULT_PROMPT = """I want you to act as smart home manager of Home Assistant.
+I will provide information of smart home along with a question, you will truthfully make correction or answer using information provided in one sentence in everyday language.
 
+Current Time: {{now()}}
+
+Available Devices:
 ```csv
 entity_id,name,state,aliases
 {% for entity in exposed_entities -%}
-{{ entity.entity_id }},{{ entity.name }},{{entity.state}},{{entity.aliases | join('/')}}
+{{ entity.entity_id }},{{ entity.name }},{{ entity.state }},{{entity.aliases | join('/')}}
 {% endfor -%}
 ```
 
-If user asks for devices that are not available, answer the user's question about the world truthfully.
-If the query requires the current state of device, answer the user's question using current state from the list of available devices. If device is not present in the list, reject the request.
-If the query requires a call service, look for the device from the list. If device is not present in the list, reject the request.
-Use comma separated everyday language rather than list structure to answer, and do not restate question.
+The current state of devices is provided in available devices.
+Use execute_services function only for requested action, not for current states.
+Do not execute service without user's confirmation.
+Do not restate or appreciate what user says, rather make a quick inquiry.
 """
 CONF_CHAT_MODEL = "chat_model"
 DEFAULT_CHAT_MODEL = "gpt-3.5-turbo"
