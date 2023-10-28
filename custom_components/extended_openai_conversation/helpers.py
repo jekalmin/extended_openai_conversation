@@ -202,8 +202,10 @@ class ScriptFunctionExecutor(FunctionExecutor):
             logger=_LOGGER,
         )
 
-        await script.async_run(run_variables=arguments, context=user_input.context)
-        return "Success"
+        result = await script.async_run(
+            run_variables=arguments, context=user_input.context
+        )
+        return result.variables.get("_function_result", "Success")
 
 
 class TemplateFunctionExecutor(FunctionExecutor):
