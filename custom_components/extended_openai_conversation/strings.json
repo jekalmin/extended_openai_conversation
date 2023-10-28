@@ -4,13 +4,15 @@
       "user": {
         "data": {
           "name": "[%key:common::config_flow::data::name%]",
-          "api_key": "[%key:common::config_flow::data::api_key%]"
+          "api_key": "[%key:common::config_flow::data::api_key%]",
+          "pinecone_api_key": "[%key:common::config_flow::data::pinecone_api_key%]"
         }
       }
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "pinecone_invalid_auth": "[%key:common::config_flow::error::pinecone_invalid_auth%]",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     }
   },
@@ -24,7 +26,10 @@
           "temperature": "Temperature",
           "top_p": "Top P",
           "max_function_calls_per_conversation": "Maximum function calls per conversation",
-          "functions": "Functions"
+          "functions": "Functions",
+          "use_interactive": "Use Interactive",
+          "pinecone_top_k": "Pinecone Top K",
+          "pinecone_score_threshold": "Pinecone Score Threshold (0 ~ 1)"
         }
       }
     }

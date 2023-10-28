@@ -1,34 +1,33 @@
 """The OpenAI Conversation integration."""
 from __future__ import annotations
 
-from functools import partial
-import logging
-from typing import Literal
 import json
-import yaml
+import logging
+from functools import partial
+from typing import Literal
 
 import openai
-from openai import error
-
+import yaml
 from homeassistant.components import conversation
+from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, MATCH_ALL
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.util import ulid
-from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+from homeassistant.core import (
+    HomeAssistant,
+)
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
-    HomeAssistantError,
     TemplateError,
     ServiceNotFound,
 )
-
 from homeassistant.helpers import (
     config_validation as cv,
     intent,
     template,
     entity_registry as er,
 )
+from homeassistant.util import ulid
+from openai import error
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -38,15 +37,23 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_PINECONE_API_KEY,
+    CONF_PINECONE_TOP_K,
+    CONF_USE_INTERACTIVE,
+    CONF_PINECONE_SCORE_THRESHOLD,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    DEFAULT_PINECONE_TOP_K,
+    DEFAULT_USE_INTERACTIVE,
     DOMAIN,
+    DATA_AGENT,
+    DATA_STORAGE,
+    DATA_USE_STORAGE,
 )
-
 from .exceptions import (
     EntityNotFound,
     EntityNotExposed,
@@ -54,15 +61,15 @@ from .exceptions import (
     FunctionNotFound,
     NativeNotFound,
 )
-
 from .helpers import (
     FunctionExecutor,
     NativeFunctionExecutor,
     ScriptFunctionExecutor,
     TemplateFunctionExecutor,
     convert_to_template,
+    PineconeStorage,
 )
-
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,8 +83,11 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "template": TemplateFunctionExecutor(),
 }
 
-# hass.data key for agent.
-DATA_AGENT = "agent"
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up OpenAI Conversation."""
+    await async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -98,10 +108,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(err) from err
 
     agent = OpenAIAgent(hass, entry)
-
     data = hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
     data[CONF_API_KEY] = entry.data[CONF_API_KEY]
     data[DATA_AGENT] = agent
+    data[DATA_USE_STORAGE] = False
+
+    pinecone_api_key = entry.data.get(CONF_PINECONE_API_KEY)
+    if pinecone_api_key is not None:
+        storage = PineconeStorage(
+            hass=hass, api_key=entry.data.get(CONF_PINECONE_API_KEY)
+        )
+        data[DATA_STORAGE] = storage
+        data[DATA_USE_STORAGE] = True
 
     conversation.async_set_agent(hass, entry, agent)
     return True
@@ -132,16 +150,21 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
         raw_prompt = self.entry.options.get(CONF_PROMPT, DEFAULT_PROMPT)
+        use_interactive = self.entry.options.get(
+            CONF_USE_INTERACTIVE, DEFAULT_USE_INTERACTIVE
+        )
         exposed_entities = self.get_exposed_entities()
 
-        if user_input.conversation_id in self.history:
+        if user_input.conversation_id in self.history and use_interactive:
             conversation_id = user_input.conversation_id
             messages = self.history[conversation_id]
         else:
             conversation_id = ulid.ulid()
             user_input.conversation_id = conversation_id
             try:
-                prompt = self._async_generate_prompt(raw_prompt, exposed_entities)
+                prompt = await self._async_generate_prompt(
+                    user_input, raw_prompt, exposed_entities
+                )
             except TemplateError as err:
                 _LOGGER.error("Error rendering prompt: %s", err)
                 intent_response = intent.IntentResponse(language=user_input.language)
@@ -193,12 +216,40 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             response=intent_response, conversation_id=conversation_id
         )
 
-    def _async_generate_prompt(self, raw_prompt: str, exposed_entities) -> str:
+    async def _async_generate_prompt(
+        self,
+        user_input: conversation.ConversationInput,
+        raw_prompt: str,
+        exposed_entities,
+    ) -> str:
         """Generate a prompt for the user."""
+
+        matched_entities = []
+        use_storage = self.hass.data[DOMAIN][self.entry.entry_id][DATA_USE_STORAGE]
+        if use_storage:
+            storage = self.hass.data[DOMAIN][self.entry.entry_id][DATA_STORAGE]
+            embedding_result = await self.embeddings(user_input.text)
+            top_k = self.entry.options.get(CONF_PINECONE_TOP_K, DEFAULT_PINECONE_TOP_K)
+            score_threshold = self.entry.options.get(CONF_PINECONE_SCORE_THRESHOLD)
+
+            result = await storage.query(
+                topK=top_k,
+                vector=embedding_result["data"][0]["embedding"],
+            )
+            matched_entities = result.get("matches", [])
+
+            if score_threshold:
+                result["matches"] = [
+                    match
+                    for match in result["matches"]
+                    if match["score"] >= score_threshold
+                ]
+
         return template.Template(raw_prompt, self.hass).async_render(
             {
                 "ha_name": self.hass.config.location_name,
                 "exposed_entities": exposed_entities,
+                "matched_entities": matched_entities,
             },
             parse_result=False,
         )
@@ -217,7 +268,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
             aliases = []
             if entity and entity.aliases:
-                aliases = entity.aliases
+                aliases = list(entity.aliases)
 
             exposed_entities.append(
                 {
@@ -334,3 +385,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             }
         )
         return await self.query(user_input, messages, exposed_entities, n_requests)
+
+    async def embeddings(self, text: str):
+        return await openai.Embedding.acreate(
+            api_key=self.entry.data[CONF_API_KEY],
+            input=text,
+            model="text-embedding-ada-002",
+            request_timeout=3,
+        )

@@ -21,7 +21,12 @@ from homeassistant.helpers.selector import (
     NumberSelectorConfig,
     TemplateSelector,
     AttributeSelector,
+    BooleanSelector,
+    NumberSelectorMode,
 )
+
+from .helpers import PineconeStorage
+from .exceptions import PineconeAuthenticationError
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -31,6 +36,10 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_USE_INTERACTIVE,
+    CONF_PINECONE_API_KEY,
+    CONF_PINECONE_TOP_K,
+    CONF_PINECONE_SCORE_THRESHOLD,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -38,6 +47,8 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_USE_INTERACTIVE,
+    DEFAULT_PINECONE_TOP_K,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -48,6 +59,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
         vol.Required(CONF_API_KEY): str,
+        vol.Optional(CONF_PINECONE_API_KEY): str,
     }
 )
 
@@ -62,6 +74,9 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
+        CONF_USE_INTERACTIVE: DEFAULT_USE_INTERACTIVE,
+        CONF_PINECONE_TOP_K: DEFAULT_PINECONE_TOP_K,
+        CONF_PINECONE_SCORE_THRESHOLD: None,
     }
 )
 
@@ -73,6 +88,9 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """
     openai.api_key = data[CONF_API_KEY]
     await hass.async_add_executor_job(partial(openai.Engine.list, request_timeout=10))
+    pinecone_api_key = data.get(CONF_PINECONE_API_KEY)
+    if pinecone_api_key is not None:
+        await PineconeStorage(hass, pinecone_api_key).validate()
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -97,6 +115,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "cannot_connect"
         except error.AuthenticationError:
             errors["base"] = "invalid_auth"
+        except PineconeAuthenticationError:
+            errors["base"] = "pinecone_invalid_auth"
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
@@ -184,4 +204,22 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
             description={"suggested_value": options.get(CONF_FUNCTIONS)},
             default=DEFAULT_CONF_FUNCTIONS_STR,
         ): TemplateSelector(),
+        vol.Optional(
+            CONF_USE_INTERACTIVE,
+            description={"suggested_value": options.get(CONF_USE_INTERACTIVE)},
+            default=DEFAULT_USE_INTERACTIVE,
+        ): BooleanSelector(),
+        vol.Optional(
+            CONF_PINECONE_TOP_K,
+            description={"suggested_value": options.get(CONF_PINECONE_TOP_K)},
+            default=DEFAULT_PINECONE_TOP_K,
+        ): NumberSelector(
+            NumberSelectorConfig(min=0, max=999999, mode=NumberSelectorMode.BOX)
+        ),
+        vol.Optional(
+            CONF_PINECONE_SCORE_THRESHOLD,
+            description={"suggested_value": options.get(CONF_PINECONE_SCORE_THRESHOLD)},
+        ): NumberSelector(
+            NumberSelectorConfig(min=0, max=1, step=0.001, mode=NumberSelectorMode.BOX)
+        ),
     }
