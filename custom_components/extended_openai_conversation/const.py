@@ -57,6 +57,12 @@ DEFAULT_CONF_FUNCTIONS = [
                                 "service_data": {
                                     "type": "object",
                                     "description": """The service data object to indicate what to control. The key "entity_id" is required. The value of "entity_id" should be retrieved from the list of available devices.""",
+                                    "properties": {
+                                        "entity_id": {
+                                            "type": "string",
+                                            "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character.",
+                                        }
+                                    },
                                 },
                             },
                             "required": ["domain", "service", "service_data"],
@@ -68,3 +74,13 @@ DEFAULT_CONF_FUNCTIONS = [
         "function": {"type": "native", "name": "execute_service"},
     }
 ]
+CONF_PINECONE_API_KEY = "pinecone_api_key"
+CONF_USE_INTERACTIVE = "use_interactive"
+DEFAULT_USE_INTERACTIVE = True
+CONF_PINECONE_TOP_K = "pinecone_top_k"
+DEFAULT_PINECONE_TOP_K = 5
+CONF_PINECONE_SCORE_THRESHOLD = "pinecone_score_threshold"
+
+DATA_AGENT = "agent"
+DATA_STORAGE = "storage"
+DATA_USE_STORAGE = "use_storage"

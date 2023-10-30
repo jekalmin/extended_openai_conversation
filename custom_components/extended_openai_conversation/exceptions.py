@@ -70,3 +70,10 @@ class NativeNotFound(HomeAssistantError):
     def __str__(self) -> str:
         """Return string representation."""
         return f"native function '{self.name}' does not exist"
+
+class PineconeAuthenticationError(HomeAssistantError):
+    """When Pinecone api_key is not valid."""
+
+    def __init__(self) -> None:
+        """Initialize error."""
+        super().__init__(self, f"Pinecone api_key is not valid.")

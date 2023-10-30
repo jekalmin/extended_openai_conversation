@@ -1,0 +1,41 @@
+index_into_pinecone:
+  fields:
+    entry:
+      required: true
+      selector:
+        config_entry:
+          integration: extended_openai_conversation
+query_pinecone:
+  fields:
+    entry:
+      required: true
+      selector:
+        config_entry:
+          integration: extended_openai_conversation
+    prompt:
+      selector:
+        text:
+          multiline: true
+    top_k:
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 9999
+          mode: box
+    score_threshold:
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.001
+          mode: box
+delete_from_pinecone:
+  fields:
+    entry:
+      required: true
+      selector:
+        config_entry:
+          integration: extended_openai_conversation
+  target:
+    entity: {}
