@@ -56,7 +56,14 @@ DEFAULT_CONF_FUNCTIONS = [
                                 },
                                 "service_data": {
                                     "type": "object",
-                                    "description": """The service data object to indicate what to control. The key "entity_id" is required. The value of "entity_id" should be retrieved from the list of available devices.""",
+                                    "description": "The service data object to indicate what to control.",
+                                    "properties": {
+                                        "entity_id": {
+                                            "type": "string",
+                                            "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character."
+                                        }
+                                    },
+                                    "required": ["entity_id"]
                                 },
                             },
                             "required": ["domain", "service", "service_data"],
