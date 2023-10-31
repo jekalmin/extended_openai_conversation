@@ -60,6 +60,8 @@ from .helpers import (
     NativeFunctionExecutor,
     ScriptFunctionExecutor,
     TemplateFunctionExecutor,
+    RestFunctionExecutor,
+    ScrapeFunctionExecutor,
     convert_to_template,
 )
 
@@ -74,6 +76,8 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
     "template": TemplateFunctionExecutor(),
+    "rest": RestFunctionExecutor(),
+    "scrape": ScrapeFunctionExecutor(),
 }
 
 # hass.data key for agent.
@@ -238,7 +242,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             if result:
                 for setting in result:
                     for function in setting["function"].values():
-                        convert_to_template(function)
+                        convert_to_template(function, hass=self.hass)
             return result
         except:
             _LOGGER.error("Failed to load functions")
