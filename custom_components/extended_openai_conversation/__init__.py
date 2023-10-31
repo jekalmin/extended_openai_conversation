@@ -44,6 +44,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    DEFAULT_CONF_FUNCTIONS,
     DOMAIN,
 )
 
@@ -236,16 +237,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
     def get_functions(self):
         try:
             function = self.entry.options.get(CONF_FUNCTIONS)
-            if not function:
-                return []
-            result = yaml.safe_load(function)
+            result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
                 for setting in result:
                     for function in setting["function"].values():
                         convert_to_template(function, hass=self.hass)
             return result
-        except:
-            _LOGGER.error("Failed to load functions")
+        except Exception as e:
+            _LOGGER.error("Failed to load functions", e)
             return []
 
     async def query(

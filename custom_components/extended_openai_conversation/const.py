@@ -60,7 +60,7 @@ DEFAULT_CONF_FUNCTIONS = [
                                     "properties": {
                                         "entity_id": {
                                             "type": "string",
-                                            "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character."
+                                            "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character.",
                                         }
                                     },
                                     "required": ["entity_id"]
