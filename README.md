@@ -1,7 +1,12 @@
 # Extended OpenAI Conversation
+This is custom component of Home Assistant.
 
-Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with a new feature of calling service added.
+Derived from build-in [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with some new features such as call-service.
 
+## Additional Features
+- Ability to call service of Home Assistant
+- Ability to create automation
+- Ability to get data from API or web page
 
 ## How it works
 Extended OpenAI Conversation uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/gpt/function-calling) to call service of Home Assistant.
@@ -9,7 +14,7 @@ Extended OpenAI Conversation uses OpenAI API's feature of [function calling](htt
 Since "gpt-3.5-turbo" model already knows how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/jekalmin/extended_openai_conversation#preparation)
 
 ## Installation
-1. Copy `extended_openai_conversation` folder into `<config directory>/custom_components`
+1. Install via HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`
 2. Restart Home Assistant
 3. Go to Settings > Devices & Services.
 4. In the bottom right corner, select the Add Integration button.
@@ -38,8 +43,10 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965
 ### 3. Hook with custom notify function
 https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7-0188-41eb-b2db-6eab61499a99
 
+### 4. Add automation
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/04b93aa6-085e-450a-a554-34c1ed1fbb36
 
-## Customize
+## Configuration
 ### Options
 By clicking a button from Edit Assist, Options can be customized.<br/>
 Options include [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options and two new options. 
@@ -70,6 +77,8 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
       - `automation_config`(string): An automation configuration in a yaml format
 - `script`: A list of services that will be called
 - `template`: The value to be returned from function.
+- `rest`: Getting data from REST API endpoint.
+- `scrape`: Scraping information from website
 
 Below is a default configuration of functions.
 
@@ -94,7 +103,12 @@ Below is a default configuration of functions.
               service_data:
                 type: object
                 description: The service data object to indicate what to control.
-                  The key "entity_id" is required. The value of "entity_id" should be retrieved from a list of available devices.
+                properties:
+                  entity_id:
+                    type: string
+                    description: The entity_id retrieved from available devices. It must start with domain, followed by dot character.
+                required:
+                - entity_id
             required:
             - domain
             - service
@@ -104,9 +118,15 @@ Below is a default configuration of functions.
     name: execute_service
 ```
 
+## Function Usage
 This is an example of configuration of functions.
 
-#### Example 1. Get weather, Add to cart
+Copy and paste below yaml configuration into "Functions".<br/>
+Then you will be able to let OpenAI call your function. 
+
+### 1. template
+#### 1-1. Get current weather
+
 ```yaml
 - spec:
     name: get_current_weather
@@ -127,6 +147,13 @@ This is an example of configuration of functions.
   function:
     type: template
     value_template: The temperature in {{ location }} is 25 {{unit}}
+```
+
+<img width="300" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8">
+
+### 2. script
+#### 2-1. Add item to shopping cart
+```yaml
 - spec:
     name: add_item_to_shopping_cart
     description: Add item to shopping cart
@@ -146,17 +173,11 @@ This is an example of configuration of functions.
         name: '{{item}}'
 ```
 
-Copy and paste above configuration into "Functions".
+<img width="300" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
 
-Then you will be able to let OpenAI call your function.
+#### 2-2. Send messages to another messenger
 
-| get_current_weather                                                                                                                                                           | add_item_to_shopping_cart                                                                                                                                                     | 
-|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img width="391" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8"> | <img width="341" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee"> |
-
-#### Example 2. Send messages to another messenger
-
-In order to accomplish "send it to Line" like [example3](https://github.com/jekalmin/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.  
+In order to accomplish "send it to Line" like [example3](https://github.com/jekalmin/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.
 
 ```yaml
 - spec:
@@ -178,7 +199,43 @@ In order to accomplish "send it to Line" like [example3](https://github.com/jeka
         message: "{{ message }}"
 ```
 
-#### Example 3. Add Automation
+#### 2-3. Get events from calendar
+
+In order to pass result of calling service to OpenAI, set response variable to `_function_result`. 
+
+```yaml
+- spec:
+    name: get_events
+    description: Use this function to get list of calendar events.
+    parameters:
+      type: object
+      properties:
+        start_date_time:
+          type: string
+          description: The start date time
+        end_date_time:
+          type: string
+          description: The end date time
+      required:
+      - start_date_time
+      - end_date_time
+  function:
+    type: script
+    sequence:
+    - service: calendar.list_events
+      data:
+        start_date_time: "{{start_date_time}}"
+        end_date_time: "{{end_date_time}}"
+      target:
+        entity_id: calendar.test
+      response_variable: _function_result
+```
+
+<img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
+
+### 3. native
+
+#### 3-1. Add automation
 
 Before adding automation, I highly recommend set notification on `automation_registered_via_extended_openai_conversation` event and create separate "Extended OpenAI Assistant" and "Assistant"
 
@@ -191,6 +248,25 @@ Before adding automation, I highly recommend set notification on `automation_reg
 
 Copy and paste below configuration into "Functions"
 
+**For English**
+```yaml
+- spec:
+    name: add_automation
+    description: Use this function to add an automation in Home Assistant.
+    parameters:
+      type: object
+      properties:
+        automation_config:
+          type: string
+          description: A configuration for automation in a valid yaml format. Next line character should be \n. Use devices from the list.
+      required:
+      - automation_config
+  function:
+    type: native
+    name: add_automation
+```
+
+**For Korean**
 ```yaml
 - spec:
     name: add_automation
@@ -207,6 +283,63 @@ Copy and paste below configuration into "Functions"
     type: native
     name: add_automation
 ```
+
+<img width="300" alt="스크린샷 2023-10-31 오후 9 32 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/55f5fe7e-b1fd-43c9-bce6-ac92e203598f">
+
+### 4. scrape
+#### 4-1. Get current HA version
+Scrape version from webpage, "https://www.home-assistant.io"
+
+Unlike [scrape](https://www.home-assistant.io/integrations/scrape/), "value_template" is added at root level in which scraped data from sensors are passed.
+
+```yaml
+scrape:
+- spec:
+    name: get_ha_version
+    description: Use this function to get Home Assistant version
+    parameters:
+      type: object
+      properties:
+        dummy:
+          type: string
+          description: Nothing
+  function:
+    type: scrape
+    resource: https://www.home-assistant.io
+    value_template: "version: {{version}}, release_date: {{release_date}}"
+    sensor:
+      - name: version
+        select: ".current-version h1"
+        value_template: '{{ value.split(":")[1] }}'
+      - name: release_date
+        select: ".release-date"
+        value_template: '{{ value.lower() }}'
+```
+
+<img width="300" alt="스크린샷 2023-10-31 오후 9 46 07" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/e640c3f3-8d68-486b-818e-bd81bf71c2f7">
+
+### 5. rest
+#### 5-1. Get friend names
+- Sample URL: https://jsonplaceholder.typicode.com/users
+```yaml
+- spec:
+    name: get_friend_names
+    description: Use this function to get friend_names
+    parameters:
+      type: object
+      properties:
+        dummy:
+          type: string
+          description: Nothing.
+  function:
+    type: rest
+    resource: https://jsonplaceholder.typicode.com/users
+    value_template: '{{value_json | map(attribute="name") | list }}'
+```
+
+<img width="300" alt="스크린샷 2023-10-31 오후 9 48 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/f968e328-5163-4c41-a479-76a5406522c1">
+
+
 
 ## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
