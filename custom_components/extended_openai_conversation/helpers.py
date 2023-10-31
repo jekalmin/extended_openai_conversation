@@ -4,9 +4,18 @@ import os
 import yaml
 import time
 
-from homeassistant.components import automation
+
+from homeassistant.components import automation, rest
 from homeassistant.components.automation.config import _async_validate_config_item
-from homeassistant.const import SERVICE_RELOAD
+from homeassistant.const import (
+    SERVICE_RELOAD,
+    CONF_METHOD,
+    CONF_TIMEOUT,
+    CONF_VERIFY_SSL,
+    CONF_VALUE_TEMPLATE,
+    CONF_RESOURCE,
+    CONF_RESOURCE_TEMPLATE,
+)
 from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
@@ -226,3 +235,49 @@ class TemplateFunctionExecutor(FunctionExecutor):
             arguments,
             parse_result=False,
         )
+
+
+class RestFunctionExecutor(FunctionExecutor):
+    def __init__(self) -> None:
+        """initialize Rest function"""
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ) -> str:
+        config = function["function"]
+        config.setdefault(CONF_METHOD, rest.const.DEFAULT_METHOD)
+        config.setdefault(CONF_VERIFY_SSL, rest.const.DEFAULT_VERIFY_SSL)
+        config.setdefault(CONF_TIMEOUT, rest.data.DEFAULT_TIMEOUT)
+        config.setdefault(rest.const.CONF_ENCODING, rest.const.DEFAULT_ENCODING)
+
+        convert_to_template(
+            config, template_keys=[CONF_VALUE_TEMPLATE, CONF_RESOURCE_TEMPLATE]
+        )
+        value_template = config.get(CONF_VALUE_TEMPLATE)
+        if value_template is not None:
+            value_template.hass = hass
+
+        resource_template: template.Template | None = config.get(CONF_RESOURCE_TEMPLATE)
+        if resource_template is not None:
+            config.pop(CONF_RESOURCE_TEMPLATE)
+            resource_template.hass = hass
+            config[CONF_RESOURCE] = resource_template.async_render(
+                arguments, parse_result=False
+            )
+
+        rest_data = rest.create_rest_data_from_config(hass, config)
+
+        await rest_data.async_update()
+        value = rest_data.data_without_xml()
+
+        if value is not None and value_template is not None:
+            value = value_template.async_render_with_possible_json_value(
+                value, None, arguments
+            )
+
+        return value

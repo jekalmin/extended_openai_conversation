@@ -60,6 +60,7 @@ from .helpers import (
     NativeFunctionExecutor,
     ScriptFunctionExecutor,
     TemplateFunctionExecutor,
+    RestFunctionExecutor,
     convert_to_template,
 )
 
@@ -74,6 +75,7 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
     "template": TemplateFunctionExecutor(),
+    "rest": RestFunctionExecutor(),
 }
 
 # hass.data key for agent.
