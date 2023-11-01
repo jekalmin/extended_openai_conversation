@@ -57,12 +57,14 @@ from .exceptions import (
 )
 
 from .helpers import (
+    FUNCTION_EXECUTORS,
     FunctionExecutor,
     NativeFunctionExecutor,
     ScriptFunctionExecutor,
     TemplateFunctionExecutor,
     RestFunctionExecutor,
     ScrapeFunctionExecutor,
+    CompositeFunctionExecutor,
     convert_to_template,
 )
 
@@ -71,15 +73,6 @@ _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-
-FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
-    "predefined": NativeFunctionExecutor(),
-    "native": NativeFunctionExecutor(),
-    "script": ScriptFunctionExecutor(),
-    "template": TemplateFunctionExecutor(),
-    "rest": RestFunctionExecutor(),
-    "scrape": ScrapeFunctionExecutor(),
-}
 
 # hass.data key for agent.
 DATA_AGENT = "agent"
@@ -326,7 +319,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         arguments = json.loads(message["function_call"]["arguments"])
 
         result = await function_executor.execute(
-            self.hass, function, arguments, user_input, exposed_entities
+            self.hass, function["function"], arguments, user_input, exposed_entities
         )
 
         messages.append(

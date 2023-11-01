@@ -125,7 +125,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ) -> str:
-        name = function["function"]["name"]
+        name = function["name"]
         if name == "execute_service":
             return await self.execute_service(
                 hass, function, arguments, user_input, exposed_entities
@@ -236,10 +236,10 @@ class ScriptFunctionExecutor(FunctionExecutor):
     ) -> str:
         script = Script(
             hass,
-            function["function"]["sequence"],
+            function["sequence"],
             "extended_openai_conversation",
             DOMAIN,
-            running_description=f"""[extended_openai_conversation] function {function.get("spec", {}).get("name")}""",
+            running_description="[extended_openai_conversation] function",
             logger=_LOGGER,
         )
 
@@ -261,7 +261,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ) -> str:
-        return Template(function["function"]["value_template"], hass).async_render(
+        return Template(function["value_template"], hass).async_render(
             arguments,
             parse_result=False,
         )
@@ -279,7 +279,7 @@ class RestFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ) -> str:
-        config = function["function"]
+        config = function
         rest_data = _get_rest_data(hass, config, arguments)
 
         await rest_data.async_update()
@@ -306,7 +306,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ) -> str:
-        config = function["function"]
+        config = function
         rest_data = _get_rest_data(hass, config, arguments)
         coordinator = scrape.coordinator.ScrapeCoordinator(
             hass,
@@ -376,3 +376,42 @@ class ScrapeFunctionExecutor(FunctionExecutor):
             value = None
         _LOGGER.debug("Parsed value: %s", value)
         return value
+
+
+class CompositeFunctionExecutor(FunctionExecutor):
+    def __init__(self) -> None:
+        """initialize composite function"""
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ) -> str:
+        config = function
+        sequence = config["sequence"]
+
+        for executor_config in sequence:
+            function_executor = FUNCTION_EXECUTORS[executor_config["type"]]
+            result = await function_executor.execute(
+                hass, executor_config, arguments, user_input, exposed_entities
+            )
+
+            response_variable = executor_config.get("response_variable")
+            if response_variable:
+                arguments[response_variable] = str(result)
+
+        return result
+
+
+FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
+    "predefined": NativeFunctionExecutor(),
+    "native": NativeFunctionExecutor(),
+    "script": ScriptFunctionExecutor(),
+    "template": TemplateFunctionExecutor(),
+    "rest": RestFunctionExecutor(),
+    "scrape": ScrapeFunctionExecutor(),
+    "composite": CompositeFunctionExecutor(),
+}
