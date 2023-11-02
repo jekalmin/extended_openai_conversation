@@ -20,7 +20,7 @@ Since "gpt-3.5-turbo" model already knows how to call service of Home Assistant 
 4. In the bottom right corner, select the Add Integration button.
 5. Follow the instructions on screen to complete the setup (API Key is required).
     - [Generating an API Key](https://www.home-assistant.io/integrations/openai_conversation/#generate-an-api-key)
-6. Go to Settings > Voice Assistants.
+6. Go to Settings > [Voice Assistants](https://my.home-assistant.io/redirect/voice_assistants/).
 7. Click to edit Assistant (named "Home Assistant" by default).
 8. Select "Extended OpenAI Conversation" from "Conversation agent" tab.
     <details>
@@ -79,6 +79,7 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 - `template`: The value to be returned from function.
 - `rest`: Getting data from REST API endpoint.
 - `scrape`: Scraping information from website
+- `composite`: A sequence of functions to execute. 
 
 Below is a default configuration of functions.
 
@@ -340,6 +341,41 @@ scrape:
 <img width="300" alt="스크린샷 2023-10-31 오후 9 48 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/f968e328-5163-4c41-a479-76a5406522c1">
 
 
+### 6. composite
+#### 6-1. Search Youtube Music
+When using [ytube_music_player](https://github.com/KoljaWindeler/ytube_music_player), after `ytube_music_player.search` service is called, result is stored in attribute of `sensor.ytube_music_player_extra` entity.<br/>
+
+
+```yaml
+- spec:
+    name: search_music
+    description: Use this function to search music
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The query
+      required:
+      - query
+  function:
+    type: composite
+    sequence:
+    - type: script
+      sequence:
+      - service: ytube_music_player.search
+        data:
+          entity_id: media_player.ytube_music_player
+          query: "{{ query }}"
+    - type: template
+      value_template: >-
+        media_content_type,media_content_id,title
+        {% for media in state_attr('sensor.ytube_music_player_extra', 'search') -%}
+          {{media.type}},{{media.id}},{{media.title}}
+        {% endfor%}
+```
+
+<img width="300" alt="스크린샷 2023-11-02 오후 8 40 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/648efef8-40d1-45d2-b3f9-9bac4a36c517">
 
 ## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
