@@ -1,7 +1,7 @@
 # Extended OpenAI Conversation
 This is custom component of Home Assistant.
 
-Derived from build-in [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with some new features such as call-service.
+Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with some new features such as call-service.
 
 ## Additional Features
 - Ability to call service of Home Assistant
@@ -376,6 +376,9 @@ When using [ytube_music_player](https://github.com/KoljaWindeler/ytube_music_pla
 ```
 
 <img width="300" alt="스크린샷 2023-11-02 오후 8 40 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/648efef8-40d1-45d2-b3f9-9bac4a36c517">
+
+## Practical Usage
+See more practical [examples](https://github.com/jekalmin/extended_openai_conversation/tree/main/examples).
 
 ## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file
