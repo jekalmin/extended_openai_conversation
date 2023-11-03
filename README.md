@@ -67,7 +67,7 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 ### Functions
 
 #### Supported function types
-- `native`: function that is provided by "extended_openai_conversation".
+- `native`: built-in function provided by "extended_openai_conversation".
   - Currently supported native functions and parameters are:
     - `execute_service`
       - `domain`(string): domain to be passed to `hass.services.async_call`
