@@ -1,3 +1,6 @@
+## Objective
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/64ba656e-3ae7-4003-9956-da71efaf06dc
+
 ## Prompt
 Add following text in your prompt
 ````
