@@ -203,6 +203,8 @@ In order to accomplish "send it to Line" like [example3](https://github.com/jeka
         message: "{{ message }}"
 ```
 
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/16dc4ca0-c823-4dfe-a2b7-1ba7623acc70">
+
 #### 2-3. Get events from calendar
 
 In order to pass result of calling service to OpenAI, set response variable to `_function_result`. 
