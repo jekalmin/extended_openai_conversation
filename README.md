@@ -58,7 +58,7 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 - `Maximum Function Calls Per Conversation`: limit the number of function calls in a single conversation.
 (Sometimes function is called over and over again, possibly running into infinite loop) 
 - `Functions`: A list of mappings of function spec to function.
-  - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat/create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
+  - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
   - `function`: function that will be called.
 
 
