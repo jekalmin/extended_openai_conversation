@@ -12,10 +12,10 @@
       properties:
         start_date_time:
           type: string
-          description: The start date time
+          description: The start date time in '%Y-%m-%dT%H:%M:%S%z' format
         end_date_time:
           type: string
-          description: The end date time
+          description: The end date time in '%Y-%m-%dT%H:%M:%S%z' format
       required:
       - start_date_time
       - end_date_time

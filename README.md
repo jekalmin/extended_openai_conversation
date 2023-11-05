@@ -46,6 +46,9 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7
 ### 4. Add automation
 https://github.com/jekalmin/extended_openai_conversation/assets/2917984/04b93aa6-085e-450a-a554-34c1ed1fbb36
 
+### 5. Play Netflix 
+https://github.com/jekalmin/extended_openai_conversation/assets/2917984/64ba656e-3ae7-4003-9956-da71efaf06dc
+
 ## Configuration
 ### Options
 By clicking a button from Edit Assist, Options can be customized.<br/>
@@ -213,10 +216,10 @@ In order to pass result of calling service to OpenAI, set response variable to `
       properties:
         start_date_time:
           type: string
-          description: The start date time
+          description: The start date time in '%Y-%m-%dT%H:%M:%S%z' format
         end_date_time:
           type: string
-          description: The end date time
+          description: The end date time in '%Y-%m-%dT%H:%M:%S%z' format
       required:
       - start_date_time
       - end_date_time
@@ -233,6 +236,71 @@ In order to pass result of calling service to OpenAI, set response variable to `
 ```
 
 <img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
+
+#### 2-4. Play Youtube on TV
+
+```yaml
+- spec:
+    name: play_youtube
+    description: Use this function to play Youtube.
+    parameters:
+      type: object
+      properties:
+        video_id:
+          type: string
+          description: The video id.
+      required:
+      - video_id
+  function:
+    type: script
+    sequence:
+    - service: webostv.command
+      data:
+        entity_id: media_player.{YOUR_WEBOSTV}
+        command: system.launcher/launch
+        payload:
+          id: youtube.leanback.v4
+          contentId: "{{video_id}}"
+    - delay:
+        hours: 0
+        minutes: 0
+        seconds: 10
+        milliseconds: 0
+    - service: webostv.button
+      data:
+        entity_id: media_player.{YOUR_WEBOSTV}
+        button: ENTER
+```
+
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
+
+#### 2-5. Play Netflix on TV
+
+```yaml
+- spec:
+    name: play_netflix
+    description: Use this function to play Netflix.
+    parameters:
+      type: object
+      properties:
+        video_id:
+          type: string
+          description: The video id.
+      required:
+      - video_id
+  function:
+    type: script
+    sequence:
+    - service: webostv.command
+      data:
+        entity_id: media_player.{YOUR_WEBOSTV}
+        command: system.launcher/launch
+        payload:
+          id: netflix
+          contentId: "m=https://www.netflix.com/watch/{{video_id}}"
+```
+
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/346065d3-7ab9-49c8-ba30-b79b37a5f084">
 
 ### 3. native
 
