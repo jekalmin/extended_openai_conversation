@@ -7,8 +7,13 @@ from typing import Literal
 import json
 import yaml
 
-import openai
-from openai import error
+from openai import OpenAI
+from openai.types.chat.chat_completion import (
+    Choice,
+    ChatCompletion,
+    ChatCompletionMessage,
+)
+from openai._exceptions import OpenAIError, AuthenticationError
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
@@ -82,17 +87,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OpenAI Conversation from a config entry."""
 
     try:
-        await hass.async_add_executor_job(
-            partial(
-                openai.Engine.list,
-                api_key=entry.data[CONF_API_KEY],
-                request_timeout=10,
-            )
-        )
-    except error.AuthenticationError as err:
+        client = OpenAI(api_key=entry.data[CONF_API_KEY], timeout=10)
+        await hass.async_add_executor_job(client.models.list)
+    except AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)
         return False
-    except error.OpenAIError as err:
+    except OpenAIError as err:
         raise ConfigEntryNotReady(err) from err
 
     agent = OpenAIAgent(hass, entry)
@@ -120,6 +120,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.hass = hass
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
+        self.client = OpenAI(api_key=entry.data[CONF_API_KEY])
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -156,7 +157,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         try:
             response = await self.query(user_input, messages, exposed_entities, 0)
-        except error.OpenAIError as err:
+        except OpenAIError as err:
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
                 intent.IntentResponseErrorCode.UNKNOWN,
@@ -186,7 +187,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.history[conversation_id] = messages
 
         intent_response = intent.IntentResponse(language=user_input.language)
-        intent_response.async_set_speech(response["content"])
+        intent_response.async_set_speech(response.content)
         return conversation.ConversationResult(
             response=intent_response, conversation_id=conversation_id
         )
@@ -262,21 +263,24 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
-        response = await openai.ChatCompletion.acreate(
-            api_key=self.entry.data[CONF_API_KEY],
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            user=user_input.conversation_id,
-            functions=functions,
-            function_call=function_call,
+        response: ChatCompletion = await self.hass.async_add_executor_job(
+            partial(
+                self.client.chat.completions.create,
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                temperature=temperature,
+                user=user_input.conversation_id,
+                functions=functions,
+                function_call=function_call,
+            )
         )
 
         _LOGGER.info("Response %s", response)
-        message = response["choices"][0]["message"]
-        if message.get("function_call"):
+        choice: Choice = response.choices[0]
+        message = choice.message
+        if choice.finish_reason == "function_call":
             message = await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
@@ -286,11 +290,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self,
         user_input: conversation.ConversationInput,
         messages,
-        message,
+        message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
     ):
-        function_name = message["function_call"]["name"]
+        function_name = message.function_call.name
         function = next(
             (s for s in self.get_functions() if s["spec"]["name"] == function_name),
             None,
@@ -304,19 +308,19 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 n_requests,
                 function,
             )
-        raise FunctionNotFound(message["function_call"]["name"])
+        raise FunctionNotFound(function_name)
 
     async def execute_function(
         self,
         user_input: conversation.ConversationInput,
         messages,
-        message,
+        message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
         function,
     ):
         function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
-        arguments = json.loads(message["function_call"]["arguments"])
+        arguments = json.loads(message.function_call.arguments)
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities
@@ -325,7 +329,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages.append(
             {
                 "role": "function",
-                "name": message["function_call"]["name"],
+                "name": message.function_call.name,
                 "content": str(result),
             }
         )
