@@ -76,6 +76,12 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """
     api_key = data[CONF_API_KEY]
     base_url = data.get(CONF_BASE_URL)
+
+    if base_url == DEFAULT_CONF_BASE_URL:
+        # Do not set base_url if using OpenAI for case of OpenAI's base_url change
+        base_url = None
+        data.pop(CONF_BASE_URL)
+
     await validate_authentication(hass=hass, api_key=api_key, base_url=base_url)
 
 
