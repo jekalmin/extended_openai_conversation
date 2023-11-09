@@ -1,14 +1,12 @@
 """Config flow for OpenAI Conversation integration."""
 from __future__ import annotations
 
-from functools import partial
 import logging
 import types
 import yaml
 from types import MappingProxyType
 from typing import Any
 
-import openai
 from openai import error
 import voluptuous as vol
 
@@ -22,6 +20,8 @@ from homeassistant.helpers.selector import (
     TemplateSelector,
     AttributeSelector,
 )
+
+from .helpers import validate_authentication
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -74,11 +74,9 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    openai.api_key = data[CONF_API_KEY]
+    api_key = data[CONF_API_KEY]
     base_url = data.get(CONF_BASE_URL)
-    await hass.async_add_executor_job(
-        partial(openai.Engine.list, api_base=base_url, request_timeout=10)
-    )
+    await validate_authentication(hass=hass, api_key=api_key, base_url=base_url)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
