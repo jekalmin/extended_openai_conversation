@@ -63,7 +63,7 @@ DEFAULT_CONF_FUNCTIONS = [
                                             "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character.",
                                         }
                                     },
-                                    "required": ["entity_id"]
+                                    "required": ["entity_id"],
                                 },
                             },
                             "required": ["domain", "service", "service_data"],
@@ -75,3 +75,5 @@ DEFAULT_CONF_FUNCTIONS = [
         "function": {"type": "native", "name": "execute_service"},
     }
 ]
+CONF_BASE_URL = "base_url"
+DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"

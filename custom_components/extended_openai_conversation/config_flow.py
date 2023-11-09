@@ -31,6 +31,7 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_BASE_URL,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -38,6 +39,7 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_CONF_BASE_URL,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -48,6 +50,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
         vol.Required(CONF_API_KEY): str,
+        vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
     }
 )
 
@@ -72,7 +75,10 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
     openai.api_key = data[CONF_API_KEY]
-    await hass.async_add_executor_job(partial(openai.Engine.list, request_timeout=10))
+    base_url = data.get(CONF_BASE_URL)
+    await hass.async_add_executor_job(
+        partial(openai.Engine.list, api_base=base_url, request_timeout=10)
+    )
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
