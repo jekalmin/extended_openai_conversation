@@ -183,7 +183,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 response=intent_response, conversation_id=conversation_id
             )
 
-        messages.append(response)
+        messages.append(response.model_dump(exclude_none=True))
         self.history[conversation_id] = messages
 
         intent_response = intent.IntentResponse(language=user_input.language)
