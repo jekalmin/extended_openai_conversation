@@ -38,6 +38,7 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_BASE_URL,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -263,6 +264,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
         response = await openai.ChatCompletion.acreate(
+            api_base=self.entry.data.get(CONF_BASE_URL),
             api_key=self.entry.data[CONF_API_KEY],
             model=model,
             messages=messages,
