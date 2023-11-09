@@ -6,6 +6,7 @@ import time
 from bs4 import BeautifulSoup
 from typing import Any
 from functools import partial
+import openai
 
 from homeassistant.components import automation, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
