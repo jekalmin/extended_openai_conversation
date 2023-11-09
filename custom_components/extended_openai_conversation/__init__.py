@@ -1,7 +1,6 @@
 """The OpenAI Conversation integration."""
 from __future__ import annotations
 
-from functools import partial
 import logging
 from typing import Literal
 import json
@@ -67,6 +66,7 @@ from .helpers import (
     ScrapeFunctionExecutor,
     CompositeFunctionExecutor,
     convert_to_template,
+    validate_authentication,
 )
 
 
@@ -83,12 +83,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up OpenAI Conversation from a config entry."""
 
     try:
-        await hass.async_add_executor_job(
-            partial(
-                openai.Engine.list,
-                api_key=entry.data[CONF_API_KEY],
-                request_timeout=10,
-            )
+        await validate_authentication(
+            hass=hass,
+            api_key=entry.data[CONF_API_KEY],
+            base_url=entry.data.get(CONF_BASE_URL),
         )
     except error.AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)

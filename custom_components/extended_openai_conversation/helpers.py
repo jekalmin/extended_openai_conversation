@@ -5,6 +5,7 @@ import yaml
 import time
 from bs4 import BeautifulSoup
 from typing import Any
+from functools import partial
 
 from homeassistant.components import automation, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
@@ -40,7 +41,7 @@ from .exceptions import (
     NativeNotFound,
 )
 
-from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED
+from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,6 +96,25 @@ def _get_rest_data(hass, rest_config, arguments):
         )
 
     return rest.create_rest_data_from_config(hass, rest_config)
+
+
+async def validate_authentication(
+    hass: HomeAssistant, api_key: str, base_url: str or None
+) -> None:
+    if base_url and base_url != DEFAULT_CONF_BASE_URL:
+        await openai.ChatCompletion.acreate(
+            api_key=api_key,
+            api_base=base_url,
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+        return
+
+    await hass.async_add_executor_job(
+        partial(
+            openai.Engine.list, api_key=api_key, api_base=base_url, request_timeout=10
+        )
+    )
 
 
 class FunctionExecutor(ABC):
