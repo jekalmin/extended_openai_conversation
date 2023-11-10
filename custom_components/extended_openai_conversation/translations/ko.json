@@ -9,7 +9,8 @@
             "user": {
                 "data": {
                     "name": "Name",
-                    "api_key": "API Key"
+                    "api_key": "API Key",
+                    "base_url": "Base Url"
                 }
             }
         }

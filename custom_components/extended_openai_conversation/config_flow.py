@@ -1,14 +1,12 @@
 """Config flow for OpenAI Conversation integration."""
 from __future__ import annotations
 
-from functools import partial
 import logging
 import types
 import yaml
 from types import MappingProxyType
 from typing import Any
 
-import openai
 from openai import error
 import voluptuous as vol
 
@@ -23,6 +21,8 @@ from homeassistant.helpers.selector import (
     AttributeSelector,
 )
 
+from .helpers import validate_authentication
+
 from .const import (
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
@@ -31,6 +31,7 @@ from .const import (
     CONF_TOP_P,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
+    CONF_BASE_URL,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -38,6 +39,7 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_CONF_BASE_URL,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -48,6 +50,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_NAME): str,
         vol.Required(CONF_API_KEY): str,
+        vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
     }
 )
 
@@ -71,8 +74,15 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    openai.api_key = data[CONF_API_KEY]
-    await hass.async_add_executor_job(partial(openai.Engine.list, request_timeout=10))
+    api_key = data[CONF_API_KEY]
+    base_url = data.get(CONF_BASE_URL)
+
+    if base_url == DEFAULT_CONF_BASE_URL:
+        # Do not set base_url if using OpenAI for case of OpenAI's base_url change
+        base_url = None
+        data.pop(CONF_BASE_URL)
+
+    await validate_authentication(hass=hass, api_key=api_key, base_url=base_url)
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

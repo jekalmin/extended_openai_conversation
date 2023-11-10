@@ -5,6 +5,8 @@ import yaml
 import time
 from bs4 import BeautifulSoup
 from typing import Any
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from openai.error import AuthenticationError
 
 from homeassistant.components import automation, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
@@ -40,7 +42,7 @@ from .exceptions import (
     NativeNotFound,
 )
 
-from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED
+from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,6 +97,23 @@ def _get_rest_data(hass, rest_config, arguments):
         )
 
     return rest.create_rest_data_from_config(hass, rest_config)
+
+
+async def validate_authentication(
+    hass: HomeAssistant, api_key: str, base_url: str
+) -> None:
+    if not base_url:
+        base_url = DEFAULT_CONF_BASE_URL
+    session = async_get_clientsession(hass)
+    response = await session.get(
+        f"{base_url}/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=10,
+    )
+    if response.status == 401:
+        raise AuthenticationError()
+
+    response.raise_for_status()
 
 
 class FunctionExecutor(ABC):
