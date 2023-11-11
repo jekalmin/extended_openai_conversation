@@ -40,6 +40,7 @@ from .const import (
     CONF_BASE_URL,
     CONF_API_VERSION,
     CONF_SKIP_AUTHENTICATION,
+    CONF_USE_TOOLS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -50,6 +51,7 @@ from .const import (
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONF_BASE_URL,
     DEFAULT_SKIP_AUTHENTICATION,
+    DEFAULT_USE_TOOLS,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -80,6 +82,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
         CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
+        CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
     }
 )
 
@@ -221,5 +224,10 @@ class OptionsFlow(config_entries.OptionsFlow):
                 CONF_ATTACH_USERNAME,
                 description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
                 default=DEFAULT_ATTACH_USERNAME,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_USE_TOOLS,
+                description={"suggested_value": options.get(CONF_USE_TOOLS)},
+                default=DEFAULT_USE_TOOLS,
             ): BooleanSelector(),
         }
