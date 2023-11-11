@@ -3,6 +3,8 @@ import logging
 import os
 import yaml
 import time
+import voluptuous
+import json
 from bs4 import BeautifulSoup
 from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -146,13 +148,13 @@ class NativeFunctionExecutor(FunctionExecutor):
     ) -> str:
         name = function["name"]
         if name == "execute_service":
-            return await self.execute_service(
+            return json.dumps(await self.execute_service(
                 hass, function, arguments, user_input, exposed_entities
-            )
+            ))
         if name == "execute_service_single":
-            return await self.execute_service_single(
+            return json.dumps(await self.execute_service_single(
                 hass, function, arguments, user_input, exposed_entities
-            )
+            ))
         if name == "add_automation":
             return await self.add_automation(
                 hass, function, arguments, user_input, exposed_entities
@@ -195,10 +197,10 @@ class NativeFunctionExecutor(FunctionExecutor):
                 service=service,
                 service_data=service_data,
             )
-            return True
-        except HomeAssistantError:
+            return {'success': True}
+        except (HomeAssistantError, voluptuous.Error) as e:
             _LOGGER.error(e)
-            return False
+            return {'error': str(e)}
 
     async def execute_service(
         self,
