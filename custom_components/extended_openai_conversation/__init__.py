@@ -251,13 +251,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
-        functions = list(map(lambda s: s["spec"], self.get_functions()))
-        function_call = "auto"
+        functions = list(map(lambda s: {'type': 'function', 'function': s["spec"]}, self.get_functions()))
+        tool_choice = "auto"
         if n_requests == self.entry.options.get(
             CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
-            function_call = "none"
+            tool_choice = "none"
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
@@ -270,19 +270,19 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             top_p=top_p,
             temperature=temperature,
             user=user_input.conversation_id,
-            functions=functions,
-            function_call=function_call,
+            tools=functions,
+            tool_choice=tool_choice
         )
 
         _LOGGER.info("Response %s", response)
         message = response["choices"][0]["message"]
-        if message.get("function_call"):
-            message = await self.execute_function_call(
+        if message.get("tool_calls"):
+            message = await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
         return message
 
-    def execute_function_call(
+    async def execute_tool_calls(
         self,
         user_input: conversation.ConversationInput,
         messages,
@@ -290,43 +290,44 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
     ):
-        function_name = message["function_call"]["name"]
-        function = next(
-            (s for s in self.get_functions() if s["spec"]["name"] == function_name),
-            None,
-        )
-        if function is not None:
-            return self.execute_function(
-                user_input,
-                messages,
-                message,
-                exposed_entities,
-                n_requests,
-                function,
+        messages.append(message)
+        for tool in message['tool_calls']:
+            function_name = tool["function"]["name"]
+            function = next(
+                (s for s in self.get_functions() if s["spec"]["name"] == function_name),
+                None,
             )
-        raise FunctionNotFound(message["function_call"]["name"])
+            if function is not None:
+                result = await self.execute_function(
+                    user_input,
+                    tool,
+                    exposed_entities,
+                    function,
+                )
+
+                messages.append(
+                    {
+                        "tool_call_id": tool['id'],
+                        "role": "tool",
+                        "name": function_name,
+                        "content": str(result),
+                    }
+                )
+            else:
+                raise FunctionNotFound(function_name)
+        return await self.query(user_input, messages, exposed_entities, n_requests)
 
     async def execute_function(
         self,
         user_input: conversation.ConversationInput,
-        messages,
-        message,
+        tool,
         exposed_entities,
-        n_requests,
         function,
     ):
         function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
-        arguments = json.loads(message["function_call"]["arguments"])
+        arguments = json.loads(tool["function"]["arguments"])
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities
         )
-
-        messages.append(
-            {
-                "role": "function",
-                "name": message["function_call"]["name"],
-                "content": str(result),
-            }
-        )
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return result

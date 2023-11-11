@@ -149,12 +149,56 @@ class NativeFunctionExecutor(FunctionExecutor):
             return await self.execute_service(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "execute_service_single":
+            return await self.execute_service_single(
+                hass, function, arguments, user_input, exposed_entities
+            )
         if name == "add_automation":
             return await self.add_automation(
                 hass, function, arguments, user_input, exposed_entities
             )
 
         raise NativeNotFound(name)
+
+    async def execute_service_single(
+        self,
+        hass: HomeAssistant,
+        function,
+        service_argument,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ) -> str:
+        domain = service_argument["domain"]
+        service = service_argument["service"]
+        service_data = service_argument.get(
+            "service_data", service_argument.get("data", {})
+        )
+        entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
+
+        if isinstance(entity_id, str):
+            entity_id = [e.strip() for e in entity_id.split(",")]
+        service_data["entity_id"] = entity_id
+
+        if entity_id is None:
+            raise CallServiceError(domain, service, service_data)
+        if not hass.services.has_service(domain, service):
+            raise ServiceNotFound(domain, service)
+        if any(hass.states.get(entity) is None for entity in entity_id):
+            raise EntityNotFound(entity_id)
+        exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
+        if not set(entity_id).issubset(exposed_entity_ids):
+            raise EntityNotExposed(entity_id)
+
+        try:
+            await hass.services.async_call(
+                domain=domain,
+                service=service,
+                service_data=service_data,
+            )
+            return True
+        except HomeAssistantError:
+            _LOGGER.error(e)
+            return False
 
     async def execute_service(
         self,
@@ -166,39 +210,8 @@ class NativeFunctionExecutor(FunctionExecutor):
     ) -> str:
         result = []
         for service_argument in arguments.get("list", []):
-            domain = service_argument["domain"]
-            service = service_argument["service"]
-            service_data = service_argument.get(
-                "service_data", service_argument.get("data", {})
-            )
-            entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
-
-            if isinstance(entity_id, str):
-                entity_id = [e.strip() for e in entity_id.split(",")]
-            service_data["entity_id"] = entity_id
-
-            if entity_id is None:
-                raise CallServiceError(domain, service, service_data)
-            if not hass.services.has_service(domain, service):
-                raise ServiceNotFound(domain, service)
-            if any(hass.states.get(entity) is None for entity in entity_id):
-                raise EntityNotFound(entity_id)
-            exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
-            if not set(entity_id).issubset(exposed_entity_ids):
-                raise EntityNotExposed(entity_id)
-
-            try:
-                await hass.services.async_call(
-                    domain=domain,
-                    service=service,
-                    service_data=service_data,
-                )
-                result.append(True)
-            except HomeAssistantError:
-                _LOGGER.error(e)
-                result.append(False)
-
-        return str(result)
+            result.append(await self.execute_service_single(hass, function, service_argument, user_input, exposed_entities))
+        return result
 
     async def add_automation(
         self,
