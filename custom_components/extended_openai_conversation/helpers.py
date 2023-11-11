@@ -137,7 +137,9 @@ async def validate_authentication(
         return
 
     if is_azure(base_url):
-        client = AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, api_version=api_version)
+        client = AsyncAzureOpenAI(
+            api_key=api_key, azure_endpoint=base_url, api_version=api_version
+        )
     else:
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
@@ -197,6 +199,10 @@ class NativeFunctionExecutor(FunctionExecutor):
             return await self.execute_service(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "execute_service_single":
+            return await self.execute_service_single(
+                hass, function, arguments, user_input, exposed_entities
+            )
         if name == "add_automation":
             return await self.add_automation(
                 hass, function, arguments, user_input, exposed_entities
@@ -208,6 +214,44 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         raise NativeNotFound(name)
 
+    async def execute_service_single(
+        self,
+        hass: HomeAssistant,
+        function,
+        service_argument,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        domain = service_argument["domain"]
+        service = service_argument["service"]
+        service_data = service_argument.get(
+            "service_data", service_argument.get("data", {})
+        )
+        entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
+        area_id = service_data.get("area_id")
+        device_id = service_data.get("device_id")
+
+        if isinstance(entity_id, str):
+            entity_id = [e.strip() for e in entity_id.split(",")]
+        service_data["entity_id"] = entity_id
+
+        if entity_id is None and area_id is None and device_id is None:
+            raise CallServiceError(domain, service, service_data)
+        if not hass.services.has_service(domain, service):
+            raise ServiceNotFound(domain, service)
+        self.validate_entity_ids(hass, entity_id or [], exposed_entities)
+
+        try:
+            await hass.services.async_call(
+                domain=domain,
+                service=service,
+                service_data=service_data,
+            )
+            return {"success": True}
+        except HomeAssistantError as e:
+            _LOGGER.error(e)
+            return {"error": str(e)}
+
     async def execute_service(
         self,
         hass: HomeAssistant,
@@ -218,36 +262,11 @@ class NativeFunctionExecutor(FunctionExecutor):
     ):
         result = []
         for service_argument in arguments.get("list", []):
-            domain = service_argument["domain"]
-            service = service_argument["service"]
-            service_data = service_argument.get(
-                "service_data", service_argument.get("data", {})
-            )
-            entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
-            area_id = service_data.get("area_id")
-            device_id = service_data.get("device_id")
-
-            if isinstance(entity_id, str):
-                entity_id = [e.strip() for e in entity_id.split(",")]
-            service_data["entity_id"] = entity_id
-
-            if entity_id is None and area_id is None and device_id is None:
-                raise CallServiceError(domain, service, service_data)
-            if not hass.services.has_service(domain, service):
-                raise ServiceNotFound(domain, service)
-            self.validate_entity_ids(hass, entity_id or [], exposed_entities)
-
-            try:
-                await hass.services.async_call(
-                    domain=domain,
-                    service=service,
-                    service_data=service_data,
+            result.append(
+                await self.execute_service_single(
+                    hass, function, service_argument, user_input, exposed_entities
                 )
-                result.append(True)
-            except HomeAssistantError as e:
-                _LOGGER.error(e)
-                result.append(False)
-
+            )
         return result
 
     async def add_automation(
