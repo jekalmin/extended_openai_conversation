@@ -18,7 +18,7 @@ entity_id,name,state,aliases
 ```
 
 The current state of devices is provided in available devices.
-Use execute_services function only for requested action, not for current states.
+Use the execute_service function only for requested action, not for current states.
 Do not execute service without user's confirmation.
 Do not restate or appreciate what user says, rather make a quick inquiry.
 """
@@ -36,43 +36,35 @@ CONF_FUNCTIONS = "functions"
 DEFAULT_CONF_FUNCTIONS = [
     {
         "spec": {
-            "name": "execute_services",
-            "description": "Use this function to execute service of devices in Home Assistant.",
+            "name": "execute_service",
+            "description": "Use this function to execute a service of devices in Home Assistant.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "list": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "domain": {
-                                    "type": "string",
-                                    "description": "The domain of the service",
-                                },
-                                "service": {
-                                    "type": "string",
-                                    "description": "The service to be called",
-                                },
-                                "service_data": {
-                                    "type": "object",
-                                    "description": "The service data object to indicate what to control.",
-                                    "properties": {
-                                        "entity_id": {
-                                            "type": "string",
-                                            "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character.",
-                                        }
-                                    },
-                                    "required": ["entity_id"],
-                                },
-                            },
-                            "required": ["domain", "service", "service_data"],
+                    "domain": {
+                        "type": "string",
+                        "description": "The domain of the service",
+                    },
+                    "service": {
+                        "type": "string",
+                        "description": "The service to be called",
+                    },
+                    "service_data": {
+                        "type": "object",
+                        "description": "The service data object to indicate what to control.",
+                        "properties": {
+                            "entity_id": {
+                                "type": "string",
+                                "description": "The entity_id retrieved from available devices. It must start with domain, followed by dot character.",
+                            }
                         },
-                    }
+                        "required": ["entity_id"],
+                    },
                 },
+                "required": ["domain", "service", "service_data"],
             },
         },
-        "function": {"type": "native", "name": "execute_service"},
+        "function": {"type": "native", "name": "execute_service_single"},
     }
 ]
 CONF_BASE_URL = "base_url"
