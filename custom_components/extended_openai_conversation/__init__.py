@@ -11,7 +11,7 @@ from openai import error
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_KEY, MATCH_ALL
+from homeassistant.const import CONF_API_KEY, MATCH_ALL, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.util import ulid
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
@@ -150,8 +150,12 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     response=intent_response, conversation_id=conversation_id
                 )
             messages = [{"role": "system", "content": prompt}]
+        user_message = {"role": "user", "content": user_input.text}
+        user = await self.hass.auth.async_get_user(user_input.context.user_id)
+        if user is not None and user.name is not None:
+            user_message[ATTR_NAME] = user.name
 
-        messages.append({"role": "user", "content": user_input.text})
+        messages.append(user_message)
 
         try:
             response = await self.query(user_input, messages, exposed_entities, 0)
