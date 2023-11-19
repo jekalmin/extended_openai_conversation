@@ -437,6 +437,14 @@ class SqliteFunctionExecutor(FunctionExecutor):
             for exposed_entity in exposed_entities
         )
 
+    def is_exposed_entity_in_query(self, query: str, exposed_entities) -> bool:
+        exposed_entity_ids = list(
+            map(lambda e: f"'{e['entity_id']}'", exposed_entities)
+        )
+        return any(
+            exposed_entity_id in query for exposed_entity_id in exposed_entity_ids
+        )
+
     def raise_error(self, msg="Unexpected error occurred."):
         raise HomeAssistantError(msg)
 
@@ -468,6 +476,9 @@ class SqliteFunctionExecutor(FunctionExecutor):
 
         template_arguments = {
             "is_exposed": lambda e: self.is_exposed(e, exposed_entities),
+            "is_exposed_entity_in_query": lambda q: self.is_exposed_entity_in_query(
+                q, exposed_entities
+            ),
             "exposed_entities": exposed_entities,
             "raise": self.raise_error,
         }
