@@ -30,6 +30,7 @@ from homeassistant.helpers import (
 )
 
 from .const import (
+    CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
     CONF_PROMPT,
@@ -38,6 +39,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -151,9 +153,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 )
             messages = [{"role": "system", "content": prompt}]
         user_message = {"role": "user", "content": user_input.text}
-        user = await self.hass.auth.async_get_user(user_input.context.user_id)
-        if user is not None and user.name is not None:
-            user_message[ATTR_NAME] = user.name
+        if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
+            user = await self.hass.auth.async_get_user(user_input.context.user_id)
+            if user is not None and user.name is not None:
+                user_message[ATTR_NAME] = user.name
 
         messages.append(user_message)
 
