@@ -492,8 +492,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
             rows = cursor.fetchall()
             result = []
             for row in rows:
-                for name, val in zip(names, row):
-                    result.append({name: val})
+                result.append({name: val for name, val in zip(names, row)})
             return result
 
 
