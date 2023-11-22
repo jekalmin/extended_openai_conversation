@@ -201,7 +201,7 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
         vol.Optional(
             CONF_ATTACH_USERNAME,
             description={
-                "suggested_value": options[CONF_ATTACH_USERNAME]
+                "suggested_value": options.get(CONF_ATTACH_USERNAME)
             },
             default=DEFAULT_ATTACH_USERNAME,
         ): BooleanSelector(),
