@@ -489,6 +489,11 @@ class SqliteFunctionExecutor(FunctionExecutor):
         with sqlite3.connect(db_url, uri=True) as conn:
             cursor = conn.execute(q)
             names = [description[0] for description in cursor.description]
+
+            if function.get("single") is True:
+                row = cursor.fetchone()
+                return {name: val for name, val in zip(names, row)}
+
             rows = cursor.fetchall()
             result = []
             for row in rows:
