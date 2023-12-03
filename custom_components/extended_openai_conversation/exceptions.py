@@ -70,3 +70,34 @@ class NativeNotFound(HomeAssistantError):
     def __str__(self) -> str:
         """Return string representation."""
         return f"native function '{self.name}' does not exist"
+
+
+class FunctionLoadFailed(HomeAssistantError):
+    """When function load failed."""
+
+    def __init__(self) -> None:
+        """Initialize error."""
+        super().__init__(
+            self,
+            "failed to load functions. Verify functions are valid in a yaml format",
+        )
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return "failed to load functions. Verify functions are valid in a yaml format"
+
+
+class ParseArgumentsFailed(HomeAssistantError):
+    """When parse arguments failed."""
+
+    def __init__(self, arguments: str) -> None:
+        """Initialize error."""
+        super().__init__(
+            self,
+            f"failed to parse arguments `{arguments}`. Increase maximum token to avoid the issue.",
+        )
+        self.arguments = arguments
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return f"failed to parse arguments `{self.arguments}`. Increase maximum token to avoid the issue."

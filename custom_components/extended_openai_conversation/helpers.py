@@ -486,8 +486,9 @@ class SqliteFunctionExecutor(FunctionExecutor):
 
         q = Template(query, hass).async_render(template_arguments)
         _LOGGER.info("Rendered query: %s", q)
+
         with sqlite3.connect(db_url, uri=True) as conn:
-            cursor = conn.execute(q)
+            cursor = conn.cursor().execute(q)
             names = [description[0] for description in cursor.description]
 
             if function.get("single") is True:

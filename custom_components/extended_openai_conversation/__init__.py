@@ -56,6 +56,8 @@ from .exceptions import (
     CallServiceError,
     FunctionNotFound,
     NativeNotFound,
+    FunctionLoadFailed,
+    ParseArgumentsFailed,
 )
 
 from .helpers import (
@@ -171,14 +173,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             return conversation.ConversationResult(
                 response=intent_response, conversation_id=conversation_id
             )
-        except (
-            EntityNotFound,
-            ServiceNotFound,
-            CallServiceError,
-            EntityNotExposed,
-            FunctionNotFound,
-            NativeNotFound,
-        ) as err:
+        except HomeAssistantError as err:
+            _LOGGER.error(err, exc_info=err)
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
                 intent.IntentResponseErrorCode.UNKNOWN,
@@ -242,9 +238,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     for function in setting["function"].values():
                         convert_to_template(function, hass=self.hass)
             return result
-        except Exception as e:
-            _LOGGER.error("Failed to load functions", e)
-            return []
+        except:
+            raise FunctionLoadFailed()
 
     async def query(
         self,
@@ -323,7 +318,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         function,
     ):
         function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
-        arguments = json.loads(message["function_call"]["arguments"])
+        try:
+            arguments = json.loads(message["function_call"]["arguments"])
+        except json.decoder.JSONDecodeError:
+            raise ParseArgumentsFailed(message["function_call"]["arguments"])
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities
