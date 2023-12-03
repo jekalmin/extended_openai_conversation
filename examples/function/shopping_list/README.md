@@ -22,6 +22,8 @@
         list:
           type: string
           description: the entity id of the list to update
+          enum:
+            - todo.shopping_list
       required:
       - item
       - list
