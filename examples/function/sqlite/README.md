@@ -101,8 +101,8 @@
 ### 2. Defined SQL manually
 
 #### 2-1. get_state_at_time
-<img width="300" alt="스크린샷 2023-11-26 오후 4 55 31" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/19fac845-5cee-4d84-98b5-1e18994bb2ee">
-<img width="300" alt="스크린샷 2023-11-26 오후 4 57 38" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/af8a26d1-0525-4411-b323-29be92d8f368">
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/19fac845-5cee-4d84-98b5-1e18994bb2ee">
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/af8a26d1-0525-4411-b323-29be92d8f368">
 
 ```yaml
 - spec:
@@ -142,7 +142,7 @@
 
 
 #### 2-2. get_states_between
-<img width="300" alt="스크린샷 2023-11-26 오후 5 46 45" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d504b372-460b-45b8-8705-027548bc0c52">
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d504b372-460b-45b8-8705-027548bc0c52">
 
 ```yaml
 - spec:
@@ -231,8 +231,8 @@
 ```
 
 #### 2-3. get_total_time_of_entity_state
-<img width="300" alt="스크린샷 2023-11-26 오후 4 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/42eab8bc-3326-4d70-b065-a4788060a49b">
-<img width="300" alt="스크린샷 2023-11-26 오후 5 35 33" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/1e01fce1-7891-4d87-bfea-cd52c5c73592">
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/42eab8bc-3326-4d70-b065-a4788060a49b">
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/1e01fce1-7891-4d87-bfea-cd52c5c73592">
 
 ```yaml
 - spec:
