@@ -1,0 +1,33 @@
+{
+    "config": {
+        "error": {
+            "cannot_connect": "Fehler beim Verbinden",
+            "invalid_auth": "Authentifizierung fehlgeschlagen",
+            "unknown": "Unbekannter Fehler"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "name": "Name",
+                    "api_key": "API Key",
+                    "base_url": "Base Url"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "max_tokens": "Maximale Anzahl an Tokens, die in einer Antwort zurückgegeben werden",
+                    "model": "Completion Model",
+                    "prompt": "Prompt Vorlage",
+                    "temperature": "Temperatur",
+                    "top_p": "Top P",
+                    "max_function_calls_per_conversation": "Maximale Anzahl an Funktionsaufrufen pro Konversation",
+                    "functions": "Funktionen"
+                }
+            }
+        }
+    }
+}

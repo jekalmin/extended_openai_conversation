@@ -3,10 +3,12 @@ import logging
 import os
 import yaml
 import time
+import sqlite3
 from bs4 import BeautifulSoup
 from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from openai.error import AuthenticationError
+from urllib import parse
 
 from homeassistant.components import automation, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
@@ -22,7 +24,7 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
 )
 from homeassistant.config import AUTOMATION_CONFIG_PATH
-from homeassistant.components import conversation
+from homeassistant.components import conversation, recorder
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.script import (
@@ -128,7 +130,7 @@ class FunctionExecutor(ABC):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         """execute function"""
 
 
@@ -143,7 +145,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         name = function["name"]
         if name == "execute_service":
             return await self.execute_service(
@@ -163,7 +165,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         result = []
         for service_argument in arguments.get("list", []):
             domain = service_argument["domain"]
@@ -198,7 +200,7 @@ class NativeFunctionExecutor(FunctionExecutor):
                 _LOGGER.error(e)
                 result.append(False)
 
-        return str(result)
+        return result
 
     async def add_automation(
         self,
@@ -207,7 +209,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         automation_config = yaml.safe_load(arguments["automation_config"])
         config = {"id": str(round(time.time() * 1000))}
         if isinstance(automation_config, list):
@@ -252,7 +254,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         script = Script(
             hass,
             function["sequence"],
@@ -279,7 +281,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         return Template(function["value_template"], hass).async_render(
             arguments,
             parse_result=False,
@@ -297,7 +299,7 @@ class RestFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         config = function
         rest_data = _get_rest_data(hass, config, arguments)
 
@@ -324,7 +326,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         config = function
         rest_data = _get_rest_data(hass, config, arguments)
         coordinator = scrape.coordinator.ScrapeCoordinator(
@@ -408,7 +410,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
         arguments,
         user_input: conversation.ConversationInput,
         exposed_entities,
-    ) -> str:
+    ):
         config = function
         sequence = config["sequence"]
 
@@ -420,9 +422,83 @@ class CompositeFunctionExecutor(FunctionExecutor):
 
             response_variable = executor_config.get("response_variable")
             if response_variable:
-                arguments[response_variable] = str(result)
+                arguments[response_variable] = result
 
         return result
+
+
+class SqliteFunctionExecutor(FunctionExecutor):
+    def __init__(self) -> None:
+        """initialize sqlite function"""
+
+    def is_exposed(self, entity_id, exposed_entities) -> bool:
+        return any(
+            exposed_entity["entity_id"] == entity_id
+            for exposed_entity in exposed_entities
+        )
+
+    def is_exposed_entity_in_query(self, query: str, exposed_entities) -> bool:
+        exposed_entity_ids = list(
+            map(lambda e: f"'{e['entity_id']}'", exposed_entities)
+        )
+        return any(
+            exposed_entity_id in query for exposed_entity_id in exposed_entity_ids
+        )
+
+    def raise_error(self, msg="Unexpected error occurred."):
+        raise HomeAssistantError(msg)
+
+    def get_default_db_url(self, hass: HomeAssistant) -> str:
+        db_file_path = os.path.join(hass.config.config_dir, recorder.DEFAULT_DB_FILE)
+        return f"file:{db_file_path}?mode=ro"
+
+    def set_url_read_only(self, url: str) -> str:
+        scheme, netloc, path, query_string, fragment = parse.urlsplit(url)
+        query_params = parse.parse_qs(query_string)
+
+        query_params["mode"] = ["ro"]
+        new_query_string = parse.urlencode(query_params, doseq=True)
+
+        return parse.urlunsplit((scheme, netloc, path, new_query_string, fragment))
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        db_url = self.set_url_read_only(
+            function.get("db_url", self.get_default_db_url(hass))
+        )
+        query = function.get("query", "{{query}}")
+
+        template_arguments = {
+            "is_exposed": lambda e: self.is_exposed(e, exposed_entities),
+            "is_exposed_entity_in_query": lambda q: self.is_exposed_entity_in_query(
+                q, exposed_entities
+            ),
+            "exposed_entities": exposed_entities,
+            "raise": self.raise_error,
+        }
+        template_arguments.update(arguments)
+
+        q = Template(query, hass).async_render(template_arguments)
+        _LOGGER.info("Rendered query: %s", q)
+        with sqlite3.connect(db_url, uri=True) as conn:
+            cursor = conn.execute(q)
+            names = [description[0] for description in cursor.description]
+
+            if function.get("single") is True:
+                row = cursor.fetchone()
+                return {name: val for name, val in zip(names, row)}
+
+            rows = cursor.fetchall()
+            result = []
+            for row in rows:
+                result.append({name: val for name, val in zip(names, row)})
+            return result
 
 
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
@@ -433,4 +509,5 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "rest": RestFunctionExecutor(),
     "scrape": ScrapeFunctionExecutor(),
     "composite": CompositeFunctionExecutor(),
+    "sqlite": SqliteFunctionExecutor(),
 }
