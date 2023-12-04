@@ -1,11 +1,6 @@
 ## Objective
 <img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
 
-## Prompt
-### add the following to prompts and fill in your list entity ids
-```For lists: Ensure you are differentiating and using one of the following as the list parameter: todo.shopping_list for modifying the "shopping list" and todo.to_do for modification to the "to-do list" ```
-
-
 ## Function
 
 ### add_item_to_shopping_cart
@@ -24,6 +19,7 @@
           description: the entity id of the list to update
           enum:
             - todo.shopping_list
+            - todo.to_do
       required:
       - item
       - list
@@ -47,6 +43,9 @@
         list:
           type: string
           description: the entity id of the list to update
+          enum:
+            - todo.shopping_list
+            - todo.to_do
       required:
       - item
       - list
@@ -59,4 +58,27 @@
         status: 'completed'
       target:
         entity_id: '{{list}}'
+- spec:
+    name: get_items_from_list
+    description: Read back items from a list
+    parameters:
+      type: object
+      properties:
+        list:
+          type: string
+          description: the entity id of the list to update
+          enum:
+            - todo.shopping_list
+            - todo.to_do
+      required:
+      - list
+  function:
+    type: script
+    sequence:
+    - service: todo.get_items
+      data:
+        status: 'needs_action'
+      target:
+        entity_id: '{{list}}'
+      response_variable: _function_result
 ```
