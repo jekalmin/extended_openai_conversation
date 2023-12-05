@@ -56,7 +56,7 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/64ba656e
 By clicking a button from Edit Assist, Options can be customized.<br/>
 Options include [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options and two new options. 
 
-- `Attach Username`: Pass the active user's name (if applicaple) to OpenAI via rhe message payload. Currently, this only applies to conversations through the UI or REST API.
+- `Attach Username`: Pass the active user's name (if applicable) to OpenAI via the message payload. Currently, this only applies to conversations through the UI or REST API.
 
 - `Maximum Function Calls Per Conversation`: limit the number of function calls in a single conversation.
 (Sometimes function is called over and over again, possibly running into infinite loop) 
