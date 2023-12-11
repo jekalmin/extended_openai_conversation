@@ -367,7 +367,6 @@ Scrape version from webpage, "https://www.home-assistant.io"
 Unlike [scrape](https://www.home-assistant.io/integrations/scrape/), "value_template" is added at root level in which scraped data from sensors are passed.
 
 ```yaml
-scrape:
 - spec:
     name: get_ha_version
     description: Use this function to get Home Assistant version

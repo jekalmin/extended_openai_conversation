@@ -4,12 +4,14 @@ import os
 import yaml
 import time
 import sqlite3
+import voluptuous as vol
 from bs4 import BeautifulSoup
 from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from openai.error import AuthenticationError
 from urllib import parse
 
+from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.components import automation, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.const import (
@@ -26,6 +28,7 @@ from homeassistant.const import (
 from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.components import conversation, recorder
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.script import (
     Script,
@@ -42,6 +45,7 @@ from .exceptions import (
     EntityNotExposed,
     CallServiceError,
     NativeNotFound,
+    InvalidFunction,
 )
 
 from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
@@ -119,8 +123,20 @@ async def validate_authentication(
 
 
 class FunctionExecutor(ABC):
-    def __init__(self) -> None:
+    def __init__(self, data_schema=vol.Schema({})) -> None:
         """initialize function executor"""
+        self.data_schema = data_schema.extend({vol.Required("type"): str})
+
+    def to_arguments(self, arguments):
+        """to_arguments function"""
+        try:
+            return self.data_schema(arguments)
+        except vol.error.Error as e:
+            function_type = next(
+                (key for key, value in FUNCTION_EXECUTORS.items() if value == self),
+                None,
+            )
+            raise InvalidFunction(function_type) from e
 
     @abstractmethod
     async def execute(
@@ -137,6 +153,7 @@ class FunctionExecutor(ABC):
 class NativeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize native function"""
+        super().__init__(vol.Schema({vol.Required("name"): str}))
 
     async def execute(
         self,
@@ -246,6 +263,7 @@ class NativeFunctionExecutor(FunctionExecutor):
 class ScriptFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize script function"""
+        super().__init__(SCRIPT_ENTITY_SCHEMA)
 
     async def execute(
         self,
@@ -273,6 +291,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
 class TemplateFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize template function"""
+        super().__init__(vol.Schema({vol.Required("value_template"): cv.template}))
 
     async def execute(
         self,
@@ -282,7 +301,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
-        return Template(function["value_template"], hass).async_render(
+        return function["value_template"].async_render(
             arguments,
             parse_result=False,
         )
@@ -291,6 +310,11 @@ class TemplateFunctionExecutor(FunctionExecutor):
 class RestFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Rest function"""
+        super().__init__(
+            vol.Schema(rest.RESOURCE_SCHEMA).extend(
+                {vol.Optional("value_template"): cv.template}
+            )
+        )
 
     async def execute(
         self,
@@ -318,6 +342,9 @@ class RestFunctionExecutor(FunctionExecutor):
 class ScrapeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Scrape function"""
+        super().__init__(
+            scrape.COMBINED_SCHEMA.extend({vol.Optional("value_template"): cv.template})
+        )
 
     async def execute(
         self,
@@ -339,13 +366,13 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         new_arguments = dict(arguments)
 
         for sensor_config in config["sensor"]:
-            name: str = sensor_config.get(CONF_NAME)
+            name: Template = sensor_config.get(CONF_NAME)
             value = self._async_update_from_rest_data(
                 coordinator.data, sensor_config, arguments
             )
             new_arguments["value"] = value
             if name:
-                new_arguments[name] = value
+                new_arguments[name.async_render()] = value
 
         result = new_arguments["value"]
         value_template = config.get(CONF_VALUE_TEMPLATE)
@@ -402,6 +429,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
 class CompositeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize composite function"""
+        super().__init__(vol.Schema({vol.Required("sequence"): cv.ensure_list}))
 
     async def execute(
         self,
@@ -430,6 +458,15 @@ class CompositeFunctionExecutor(FunctionExecutor):
 class SqliteFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize sqlite function"""
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Optional("query"): str,
+                    vol.Optional("db_url"): str,
+                    vol.Optional("single"): bool,
+                }
+            )
+        )
 
     def is_exposed(self, entity_id, exposed_entities) -> bool:
         return any(

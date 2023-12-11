@@ -58,6 +58,7 @@ from .exceptions import (
     NativeNotFound,
     FunctionLoadFailed,
     ParseArgumentsFailed,
+    InvalidFunction,
 )
 
 from .helpers import (
@@ -235,9 +236,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
                 for setting in result:
-                    for function in setting["function"].values():
-                        convert_to_template(function, hass=self.hass)
+                    function_executor = FUNCTION_EXECUTORS[setting["function"]["type"]]
+                    setting["function"] = function_executor.to_arguments(
+                        setting["function"]
+                    )
             return result
+        except InvalidFunction as e:
+            raise e
         except:
             raise FunctionLoadFailed()
 
@@ -320,8 +325,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
         try:
             arguments = json.loads(message["function_call"]["arguments"])
-        except json.decoder.JSONDecodeError:
-            raise ParseArgumentsFailed(message["function_call"]["arguments"])
+        except json.decoder.JSONDecodeError as err:
+            raise ParseArgumentsFailed(message["function_call"]["arguments"]) from err
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities
