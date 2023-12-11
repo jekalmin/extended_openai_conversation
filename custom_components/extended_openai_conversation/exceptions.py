@@ -101,3 +101,19 @@ class ParseArgumentsFailed(HomeAssistantError):
     def __str__(self) -> str:
         """Return string representation."""
         return f"failed to parse arguments `{self.arguments}`. Increase maximum token to avoid the issue."
+
+
+class InvalidFunction(HomeAssistantError):
+    """When function validation failed."""
+
+    def __init__(self, function_name: str) -> None:
+        """Initialize error."""
+        super().__init__(
+            self,
+            f"failed to validate function `{function_name}`",
+        )
+        self.function_name = function_name
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return f"failed to validate function `{self.function_name}` ({self.__cause__})"
