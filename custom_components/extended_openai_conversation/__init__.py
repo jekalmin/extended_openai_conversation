@@ -265,6 +265,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
+        response_format = {"type": "text"}
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
@@ -279,6 +280,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             user=user_input.conversation_id,
             functions=functions,
             function_call=function_call,
+            response_format=response_format,
         )
 
         _LOGGER.info("Response %s", response)
