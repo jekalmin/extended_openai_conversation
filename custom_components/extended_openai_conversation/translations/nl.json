@@ -10,7 +10,8 @@
                 "data": {
                     "name": "Naam",
                     "api_key": "API-sleutel",
-                    "base_url": "Basis-URL"
+                    "base_url": "Basis-URL",
+                    "api_version": "Api Version"
                 }
             }
         }

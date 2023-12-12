@@ -34,6 +34,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    CONF_API_VERSION,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -54,6 +55,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_NAME): str,
         vol.Required(CONF_API_KEY): str,
         vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
+        vol.Optional(CONF_API_VERSION): str,
     }
 )
 
@@ -80,13 +82,16 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """
     api_key = data[CONF_API_KEY]
     base_url = data.get(CONF_BASE_URL)
+    api_version = data.get(CONF_API_VERSION)
 
     if base_url == DEFAULT_CONF_BASE_URL:
         # Do not set base_url if using OpenAI for case of OpenAI's base_url change
         base_url = None
         data.pop(CONF_BASE_URL)
 
-    await validate_authentication(hass=hass, api_key=api_key, base_url=base_url)
+    await validate_authentication(
+        hass=hass, api_key=api_key, base_url=base_url, api_version=api_version
+    )
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

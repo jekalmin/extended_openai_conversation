@@ -5,7 +5,8 @@
         "data": {
           "name": "[%key:common::config_flow::data::name%]",
           "api_key": "[%key:common::config_flow::data::api_key%]",
-          "base_url": "[%key:common::config_flow::data::base_url%]"
+          "base_url": "[%key:common::config_flow::data::base_url%]",
+          "api_version": "[%key:common::config_flow::data::api_version%]"
         }
       }
     },
