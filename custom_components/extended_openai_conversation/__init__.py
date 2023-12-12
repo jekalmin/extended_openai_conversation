@@ -1,6 +1,7 @@
 """The OpenAI Conversation integration."""
 from __future__ import annotations
 
+import re
 import logging
 from typing import Literal
 import json
@@ -39,6 +40,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    CONF_API_VERSION,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -79,6 +81,7 @@ from .helpers import (
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
 
 
 # hass.data key for agent.
@@ -93,6 +96,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass=hass,
             api_key=entry.data[CONF_API_KEY],
             base_url=entry.data.get(CONF_BASE_URL),
+            api_version=entry.data.get(CONF_API_VERSION),
         )
     except error.AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)
@@ -258,6 +262,12 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
     ):
         """Process a sentence."""
+        api_base = self.entry.data.get(CONF_BASE_URL)
+        api_key = self.entry.data[CONF_API_KEY]
+        api_type = None
+        if api_base and re.search(AZURE_DOMAIN_PATTERN, api_base):
+            api_type = "azure"
+        api_version = self.entry.data.get(CONF_API_VERSION)
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
@@ -274,8 +284,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
         response = await openai.ChatCompletion.acreate(
-            api_base=self.entry.data.get(CONF_BASE_URL),
-            api_key=self.entry.data[CONF_API_KEY],
+            api_base=api_base,
+            api_key=api_key,
+            api_type=api_type,
+            api_version=api_version,
             model=model,
             messages=messages,
             max_tokens=max_tokens,

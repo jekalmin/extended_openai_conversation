@@ -10,7 +10,8 @@
                 "data": {
                     "name": "Name",
                     "api_key": "API Key",
-                    "base_url": "Base Url"
+                    "base_url": "Base Url",
+                    "api_version": "Api Version"
                 }
             }
         }

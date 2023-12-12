@@ -122,13 +122,18 @@ def _get_rest_data(hass, rest_config, arguments):
 
 
 async def validate_authentication(
-    hass: HomeAssistant, api_key: str, base_url: str
+    hass: HomeAssistant, api_key: str, base_url: str, api_version: str
 ) -> None:
     if not base_url:
         base_url = DEFAULT_CONF_BASE_URL
+
+    url = f"{base_url}/models"
+    if api_version:
+        url = f"{url}?api-version={api_version}"
+
     session = async_get_clientsession(hass)
     response = await session.get(
-        f"{base_url}/models",
+        url,
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=10,
     )
