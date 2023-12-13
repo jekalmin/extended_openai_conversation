@@ -166,6 +166,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         try:
             response = await self.query(user_input, messages, exposed_entities, 0)
         except error.OpenAIError as err:
+            _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
                 intent.IntentResponseErrorCode.UNKNOWN,
