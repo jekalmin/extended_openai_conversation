@@ -11,8 +11,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from openai.error import AuthenticationError
 from urllib import parse
 
+from datetime import timedelta
+import homeassistant.util.dt as dt_util
+from homeassistant.components.recorder import get_instance, history as hist
+from homeassistant.components.recorder.util import session_scope
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
-from homeassistant.components import automation, rest, scrape
+from homeassistant.components import automation, rest, scrape, history
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.const import (
     SERVICE_RELOAD,
@@ -27,7 +31,7 @@ from homeassistant.const import (
 )
 from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.components import conversation, recorder
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.script import (
@@ -138,6 +142,13 @@ class FunctionExecutor(ABC):
             )
             raise InvalidFunction(function_type) from e
 
+    def validate_entity_ids(self, hass: HomeAssistant, entity_ids, exposed_entities):
+        if any(hass.states.get(entity_id) is None for entity_id in entity_ids):
+            raise EntityNotFound(entity_ids)
+        exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
+        if not set(entity_ids).issubset(exposed_entity_ids):
+            raise EntityNotExposed(entity_ids)
+
     @abstractmethod
     async def execute(
         self,
@@ -200,11 +211,7 @@ class NativeFunctionExecutor(FunctionExecutor):
                 raise CallServiceError(domain, service, service_data)
             if not hass.services.has_service(domain, service):
                 raise ServiceNotFound(domain, service)
-            if any(hass.states.get(entity) is None for entity in entity_id):
-                raise EntityNotFound(entity_id)
-            exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
-            if not set(entity_id).issubset(exposed_entity_ids):
-                raise EntityNotExposed(entity_id)
+            self.validate_entity_ids(hass, entity_id, exposed_entities)
 
             try:
                 await hass.services.async_call(
@@ -539,6 +546,71 @@ class SqliteFunctionExecutor(FunctionExecutor):
             return result
 
 
+class HistoryFunctionExecutor(FunctionExecutor):
+    def __init__(self) -> None:
+        """initialize history function"""
+        super().__init__()
+        self.view = history.HistoryPeriodView()
+        self.one_day = timedelta(days=1)
+        # super().__init__(vol.Schema({vol.Required("sequence"): cv.ensure_list}))
+
+    def as_utc(self, value: str, default_value, parse_error_message: str):
+        if value is None:
+            return default_value
+
+        parsed_datetime = dt_util.parse_datetime(value)
+        if parsed_datetime is None:
+            raise HomeAssistantError(parse_error_message)
+
+        return dt_util.as_utc(parsed_datetime)
+
+    def as_dict(self, state: State | dict[str, Any]):
+        if isinstance(state, State):
+            return state.as_dict()
+        return state
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        start_time = arguments.get("start_time")
+        end_time = arguments.get("end_time")
+        entity_ids = arguments.get("entity_ids", [])
+        include_start_time_state = arguments.get("include_start_time_state", True)
+        significant_changes_only = arguments.get("significant_changes_only", True)
+        minimal_response = arguments.get("minimal_response", True)
+        no_attributes = arguments.get("no_attributes", True)
+
+        now = dt_util.utcnow()
+        start_time = self.as_utc(start_time, now - self.one_day, "start_time not valid")
+        end_time = self.as_utc(
+            end_time, start_time + self.one_day, "end_time not valid"
+        )
+
+        self.validate_entity_ids(hass, entity_ids, exposed_entities)
+
+        with session_scope(hass=hass, read_only=True) as session:
+            result = await get_instance(hass).async_add_executor_job(
+                hist.get_significant_states_with_session,
+                hass,
+                session,
+                start_time,
+                end_time,
+                entity_ids,
+                None,
+                include_start_time_state,
+                significant_changes_only,
+                minimal_response,
+                no_attributes,
+            )
+
+        return [self.as_dict(item) for sublist in result.values() for item in sublist]
+
+
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "predefined": NativeFunctionExecutor(),
     "native": NativeFunctionExecutor(),
@@ -548,4 +620,5 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "scrape": ScrapeFunctionExecutor(),
     "composite": CompositeFunctionExecutor(),
     "sqlite": SqliteFunctionExecutor(),
+    "history": HistoryFunctionExecutor(),
 }
