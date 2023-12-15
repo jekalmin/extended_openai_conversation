@@ -436,7 +436,25 @@ class ScrapeFunctionExecutor(FunctionExecutor):
 class CompositeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize composite function"""
-        super().__init__(vol.Schema({vol.Required("sequence"): cv.ensure_list}))
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("sequence"): vol.All(
+                        cv.ensure_list, [self.function_schema]
+                    )
+                }
+            )
+        )
+
+    def function_schema(self, value: Any) -> dict:
+        """Validate a composite function schema."""
+        if not isinstance(value, dict):
+            raise vol.Invalid("expected dictionary")
+
+        composite_schema = {vol.Optional("response_variable"): str}
+        return FUNCTION_EXECUTORS[value["type"]].data_schema.extend(composite_schema)(
+            value
+        )
 
     async def execute(
         self,
