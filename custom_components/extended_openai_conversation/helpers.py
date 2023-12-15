@@ -570,7 +570,6 @@ class HistoryFunctionExecutor(FunctionExecutor):
         super().__init__()
         self.view = history.HistoryPeriodView()
         self.one_day = timedelta(days=1)
-        # super().__init__(vol.Schema({vol.Required("sequence"): cv.ensure_list}))
 
     def as_utc(self, value: str, default_value, parse_error_message: str):
         if value is None:
@@ -626,7 +625,7 @@ class HistoryFunctionExecutor(FunctionExecutor):
                 no_attributes,
             )
 
-        return [self.as_dict(item) for sublist in result.values() for item in sublist]
+        return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
 
 
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
