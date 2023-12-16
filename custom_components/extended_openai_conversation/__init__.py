@@ -72,6 +72,7 @@ from .helpers import (
     CompositeFunctionExecutor,
     convert_to_template,
     validate_authentication,
+    get_function_executor,
 )
 
 
@@ -237,12 +238,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
                 for setting in result:
-                    function_executor = FUNCTION_EXECUTORS[setting["function"]["type"]]
+                    function_executor = get_function_executor(
+                        setting["function"]["type"]
+                    )
                     setting["function"] = function_executor.to_arguments(
                         setting["function"]
                     )
             return result
-        except InvalidFunction as e:
+        except (InvalidFunction, FunctionNotFound) as e:
             raise e
         except:
             raise FunctionLoadFailed()
@@ -325,7 +328,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
         function,
     ):
-        function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
+        function_executor = get_function_executor(function["function"]["type"])
+
         try:
             arguments = json.loads(message["function_call"]["arguments"])
         except json.decoder.JSONDecodeError as err:

@@ -13,10 +13,15 @@ from urllib import parse
 
 from datetime import timedelta
 import homeassistant.util.dt as dt_util
-from homeassistant.components.recorder import get_instance, history as hist
-from homeassistant.components.recorder.util import session_scope
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
-from homeassistant.components import automation, rest, scrape, history
+from homeassistant.components import (
+    automation,
+    rest,
+    scrape,
+    history,
+    conversation,
+    recorder,
+)
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.const import (
     SERVICE_RELOAD,
@@ -30,7 +35,6 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
 )
 from homeassistant.config import AUTOMATION_CONFIG_PATH
-from homeassistant.components import conversation, recorder
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.template import Template
@@ -50,12 +54,20 @@ from .exceptions import (
     CallServiceError,
     NativeNotFound,
     InvalidFunction,
+    FunctionNotFound,
 )
 
 from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def get_function_executor(value: str):
+    function_executor = FUNCTION_EXECUTORS.get(value)
+    if function_executor is None:
+        raise FunctionNotFound(value)
+    return function_executor
 
 
 def convert_to_template(
@@ -183,6 +195,10 @@ class NativeFunctionExecutor(FunctionExecutor):
             return await self.add_automation(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "get_history":
+            return await self.get_history(
+                hass, function, arguments, user_input, exposed_entities
+            )
 
         raise NativeNotFound(name)
 
@@ -265,6 +281,61 @@ class NativeFunctionExecutor(FunctionExecutor):
             {"automation_config": config, "raw_config": raw_config},
         )
         return "Success"
+
+    async def get_history(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        start_time = arguments.get("start_time")
+        end_time = arguments.get("end_time")
+        entity_ids = arguments.get("entity_ids", [])
+        include_start_time_state = arguments.get("include_start_time_state", True)
+        significant_changes_only = arguments.get("significant_changes_only", True)
+        minimal_response = arguments.get("minimal_response", True)
+        no_attributes = arguments.get("no_attributes", True)
+
+        now = dt_util.utcnow()
+        one_day = timedelta(days=1)
+        start_time = self.as_utc(start_time, now - one_day, "start_time not valid")
+        end_time = self.as_utc(end_time, start_time + one_day, "end_time not valid")
+
+        self.validate_entity_ids(hass, entity_ids, exposed_entities)
+
+        with recorder.util.session_scope(hass=hass, read_only=True) as session:
+            result = await recorder.get_instance(hass).async_add_executor_job(
+                recorder.history.get_significant_states_with_session,
+                hass,
+                session,
+                start_time,
+                end_time,
+                entity_ids,
+                None,
+                include_start_time_state,
+                significant_changes_only,
+                minimal_response,
+                no_attributes,
+            )
+
+        return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
+
+    def as_utc(self, value: str, default_value, parse_error_message: str):
+        if value is None:
+            return default_value
+
+        parsed_datetime = dt_util.parse_datetime(value)
+        if parsed_datetime is None:
+            raise HomeAssistantError(parse_error_message)
+
+        return dt_util.as_utc(parsed_datetime)
+
+    def as_dict(self, state: State | dict[str, Any]):
+        if isinstance(state, State):
+            return state.as_dict()
+        return state
 
 
 class ScriptFunctionExecutor(FunctionExecutor):
@@ -452,9 +523,9 @@ class CompositeFunctionExecutor(FunctionExecutor):
             raise vol.Invalid("expected dictionary")
 
         composite_schema = {vol.Optional("response_variable"): str}
-        return FUNCTION_EXECUTORS[value["type"]].data_schema.extend(composite_schema)(
-            value
-        )
+        function_executor = get_function_executor(value["type"])
+
+        return function_executor.data_schema.extend(composite_schema)(value)
 
     async def execute(
         self,
@@ -564,72 +635,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
             return result
 
 
-class HistoryFunctionExecutor(FunctionExecutor):
-    def __init__(self) -> None:
-        """initialize history function"""
-        super().__init__()
-        self.view = history.HistoryPeriodView()
-        self.one_day = timedelta(days=1)
-
-    def as_utc(self, value: str, default_value, parse_error_message: str):
-        if value is None:
-            return default_value
-
-        parsed_datetime = dt_util.parse_datetime(value)
-        if parsed_datetime is None:
-            raise HomeAssistantError(parse_error_message)
-
-        return dt_util.as_utc(parsed_datetime)
-
-    def as_dict(self, state: State | dict[str, Any]):
-        if isinstance(state, State):
-            return state.as_dict()
-        return state
-
-    async def execute(
-        self,
-        hass: HomeAssistant,
-        function,
-        arguments,
-        user_input: conversation.ConversationInput,
-        exposed_entities,
-    ):
-        start_time = arguments.get("start_time")
-        end_time = arguments.get("end_time")
-        entity_ids = arguments.get("entity_ids", [])
-        include_start_time_state = arguments.get("include_start_time_state", True)
-        significant_changes_only = arguments.get("significant_changes_only", True)
-        minimal_response = arguments.get("minimal_response", True)
-        no_attributes = arguments.get("no_attributes", True)
-
-        now = dt_util.utcnow()
-        start_time = self.as_utc(start_time, now - self.one_day, "start_time not valid")
-        end_time = self.as_utc(
-            end_time, start_time + self.one_day, "end_time not valid"
-        )
-
-        self.validate_entity_ids(hass, entity_ids, exposed_entities)
-
-        with session_scope(hass=hass, read_only=True) as session:
-            result = await get_instance(hass).async_add_executor_job(
-                hist.get_significant_states_with_session,
-                hass,
-                session,
-                start_time,
-                end_time,
-                entity_ids,
-                None,
-                include_start_time_state,
-                significant_changes_only,
-                minimal_response,
-                no_attributes,
-            )
-
-        return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
-
-
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
-    "predefined": NativeFunctionExecutor(),
     "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
     "template": TemplateFunctionExecutor(),
@@ -637,5 +643,4 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "scrape": ScrapeFunctionExecutor(),
     "composite": CompositeFunctionExecutor(),
     "sqlite": SqliteFunctionExecutor(),
-    "history": HistoryFunctionExecutor(),
 }
