@@ -3,7 +3,7 @@
 
 ## Function
 
-### add_item_to_shopping_cart
+### add_item_to_list
 ```yaml
 - spec:
     name: add_item_to_list
@@ -31,6 +31,10 @@
         item: '{{item}}'
       target:
         entity_id: '{{list}}'
+```
+
+### remove_item_from_list
+```yaml
 - spec:
     name: remove_item_from_list
     description: Check an item off a list
@@ -58,6 +62,10 @@
         status: 'completed'
       target:
         entity_id: '{{list}}'
+```
+
+### get_items_from_list
+```yaml
 - spec:
     name: get_items_from_list
     description: Read back items from a list
