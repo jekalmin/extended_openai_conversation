@@ -539,7 +539,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
         sequence = config["sequence"]
 
         for executor_config in sequence:
-            function_executor = FUNCTION_EXECUTORS[executor_config["type"]]
+            function_executor = get_function_executor(executor_config["type"])
             result = await function_executor.execute(
                 hass, executor_config, arguments, user_input, exposed_entities
             )
