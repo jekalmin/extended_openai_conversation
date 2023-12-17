@@ -6,7 +6,8 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 ## Additional Features
 - Ability to call service of Home Assistant
 - Ability to create automation
-- Ability to get data from API or web page
+- Ability to get data from external API or web page
+- Ability to retrieve state history of entities
 - Option to pass the current user's name to OpenAI via the user message context
 
 ## How it works
@@ -81,6 +82,13 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
       - `service_data`(string): service_data to be passed to `hass.services.async_call`
     - `add_automation`
       - `automation_config`(string): An automation configuration in a yaml format
+    - `get_history`
+      - `entity_ids`(list): a list of entity ids to filter
+      - `start_time`(string): defaults to 1 day before the time of the request. It determines the beginning of the period
+      - `end_time`(string): the end of the period in URL encoded format (defaults to 1 day)
+      - `minimal_response`(boolean): only return last_changed and state for states other than the first and last state (defaults to true)
+      - `no_attributes`(boolean): skip returning attributes from the database (defaults to true)
+      - `significant_changes_only`(boolean): only return significant state changes (defaults to true)
 - `script`: A list of services that will be called
 - `template`: The value to be returned from function.
 - `rest`: Getting data from REST API endpoint.
@@ -359,6 +367,52 @@ Copy and paste below configuration into "Functions"
 ```
 
 <img width="300" alt="스크린샷 2023-10-31 오후 9 32 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/55f5fe7e-b1fd-43c9-bce6-ac92e203598f">
+
+#### 3-2. Get History
+Get state history of entities
+
+```yaml
+- spec:
+    name: get_history
+    description: Retrieve historical data of specified entities.
+    parameters:
+      type: object
+      properties:
+        entity_ids:
+          type: array
+          items:
+            type: string
+            description: The entity id to filter.
+        start_time:
+          type: string
+          description: Start of the history period in "%Y-%m-%dT%H:%M:%S%z".
+        end_time:
+          type: string
+          description: End of the history period in "%Y-%m-%dT%H:%M:%S%z".
+      required:
+      - entity_ids
+  function:
+    type: composite
+    sequence:
+      - type: native
+        name: get_history
+        response_variable: history_result
+      - type: template
+        value_template: >-
+          {% set ns = namespace(result = [], list = []) %}
+          {% for item_list in history_result %}
+              {% set ns.list = [] %}
+              {% for item in item_list %}
+                  {% set last_changed = item.last_changed | as_timestamp | timestamp_local if item.last_changed else None %}
+                  {% set new_item = dict(item, last_changed=last_changed) %}
+                  {% set ns.list = ns.list + [new_item] %}
+              {% endfor %}
+              {% set ns.result = ns.result + [ns.list] %}
+          {% endfor %}
+          {{ ns.result }}
+```
+
+<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/32217f3d-10fc-4001-9028-717b1683573b">
 
 ### 4. scrape
 #### 4-1. Get current HA version
