@@ -77,3 +77,5 @@ DEFAULT_CONF_FUNCTIONS = [
 ]
 CONF_BASE_URL = "base_url"
 DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
+CONF_ATTACH_USERNAME = "attach_username"
+DEFAULT_ATTACH_USERNAME = False

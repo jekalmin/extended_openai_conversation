@@ -4,13 +4,24 @@ import os
 import yaml
 import time
 import sqlite3
+import voluptuous as vol
 from bs4 import BeautifulSoup
 from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from openai.error import AuthenticationError
 from urllib import parse
 
-from homeassistant.components import automation, rest, scrape
+from datetime import timedelta
+import homeassistant.util.dt as dt_util
+from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
+from homeassistant.components import (
+    automation,
+    rest,
+    scrape,
+    history,
+    conversation,
+    recorder,
+)
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.const import (
     SERVICE_RELOAD,
@@ -24,8 +35,8 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
 )
 from homeassistant.config import AUTOMATION_CONFIG_PATH
-from homeassistant.components import conversation, recorder
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.script import (
     Script,
@@ -42,12 +53,21 @@ from .exceptions import (
     EntityNotExposed,
     CallServiceError,
     NativeNotFound,
+    InvalidFunction,
+    FunctionNotFound,
 )
 
 from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def get_function_executor(value: str):
+    function_executor = FUNCTION_EXECUTORS.get(value)
+    if function_executor is None:
+        raise FunctionNotFound(value)
+    return function_executor
 
 
 def convert_to_template(
@@ -119,8 +139,27 @@ async def validate_authentication(
 
 
 class FunctionExecutor(ABC):
-    def __init__(self) -> None:
+    def __init__(self, data_schema=vol.Schema({})) -> None:
         """initialize function executor"""
+        self.data_schema = data_schema.extend({vol.Required("type"): str})
+
+    def to_arguments(self, arguments):
+        """to_arguments function"""
+        try:
+            return self.data_schema(arguments)
+        except vol.error.Error as e:
+            function_type = next(
+                (key for key, value in FUNCTION_EXECUTORS.items() if value == self),
+                None,
+            )
+            raise InvalidFunction(function_type) from e
+
+    def validate_entity_ids(self, hass: HomeAssistant, entity_ids, exposed_entities):
+        if any(hass.states.get(entity_id) is None for entity_id in entity_ids):
+            raise EntityNotFound(entity_ids)
+        exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
+        if not set(entity_ids).issubset(exposed_entity_ids):
+            raise EntityNotExposed(entity_ids)
 
     @abstractmethod
     async def execute(
@@ -137,6 +176,7 @@ class FunctionExecutor(ABC):
 class NativeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize native function"""
+        super().__init__(vol.Schema({vol.Required("name"): str}))
 
     async def execute(
         self,
@@ -153,6 +193,10 @@ class NativeFunctionExecutor(FunctionExecutor):
             )
         if name == "add_automation":
             return await self.add_automation(
+                hass, function, arguments, user_input, exposed_entities
+            )
+        if name == "get_history":
+            return await self.get_history(
                 hass, function, arguments, user_input, exposed_entities
             )
 
@@ -183,11 +227,7 @@ class NativeFunctionExecutor(FunctionExecutor):
                 raise CallServiceError(domain, service, service_data)
             if not hass.services.has_service(domain, service):
                 raise ServiceNotFound(domain, service)
-            if any(hass.states.get(entity) is None for entity in entity_id):
-                raise EntityNotFound(entity_id)
-            exposed_entity_ids = map(lambda e: e["entity_id"], exposed_entities)
-            if not set(entity_id).issubset(exposed_entity_ids):
-                raise EntityNotExposed(entity_id)
+            self.validate_entity_ids(hass, entity_id, exposed_entities)
 
             try:
                 await hass.services.async_call(
@@ -242,10 +282,66 @@ class NativeFunctionExecutor(FunctionExecutor):
         )
         return "Success"
 
+    async def get_history(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        start_time = arguments.get("start_time")
+        end_time = arguments.get("end_time")
+        entity_ids = arguments.get("entity_ids", [])
+        include_start_time_state = arguments.get("include_start_time_state", True)
+        significant_changes_only = arguments.get("significant_changes_only", True)
+        minimal_response = arguments.get("minimal_response", True)
+        no_attributes = arguments.get("no_attributes", True)
+
+        now = dt_util.utcnow()
+        one_day = timedelta(days=1)
+        start_time = self.as_utc(start_time, now - one_day, "start_time not valid")
+        end_time = self.as_utc(end_time, start_time + one_day, "end_time not valid")
+
+        self.validate_entity_ids(hass, entity_ids, exposed_entities)
+
+        with recorder.util.session_scope(hass=hass, read_only=True) as session:
+            result = await recorder.get_instance(hass).async_add_executor_job(
+                recorder.history.get_significant_states_with_session,
+                hass,
+                session,
+                start_time,
+                end_time,
+                entity_ids,
+                None,
+                include_start_time_state,
+                significant_changes_only,
+                minimal_response,
+                no_attributes,
+            )
+
+        return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
+
+    def as_utc(self, value: str, default_value, parse_error_message: str):
+        if value is None:
+            return default_value
+
+        parsed_datetime = dt_util.parse_datetime(value)
+        if parsed_datetime is None:
+            raise HomeAssistantError(parse_error_message)
+
+        return dt_util.as_utc(parsed_datetime)
+
+    def as_dict(self, state: State | dict[str, Any]):
+        if isinstance(state, State):
+            return state.as_dict()
+        return state
+
 
 class ScriptFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize script function"""
+        super().__init__(SCRIPT_ENTITY_SCHEMA)
 
     async def execute(
         self,
@@ -273,6 +369,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
 class TemplateFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize template function"""
+        super().__init__(vol.Schema({vol.Required("value_template"): cv.template}))
 
     async def execute(
         self,
@@ -282,7 +379,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
-        return Template(function["value_template"], hass).async_render(
+        return function["value_template"].async_render(
             arguments,
             parse_result=False,
         )
@@ -291,6 +388,11 @@ class TemplateFunctionExecutor(FunctionExecutor):
 class RestFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Rest function"""
+        super().__init__(
+            vol.Schema(rest.RESOURCE_SCHEMA).extend(
+                {vol.Optional("value_template"): cv.template}
+            )
+        )
 
     async def execute(
         self,
@@ -318,6 +420,9 @@ class RestFunctionExecutor(FunctionExecutor):
 class ScrapeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Scrape function"""
+        super().__init__(
+            scrape.COMBINED_SCHEMA.extend({vol.Optional("value_template"): cv.template})
+        )
 
     async def execute(
         self,
@@ -339,13 +444,13 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         new_arguments = dict(arguments)
 
         for sensor_config in config["sensor"]:
-            name: str = sensor_config.get(CONF_NAME)
+            name: Template = sensor_config.get(CONF_NAME)
             value = self._async_update_from_rest_data(
                 coordinator.data, sensor_config, arguments
             )
             new_arguments["value"] = value
             if name:
-                new_arguments[name] = value
+                new_arguments[name.async_render()] = value
 
         result = new_arguments["value"]
         value_template = config.get(CONF_VALUE_TEMPLATE)
@@ -402,6 +507,25 @@ class ScrapeFunctionExecutor(FunctionExecutor):
 class CompositeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize composite function"""
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("sequence"): vol.All(
+                        cv.ensure_list, [self.function_schema]
+                    )
+                }
+            )
+        )
+
+    def function_schema(self, value: Any) -> dict:
+        """Validate a composite function schema."""
+        if not isinstance(value, dict):
+            raise vol.Invalid("expected dictionary")
+
+        composite_schema = {vol.Optional("response_variable"): str}
+        function_executor = get_function_executor(value["type"])
+
+        return function_executor.data_schema.extend(composite_schema)(value)
 
     async def execute(
         self,
@@ -415,7 +539,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
         sequence = config["sequence"]
 
         for executor_config in sequence:
-            function_executor = FUNCTION_EXECUTORS[executor_config["type"]]
+            function_executor = get_function_executor(executor_config["type"])
             result = await function_executor.execute(
                 hass, executor_config, arguments, user_input, exposed_entities
             )
@@ -430,6 +554,15 @@ class CompositeFunctionExecutor(FunctionExecutor):
 class SqliteFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize sqlite function"""
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Optional("query"): str,
+                    vol.Optional("db_url"): str,
+                    vol.Optional("single"): bool,
+                }
+            )
+        )
 
     def is_exposed(self, entity_id, exposed_entities) -> bool:
         return any(
@@ -486,8 +619,9 @@ class SqliteFunctionExecutor(FunctionExecutor):
 
         q = Template(query, hass).async_render(template_arguments)
         _LOGGER.info("Rendered query: %s", q)
+
         with sqlite3.connect(db_url, uri=True) as conn:
-            cursor = conn.execute(q)
+            cursor = conn.cursor().execute(q)
             names = [description[0] for description in cursor.description]
 
             if function.get("single") is True:
@@ -502,7 +636,6 @@ class SqliteFunctionExecutor(FunctionExecutor):
 
 
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
-    "predefined": NativeFunctionExecutor(),
     "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
     "template": TemplateFunctionExecutor(),

@@ -11,7 +11,7 @@ from openai import error
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_KEY, MATCH_ALL
+from homeassistant.const import CONF_API_KEY, MATCH_ALL, ATTR_NAME
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.util import ulid
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
@@ -30,6 +30,7 @@ from homeassistant.helpers import (
 )
 
 from .const import (
+    CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
     CONF_PROMPT,
@@ -38,6 +39,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -54,6 +56,9 @@ from .exceptions import (
     CallServiceError,
     FunctionNotFound,
     NativeNotFound,
+    FunctionLoadFailed,
+    ParseArgumentsFailed,
+    InvalidFunction,
 )
 
 from .helpers import (
@@ -67,6 +72,7 @@ from .helpers import (
     CompositeFunctionExecutor,
     convert_to_template,
     validate_authentication,
+    get_function_executor,
 )
 
 
@@ -150,12 +156,18 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     response=intent_response, conversation_id=conversation_id
                 )
             messages = [{"role": "system", "content": prompt}]
+        user_message = {"role": "user", "content": user_input.text}
+        if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
+            user = await self.hass.auth.async_get_user(user_input.context.user_id)
+            if user is not None and user.name is not None:
+                user_message[ATTR_NAME] = user.name
 
-        messages.append({"role": "user", "content": user_input.text})
+        messages.append(user_message)
 
         try:
             response = await self.query(user_input, messages, exposed_entities, 0)
         except error.OpenAIError as err:
+            _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
                 intent.IntentResponseErrorCode.UNKNOWN,
@@ -164,14 +176,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             return conversation.ConversationResult(
                 response=intent_response, conversation_id=conversation_id
             )
-        except (
-            EntityNotFound,
-            ServiceNotFound,
-            CallServiceError,
-            EntityNotExposed,
-            FunctionNotFound,
-            NativeNotFound,
-        ) as err:
+        except HomeAssistantError as err:
+            _LOGGER.error(err, exc_info=err)
             intent_response = intent.IntentResponse(language=user_input.language)
             intent_response.async_set_error(
                 intent.IntentResponseErrorCode.UNKNOWN,
@@ -232,12 +238,17 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
                 for setting in result:
-                    for function in setting["function"].values():
-                        convert_to_template(function, hass=self.hass)
+                    function_executor = get_function_executor(
+                        setting["function"]["type"]
+                    )
+                    setting["function"] = function_executor.to_arguments(
+                        setting["function"]
+                    )
             return result
-        except Exception as e:
-            _LOGGER.error("Failed to load functions", e)
-            return []
+        except (InvalidFunction, FunctionNotFound) as e:
+            raise e
+        except:
+            raise FunctionLoadFailed()
 
     async def query(
         self,
@@ -258,6 +269,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
+        response_format = {"type": "text"}
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
@@ -272,6 +284,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             user=user_input.conversation_id,
             functions=functions,
             function_call=function_call,
+            response_format=response_format,
         )
 
         _LOGGER.info("Response %s", response)
@@ -315,8 +328,12 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
         function,
     ):
-        function_executor = FUNCTION_EXECUTORS[function["function"]["type"]]
-        arguments = json.loads(message["function_call"]["arguments"])
+        function_executor = get_function_executor(function["function"]["type"])
+
+        try:
+            arguments = json.loads(message["function_call"]["arguments"])
+        except json.decoder.JSONDecodeError as err:
+            raise ParseArgumentsFailed(message["function_call"]["arguments"]) from err
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities

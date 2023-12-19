@@ -15,6 +15,7 @@ from homeassistant.const import CONF_NAME, CONF_API_KEY
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     TemplateSelector,
@@ -24,6 +25,7 @@ from homeassistant.helpers.selector import (
 from .helpers import validate_authentication
 
 from .const import (
+    CONF_ATTACH_USERNAME,
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
     CONF_PROMPT,
@@ -32,6 +34,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
@@ -65,6 +68,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
+        CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
     }
 )
 
@@ -194,4 +198,11 @@ def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
             description={"suggested_value": options.get(CONF_FUNCTIONS)},
             default=DEFAULT_CONF_FUNCTIONS_STR,
         ): TemplateSelector(),
+        vol.Optional(
+            CONF_ATTACH_USERNAME,
+            description={
+                "suggested_value": options.get(CONF_ATTACH_USERNAME)
+            },
+            default=DEFAULT_ATTACH_USERNAME,
+        ): BooleanSelector(),
     }
