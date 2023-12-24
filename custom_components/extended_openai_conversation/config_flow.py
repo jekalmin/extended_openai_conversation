@@ -20,9 +20,13 @@ from homeassistant.helpers.selector import (
     NumberSelectorConfig,
     TemplateSelector,
     AttributeSelector,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectOptionDict,
+    SelectSelectorMode,
 )
 
-from .helpers import validate_authentication
+from .helpers import validate_authentication, get_api_type
 
 from .const import (
     CONF_ATTACH_USERNAME,
@@ -35,6 +39,9 @@ from .const import (
     CONF_FUNCTIONS,
     CONF_BASE_URL,
     CONF_API_VERSION,
+    CONF_SKIP_AUTHENTICATION,
+    CONF_MODEL_KEY,
+    MODEL_KEYS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -44,6 +51,8 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONF_BASE_URL,
+    DEFAULT_SKIP_AUTHENTICATION,
+    DEFAULT_MODEL_KEY,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -56,6 +65,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_API_KEY): str,
         vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
         vol.Optional(CONF_API_VERSION): str,
+        vol.Optional(
+            CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
+        ): bool,
     }
 )
 
@@ -83,6 +95,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     api_key = data[CONF_API_KEY]
     base_url = data.get(CONF_BASE_URL)
     api_version = data.get(CONF_API_VERSION)
+    skip_authentication = data.get(CONF_SKIP_AUTHENTICATION)
 
     if base_url == DEFAULT_CONF_BASE_URL:
         # Do not set base_url if using OpenAI for case of OpenAI's base_url change
@@ -90,7 +103,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
         data.pop(CONF_BASE_URL)
 
     await validate_authentication(
-        hass=hass, api_key=api_key, base_url=base_url, api_version=api_version
+        hass=hass,
+        api_key=api_key,
+        base_url=base_url,
+        api_version=api_version,
+        skip_authentication=skip_authentication,
     )
 
 
@@ -151,63 +168,77 @@ class OptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(
                 title=user_input.get(CONF_NAME, DEFAULT_NAME), data=user_input
             )
-        schema = openai_config_option_schema(self.config_entry.options)
+        schema = self.openai_config_option_schema(self.config_entry.options)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),
         )
 
+    def openai_config_option_schema(self, options: MappingProxyType[str, Any]) -> dict:
+        """Return a schema for OpenAI completion options."""
+        if not options:
+            options = DEFAULT_OPTIONS
 
-def openai_config_option_schema(options: MappingProxyType[str, Any]) -> dict:
-    """Return a schema for OpenAI completion options."""
-    if not options:
-        options = DEFAULT_OPTIONS
-    return {
-        vol.Optional(
-            CONF_PROMPT,
-            description={"suggested_value": options[CONF_PROMPT]},
-            default=DEFAULT_PROMPT,
-        ): TemplateSelector(),
-        vol.Optional(
-            CONF_CHAT_MODEL,
-            description={
-                # New key in HA 2023.4
-                "suggested_value": options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
-            },
-            default=DEFAULT_CHAT_MODEL,
-        ): str,
-        vol.Optional(
-            CONF_MAX_TOKENS,
-            description={"suggested_value": options[CONF_MAX_TOKENS]},
-            default=DEFAULT_MAX_TOKENS,
-        ): int,
-        vol.Optional(
-            CONF_TOP_P,
-            description={"suggested_value": options[CONF_TOP_P]},
-            default=DEFAULT_TOP_P,
-        ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
-        vol.Optional(
-            CONF_TEMPERATURE,
-            description={"suggested_value": options[CONF_TEMPERATURE]},
-            default=DEFAULT_TEMPERATURE,
-        ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
-        vol.Optional(
-            CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-            description={
-                "suggested_value": options[CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION]
-            },
-            default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-        ): int,
-        vol.Optional(
-            CONF_FUNCTIONS,
-            description={"suggested_value": options.get(CONF_FUNCTIONS)},
-            default=DEFAULT_CONF_FUNCTIONS_STR,
-        ): TemplateSelector(),
-        vol.Optional(
-            CONF_ATTACH_USERNAME,
-            description={
-                "suggested_value": options.get(CONF_ATTACH_USERNAME)
-            },
-            default=DEFAULT_ATTACH_USERNAME,
-        ): BooleanSelector(),
-    }
+        is_azure = get_api_type(self.config_entry.data.get(CONF_BASE_URL)) == "azure"
+
+        return {
+            vol.Optional(
+                CONF_PROMPT,
+                description={"suggested_value": options[CONF_PROMPT]},
+                default=DEFAULT_PROMPT,
+            ): TemplateSelector(),
+            vol.Optional(
+                CONF_CHAT_MODEL,
+                description={
+                    # New key in HA 2023.4
+                    "suggested_value": options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+                },
+                default=DEFAULT_CHAT_MODEL,
+            ): str,
+            vol.Optional(
+                CONF_MAX_TOKENS,
+                description={"suggested_value": options[CONF_MAX_TOKENS]},
+                default=DEFAULT_MAX_TOKENS,
+            ): int,
+            vol.Optional(
+                CONF_TOP_P,
+                description={"suggested_value": options[CONF_TOP_P]},
+                default=DEFAULT_TOP_P,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
+            vol.Optional(
+                CONF_TEMPERATURE,
+                description={"suggested_value": options[CONF_TEMPERATURE]},
+                default=DEFAULT_TEMPERATURE,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
+            vol.Optional(
+                CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                description={
+                    "suggested_value": options[CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION]
+                },
+                default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+            ): int,
+            vol.Optional(
+                CONF_FUNCTIONS,
+                description={"suggested_value": options.get(CONF_FUNCTIONS)},
+                default=DEFAULT_CONF_FUNCTIONS_STR,
+            ): TemplateSelector(),
+            vol.Optional(
+                CONF_ATTACH_USERNAME,
+                description={
+                    "suggested_value": options.get(CONF_ATTACH_USERNAME)
+                },
+                default=DEFAULT_ATTACH_USERNAME,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_MODEL_KEY,
+                description={"suggested_value": options.get(CONF_MODEL_KEY)},
+                default="engine" if is_azure else DEFAULT_MODEL_KEY,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=key, label=key) for key in MODEL_KEYS
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
