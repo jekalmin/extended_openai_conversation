@@ -284,6 +284,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
+        if len(functions) == 0:
+            functions = None
+            function_call = None
 
         model_key = self.entry.options.get(
             CONF_MODEL_KEY, get_default_model_key(api_base)
