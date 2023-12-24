@@ -26,7 +26,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .helpers import validate_authentication, get_api_type
+from .helpers import validate_authentication, get_default_model_key
 
 from .const import (
     CONF_ATTACH_USERNAME,
@@ -52,7 +52,6 @@ from .const import (
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONF_BASE_URL,
     DEFAULT_SKIP_AUTHENTICATION,
-    DEFAULT_MODEL_KEY,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -179,8 +178,6 @@ class OptionsFlow(config_entries.OptionsFlow):
         if not options:
             options = DEFAULT_OPTIONS
 
-        is_azure = get_api_type(self.config_entry.data.get(CONF_BASE_URL)) == "azure"
-
         return {
             vol.Optional(
                 CONF_PROMPT,
@@ -224,15 +221,15 @@ class OptionsFlow(config_entries.OptionsFlow):
             ): TemplateSelector(),
             vol.Optional(
                 CONF_ATTACH_USERNAME,
-                description={
-                    "suggested_value": options.get(CONF_ATTACH_USERNAME)
-                },
+                description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
                 default=DEFAULT_ATTACH_USERNAME,
             ): BooleanSelector(),
             vol.Optional(
                 CONF_MODEL_KEY,
                 description={"suggested_value": options.get(CONF_MODEL_KEY)},
-                default="engine" if is_azure else DEFAULT_MODEL_KEY,
+                default=get_default_model_key(
+                    self.config_entry.data.get(CONF_BASE_URL)
+                ),
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[

@@ -58,7 +58,10 @@ from .exceptions import (
     FunctionNotFound,
 )
 
-from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
+from .const import (
+    DOMAIN,
+    EVENT_AUTOMATION_REGISTERED,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -78,6 +81,13 @@ def get_api_type(base_url: str):
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
         return "azure"
     return None
+
+
+def get_default_model_key(base_url: str):
+    is_azure = get_api_type(base_url) == "azure"
+    if is_azure:
+        return "engine"
+    return "model"
 
 
 def convert_to_template(

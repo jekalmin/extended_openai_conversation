@@ -51,7 +51,6 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_SKIP_AUTHENTICATION,
-    DEFAULT_MODEL_KEY,
     DOMAIN,
 )
 
@@ -79,6 +78,7 @@ from .helpers import (
     validate_authentication,
     get_function_executor,
     get_api_type,
+    get_default_model_key,
 )
 
 
@@ -284,9 +284,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
-        model_kwargs = {
-            self.entry.options.get(CONF_MODEL_KEY, DEFAULT_MODEL_KEY): model
-        }
+
+        model_key = self.entry.options.get(
+            CONF_MODEL_KEY, get_default_model_key(api_base)
+        )
+        model_kwargs = {model_key: model}
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
