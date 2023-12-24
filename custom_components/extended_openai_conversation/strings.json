@@ -6,7 +6,8 @@
           "name": "[%key:common::config_flow::data::name%]",
           "api_key": "[%key:common::config_flow::data::api_key%]",
           "base_url": "[%key:common::config_flow::data::base_url%]",
-          "api_version": "[%key:common::config_flow::data::api_version%]"
+          "api_version": "[%key:common::config_flow::data::api_version%]",
+          "skip_authentication": "[%key:common::config_flow::data::skip_authentication%]"
         }
       }
     },
@@ -27,7 +28,8 @@
           "top_p": "Top P",
           "max_function_calls_per_conversation": "Maximum function calls per conversation",
           "functions": "Functions",
-          "attach_username": "Attach Username to Message"
+          "attach_username": "Attach Username to Message",
+          "model_key": "Model Key"
         }
       }
     }

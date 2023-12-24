@@ -1,7 +1,6 @@
 """The OpenAI Conversation integration."""
 from __future__ import annotations
 
-import re
 import logging
 from typing import Literal
 import json
@@ -41,6 +40,8 @@ from .const import (
     CONF_FUNCTIONS,
     CONF_BASE_URL,
     CONF_API_VERSION,
+    CONF_SKIP_AUTHENTICATION,
+    CONF_MODEL_KEY,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -49,6 +50,8 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_SKIP_AUTHENTICATION,
+    DEFAULT_MODEL_KEY,
     DOMAIN,
 )
 
@@ -75,6 +78,7 @@ from .helpers import (
     convert_to_template,
     validate_authentication,
     get_function_executor,
+    get_api_type,
 )
 
 
@@ -97,6 +101,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             api_key=entry.data[CONF_API_KEY],
             base_url=entry.data.get(CONF_BASE_URL),
             api_version=entry.data.get(CONF_API_VERSION),
+            skip_authentication=entry.data.get(
+                CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
+            ),
         )
     except error.AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)
@@ -264,9 +271,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         """Process a sentence."""
         api_base = self.entry.data.get(CONF_BASE_URL)
         api_key = self.entry.data[CONF_API_KEY]
-        api_type = None
-        if api_base and re.search(AZURE_DOMAIN_PATTERN, api_base):
-            api_type = "azure"
+        api_type = get_api_type(api_base)
         api_version = self.entry.data.get(CONF_API_VERSION)
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
@@ -279,7 +284,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
-        response_format = {"type": "text"}
+        model_kwargs = {
+            self.entry.options.get(CONF_MODEL_KEY, DEFAULT_MODEL_KEY): model
+        }
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
@@ -288,7 +295,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             api_key=api_key,
             api_type=api_type,
             api_version=api_version,
-            model=model,
             messages=messages,
             max_tokens=max_tokens,
             top_p=top_p,
@@ -296,7 +302,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             user=user_input.conversation_id,
             functions=functions,
             function_call=function_call,
-            response_format=response_format,
+            **model_kwargs,
         )
 
         _LOGGER.info("Response %s", response)

@@ -2,7 +2,14 @@
 
 DOMAIN = "extended_openai_conversation"
 DEFAULT_NAME = "Extended OpenAI Conversation"
+CONF_BASE_URL = "base_url"
+DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
+CONF_API_VERSION = "api_version"
+CONF_SKIP_AUTHENTICATION = "skip_authentication"
+DEFAULT_SKIP_AUTHENTICATION = False
+
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
+
 CONF_PROMPT = "prompt"
 DEFAULT_PROMPT = """I want you to act as smart home manager of Home Assistant.
 I will provide information of smart home along with a question, you will truthfully make correction or answer using information provided in one sentence in everyday language.
@@ -75,8 +82,8 @@ DEFAULT_CONF_FUNCTIONS = [
         "function": {"type": "native", "name": "execute_service"},
     }
 ]
-CONF_BASE_URL = "base_url"
-DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
-CONF_API_VERSION = "api_version"
 CONF_ATTACH_USERNAME = "attach_username"
 DEFAULT_ATTACH_USERNAME = False
+CONF_MODEL_KEY = "model_key"
+DEFAULT_MODEL_KEY = "model"
+MODEL_KEYS = ["model", "engine"]

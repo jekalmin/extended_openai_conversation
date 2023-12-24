@@ -11,7 +11,8 @@
                     "name": "Name",
                     "api_key": "API Key",
                     "base_url": "Base Url",
-                    "api_version": "Api Version"
+                    "api_version": "Api Version",
+                    "skip_authentication": "Skip Authentication"
                 }
             }
         }
@@ -26,7 +27,9 @@
                     "temperature": "Temperatur",
                     "top_p": "Top P",
                     "max_function_calls_per_conversation": "Maximale Anzahl an Funktionsaufrufen pro Konversation",
-                    "functions": "Funktionen"
+                    "functions": "Funktionen",
+                    "attach_username": "Attach Username to Message",
+                    "model_key": "Model Key"
                 }
             }
         }
