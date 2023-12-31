@@ -9,10 +9,10 @@
             "user": {
                 "data": {
                     "name": "Naam",
-                    "api_key": "API-sleutel",
-                    "base_url": "Basis-URL",
-                    "api_version": "Api Version",
-                    "skip_authentication": "Skip Authentication"
+                    "api_key": "API Sleutel",
+                    "base_url": "Basis URL",
+                    "api_version": "API Version",
+                    "skip_authentication": "Authenticatie overslaan"
                 }
             }
         }
@@ -28,8 +28,8 @@
                     "top_p": "Top P",
                     "max_function_calls_per_conversation": "Maximale keren functies mogen worden aangeroepen per conversatie",
                     "functions": "Functies",
-                    "attach_username": "Attach Username to Message",
-                    "model_key": "Model Key"
+                    "attach_username": "Gebruikersnaam aan bericht toevoegen",
+                    "model_key": "Model Sleutel"
                 }
             }
         }
