@@ -39,6 +39,9 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_FUNCTIONS,
     CONF_BASE_URL,
+    CONF_API_VERSION,
+    CONF_SKIP_AUTHENTICATION,
+    CONF_MODEL_KEY,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -47,6 +50,7 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_SKIP_AUTHENTICATION,
     DOMAIN,
 )
 
@@ -73,12 +77,15 @@ from .helpers import (
     convert_to_template,
     validate_authentication,
     get_function_executor,
+    get_api_type,
+    get_default_model_key,
 )
 
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
 
 
 # hass.data key for agent.
@@ -93,6 +100,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass=hass,
             api_key=entry.data[CONF_API_KEY],
             base_url=entry.data.get(CONF_BASE_URL),
+            api_version=entry.data.get(CONF_API_VERSION),
+            skip_authentication=entry.data.get(
+                CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
+            ),
         )
     except error.AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)
@@ -258,6 +269,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
     ):
         """Process a sentence."""
+        api_base = self.entry.data.get(CONF_BASE_URL)
+        api_key = self.entry.data[CONF_API_KEY]
+        api_type = get_api_type(api_base)
+        api_version = self.entry.data.get(CONF_API_VERSION)
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
@@ -269,14 +284,22 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
             function_call = "none"
-        response_format = {"type": "text"}
+        if len(functions) == 0:
+            functions = None
+            function_call = None
+
+        model_key = self.entry.options.get(
+            CONF_MODEL_KEY, get_default_model_key(api_base)
+        )
+        model_kwargs = {model_key: model}
 
         _LOGGER.info("Prompt for %s: %s", model, messages)
 
         response = await openai.ChatCompletion.acreate(
-            api_base=self.entry.data.get(CONF_BASE_URL),
-            api_key=self.entry.data[CONF_API_KEY],
-            model=model,
+            api_base=api_base,
+            api_key=api_key,
+            api_type=api_type,
+            api_version=api_version,
             messages=messages,
             max_tokens=max_tokens,
             top_p=top_p,
@@ -284,7 +307,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             user=user_input.conversation_id,
             functions=functions,
             function_call=function_call,
-            response_format=response_format,
+            **model_kwargs,
         )
 
         _LOGGER.info("Response %s", response)

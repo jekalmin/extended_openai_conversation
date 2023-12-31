@@ -4,11 +4,12 @@ import os
 import yaml
 import time
 import sqlite3
+import openai
+import re
 import voluptuous as vol
+from functools import partial
 from bs4 import BeautifulSoup
 from typing import Any
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from openai.error import AuthenticationError
 from urllib import parse
 
 from datetime import timedelta
@@ -57,10 +58,16 @@ from .exceptions import (
     FunctionNotFound,
 )
 
-from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, DEFAULT_CONF_BASE_URL
+from .const import (
+    DOMAIN,
+    EVENT_AUTOMATION_REGISTERED,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
 
 
 def get_function_executor(value: str):
@@ -68,6 +75,19 @@ def get_function_executor(value: str):
     if function_executor is None:
         raise FunctionNotFound(value)
     return function_executor
+
+
+def get_api_type(base_url: str):
+    if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
+        return "azure"
+    return None
+
+
+def get_default_model_key(base_url: str):
+    is_azure = get_api_type(base_url) == "azure"
+    if is_azure:
+        return "engine"
+    return "model"
 
 
 def convert_to_template(
@@ -122,20 +142,25 @@ def _get_rest_data(hass, rest_config, arguments):
 
 
 async def validate_authentication(
-    hass: HomeAssistant, api_key: str, base_url: str
+    hass: HomeAssistant,
+    api_key: str,
+    base_url: str,
+    api_version: str,
+    skip_authentication=False,
 ) -> None:
-    if not base_url:
-        base_url = DEFAULT_CONF_BASE_URL
-    session = async_get_clientsession(hass)
-    response = await session.get(
-        f"{base_url}/models",
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=10,
-    )
-    if response.status == 401:
-        raise AuthenticationError()
+    if skip_authentication:
+        return
 
-    response.raise_for_status()
+    await hass.async_add_executor_job(
+        partial(
+            openai.Model.list,
+            api_type=get_api_type(base_url),
+            api_key=api_key,
+            api_version=api_version,
+            api_base=base_url,
+            request_timeout=10,
+        )
+    )
 
 
 class FunctionExecutor(ABC):
