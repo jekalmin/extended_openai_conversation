@@ -1,0 +1,37 @@
+{
+    "config": {
+        "error": {
+            "cannot_connect": "Nie udało się połączyć",
+            "invalid_auth": "Błąd authentykacji",
+            "unknown": "Nieznany błąd"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "name": "Imię",
+                    "api_key": "Klucz API",
+                    "base_url": "Bazowy URL",
+                    "api_version": "Wersja API",
+                    "skip_authentication": "Pomiń authentykację"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "max_tokens": "Maksymalna ilość tokenów w odpowiedzi",
+                    "model": "Model",
+                    "prompt": "Prompt",
+                    "temperature": "Temperatura",
+                    "top_p": "Top P",
+                    "max_function_calls_per_conversation": "Maksymalna ilość wywołań funkcji na rozmowę",
+                    "functions": "Funkcje",
+                    "attach_username": "Dodaj nazwę użytkownika do wiadomości",
+                    "model_key": "Klucz modelu"
+                }
+            }
+        }
+    }
+}
