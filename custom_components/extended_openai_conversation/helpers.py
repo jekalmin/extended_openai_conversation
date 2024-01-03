@@ -4,10 +4,9 @@ import os
 import yaml
 import time
 import sqlite3
-import openai
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 import re
 import voluptuous as vol
-from functools import partial
 from bs4 import BeautifulSoup
 from typing import Any
 from urllib import parse
@@ -77,17 +76,10 @@ def get_function_executor(value: str):
     return function_executor
 
 
-def get_api_type(base_url: str):
+def is_azure(base_url: str):
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
-        return "azure"
-    return None
-
-
-def get_default_model_key(base_url: str):
-    is_azure = get_api_type(base_url) == "azure"
-    if is_azure:
-        return "engine"
-    return "model"
+        return True
+    return False
 
 
 def convert_to_template(
@@ -151,16 +143,12 @@ async def validate_authentication(
     if skip_authentication:
         return
 
-    await hass.async_add_executor_job(
-        partial(
-            openai.Model.list,
-            api_type=get_api_type(base_url),
-            api_key=api_key,
-            api_version=api_version,
-            api_base=base_url,
-            request_timeout=10,
-        )
-    )
+    if is_azure(base_url):
+        client = AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, api_version=api_version)
+    else:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+    await client.models.list(timeout=10)
 
 
 class FunctionExecutor(ABC):

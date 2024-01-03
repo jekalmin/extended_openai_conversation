@@ -84,5 +84,3 @@ DEFAULT_CONF_FUNCTIONS = [
 ]
 CONF_ATTACH_USERNAME = "attach_username"
 DEFAULT_ATTACH_USERNAME = False
-CONF_MODEL_KEY = "model_key"
-MODEL_KEYS = ["model", "engine"]
