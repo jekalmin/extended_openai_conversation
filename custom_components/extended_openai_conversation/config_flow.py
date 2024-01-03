@@ -7,7 +7,7 @@ import yaml
 from types import MappingProxyType
 from typing import Any
 
-from openai import error
+from openai._exceptions import APIConnectionError, AuthenticationError
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -26,7 +26,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .helpers import validate_authentication, get_default_model_key
+from .helpers import validate_authentication
 
 from .const import (
     CONF_ATTACH_USERNAME,
@@ -40,8 +40,6 @@ from .const import (
     CONF_BASE_URL,
     CONF_API_VERSION,
     CONF_SKIP_AUTHENTICATION,
-    CONF_MODEL_KEY,
-    MODEL_KEYS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -128,9 +126,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             await validate_input(self.hass, user_input)
-        except error.APIConnectionError:
+        except APIConnectionError:
             errors["base"] = "cannot_connect"
-        except error.AuthenticationError:
+        except AuthenticationError:
             errors["base"] = "invalid_auth"
         except Exception:  # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
@@ -224,18 +222,4 @@ class OptionsFlow(config_entries.OptionsFlow):
                 description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
                 default=DEFAULT_ATTACH_USERNAME,
             ): BooleanSelector(),
-            vol.Optional(
-                CONF_MODEL_KEY,
-                description={"suggested_value": options.get(CONF_MODEL_KEY)},
-                default=get_default_model_key(
-                    self.config_entry.data.get(CONF_BASE_URL)
-                ),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[
-                        SelectOptionDict(value=key, label=key) for key in MODEL_KEYS
-                    ],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
         }
