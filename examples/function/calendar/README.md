@@ -22,7 +22,7 @@
   function:
     type: script
     sequence:
-    - service: calendar.list_events
+    - service: calendar.get_events
       data:
         start_date_time: "{{start_date_time}}"
         end_date_time: "{{end_date_time}}"
