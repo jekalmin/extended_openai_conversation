@@ -27,6 +27,8 @@
         start_date_time: "{{start_date_time}}"
         end_date_time: "{{end_date_time}}"
       target:
-        entity_id: calendar.test
+        entity_id:
+        - calendar.[YourCalendarHere]
+        - calendar.[MoreCalendarsArePossible]
       response_variable: _function_result
 ```
