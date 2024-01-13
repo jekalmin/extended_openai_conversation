@@ -24,7 +24,6 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
     TemplateError,
-    ServiceNotFound,
 )
 
 from homeassistant.helpers import (
@@ -59,26 +58,13 @@ from .const import (
 )
 
 from .exceptions import (
-    EntityNotFound,
-    EntityNotExposed,
-    CallServiceError,
     FunctionNotFound,
-    NativeNotFound,
     FunctionLoadFailed,
     ParseArgumentsFailed,
     InvalidFunction,
 )
 
 from .helpers import (
-    FUNCTION_EXECUTORS,
-    FunctionExecutor,
-    NativeFunctionExecutor,
-    ScriptFunctionExecutor,
-    TemplateFunctionExecutor,
-    RestFunctionExecutor,
-    ScrapeFunctionExecutor,
-    CompositeFunctionExecutor,
-    convert_to_template,
     validate_authentication,
     get_function_executor,
     is_azure,
@@ -88,11 +74,11 @@ from .helpers import (
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
 
 
 # hass.data key for agent.
 DATA_AGENT = "agent"
+
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -306,7 +292,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
 
 
-        _LOGGER.info("Response %s", response)
+        _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
         choice: Choice = response.choices[0]
         message = choice.message
         if choice.finish_reason == "function_call":

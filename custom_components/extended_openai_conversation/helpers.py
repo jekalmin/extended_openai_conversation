@@ -18,7 +18,6 @@ from homeassistant.components import (
     automation,
     rest,
     scrape,
-    history,
     conversation,
     recorder,
 )
@@ -38,13 +37,7 @@ from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.template import Template
-from homeassistant.helpers.script import (
-    Script,
-    SCRIPT_MODE_SINGLE,
-    SCRIPT_MODE_PARALLEL,
-    DEFAULT_MAX,
-    DEFAULT_MAX_EXCEEDED,
-)
+from homeassistant.helpers.script import Script
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 
 
@@ -231,16 +224,18 @@ class NativeFunctionExecutor(FunctionExecutor):
                 "service_data", service_argument.get("data", {})
             )
             entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
+            area_id = service_data.get("area_id")
+            device_id = service_data.get("device_id")
 
             if isinstance(entity_id, str):
                 entity_id = [e.strip() for e in entity_id.split(",")]
             service_data["entity_id"] = entity_id
 
-            if entity_id is None:
+            if entity_id is None and area_id is None and device_id is None:
                 raise CallServiceError(domain, service, service_data)
             if not hass.services.has_service(domain, service):
                 raise ServiceNotFound(domain, service)
-            self.validate_entity_ids(hass, entity_id, exposed_entities)
+            self.validate_entity_ids(hass, entity_id or [], exposed_entities)
 
             try:
                 await hass.services.async_call(
@@ -249,7 +244,7 @@ class NativeFunctionExecutor(FunctionExecutor):
                     service_data=service_data,
                 )
                 result.append(True)
-            except HomeAssistantError:
+            except HomeAssistantError as e:
                 _LOGGER.error(e)
                 result.append(False)
 

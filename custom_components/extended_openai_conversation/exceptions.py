@@ -35,7 +35,7 @@ class CallServiceError(HomeAssistantError):
         """Initialize error."""
         super().__init__(
             self,
-            f"unable to call service {domain}.{service} with data {data}. 'entity_id' is required",
+            f"unable to call service {domain}.{service} with data {data}. One of 'entity_id', 'area_id', or 'device_id' is required",
         )
         self.domain = domain
         self.service = service
@@ -43,7 +43,7 @@ class CallServiceError(HomeAssistantError):
 
     def __str__(self) -> str:
         """Return string representation."""
-        return f"unable to call service {self.domain}.{self.service} with data {self.data}. 'entity_id' is required"
+        return f"unable to call service {self.domain}.{self.service} with data {self.data}. One of 'entity_id', 'area_id', or 'device_id' is required"
 
 
 class FunctionNotFound(HomeAssistantError):
