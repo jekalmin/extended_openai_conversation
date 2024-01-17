@@ -5,7 +5,6 @@ import logging
 from typing import Literal
 import json
 import yaml
-import voluptuous as vol
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI
 from openai.types.chat.chat_completion import (
@@ -18,12 +17,7 @@ from openai._exceptions import OpenAIError, AuthenticationError
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, MATCH_ALL, ATTR_NAME
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-)
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
@@ -38,7 +32,6 @@ from homeassistant.helpers import (
     intent,
     template,
     entity_registry as er,
-    selector,
 )
 
 from .const import (
@@ -78,6 +71,8 @@ from .helpers import (
     is_azure,
 )
 
+from .services import async_setup_services
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,62 +81,12 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # hass.data key for agent.
 DATA_AGENT = "agent"
-SERVICE_QUERY_IMAGE = "query_image"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up OpenAI Conversation."""
-
-    async def query_image(call: ServiceCall) -> ServiceResponse:
-        """Query an image."""
-        try:
-            model = call.data["model"]
-            images = [
-                {"type": "image_url", "image_url": image}
-                for image in call.data["images"]
-            ]
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": call.data["prompt"]}] + images,
-                }
-            ]
-            _LOGGER.info("Prompt for %s: %s", model, messages)
-
-            response = await openai.ChatCompletion.acreate(
-                api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"],
-                model=model,
-                messages=messages,
-                max_tokens=call.data["max_tokens"],
-            )
-            _LOGGER.info("Response %s", response)
-        except error.OpenAIError as err:
-            raise HomeAssistantError(f"Error generating image: {err}") from err
-
-        return response
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_QUERY_IMAGE,
-        query_image,
-        schema=vol.Schema(
-            {
-                vol.Required("config_entry"): selector.ConfigEntrySelector(
-                    {
-                        "integration": DOMAIN,
-                    }
-                ),
-                vol.Required("model", default="gpt-4-vision-preview"): cv.string,
-                vol.Required("prompt"): cv.string,
-                vol.Required("images"): vol.All(cv.ensure_list, [{"url": cv.url}]),
-                vol.Optional("max_tokens", default=300): cv.positive_int,
-            }
-        ),
-        supports_response=SupportsResponse.ONLY,
-    )
+    await async_setup_services(hass, config)
     return True
-
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -190,9 +135,15 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
         if is_azure(base_url):
-            self.client = AsyncAzureOpenAI(api_key=entry.data[CONF_API_KEY], azure_endpoint=base_url, api_version=entry.data.get(CONF_API_VERSION))
+            self.client = AsyncAzureOpenAI(
+                api_key=entry.data[CONF_API_KEY],
+                azure_endpoint=base_url,
+                api_version=entry.data.get(CONF_API_VERSION),
+            )
         else:
-            self.client = AsyncOpenAI(api_key=entry.data[CONF_API_KEY], base_url=base_url)
+            self.client = AsyncOpenAI(
+                api_key=entry.data[CONF_API_KEY], base_url=base_url
+            )
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -353,7 +304,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             functions=functions,
             function_call=function_call,
         )
-
 
         _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
         choice: Choice = response.choices[0]
