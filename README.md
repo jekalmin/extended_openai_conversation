@@ -79,7 +79,10 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
     - `execute_service`
       - `domain`(string): domain to be passed to `hass.services.async_call`
       - `service`(string): service to be passed to `hass.services.async_call`
-      - `service_data`(string): service_data to be passed to `hass.services.async_call`
+      - `service_data`(object): service_data to be passed to `hass.services.async_call`.
+        - `entity_id`(string): target entity
+        - `device_id`(string): target device
+        - `area_id`(string): target area
     - `add_automation`
       - `automation_config`(string): An automation configuration in a yaml format
     - `get_history`
@@ -141,6 +144,9 @@ Then you will be able to let OpenAI call your function.
 
 ### 1. template
 #### 1-1. Get current weather
+
+For real world example, see [weather](https://github.com/jekalmin/extended_openai_conversation/tree/main/examples/function/weather).<br/>
+This is just an example from [OpenAI documentation](https://platform.openai.com/docs/guides/function-calling/common-use-cases)
 
 ```yaml
 - spec:
