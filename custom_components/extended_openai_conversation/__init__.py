@@ -17,14 +17,14 @@ from openai._exceptions import OpenAIError, AuthenticationError
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, MATCH_ALL, ATTR_NAME
-from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
     TemplateError,
-    ServiceNotFound,
 )
 
 from homeassistant.helpers import (
@@ -59,40 +59,34 @@ from .const import (
 )
 
 from .exceptions import (
-    EntityNotFound,
-    EntityNotExposed,
-    CallServiceError,
     FunctionNotFound,
-    NativeNotFound,
     FunctionLoadFailed,
     ParseArgumentsFailed,
     InvalidFunction,
 )
 
 from .helpers import (
-    FUNCTION_EXECUTORS,
-    FunctionExecutor,
-    NativeFunctionExecutor,
-    ScriptFunctionExecutor,
-    TemplateFunctionExecutor,
-    RestFunctionExecutor,
-    ScrapeFunctionExecutor,
-    CompositeFunctionExecutor,
-    convert_to_template,
     validate_authentication,
     get_function_executor,
     is_azure,
 )
 
+from .services import async_setup_services
+
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
-AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
 
 
 # hass.data key for agent.
 DATA_AGENT = "agent"
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up OpenAI Conversation."""
+    await async_setup_services(hass, config)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -141,9 +135,15 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
         if is_azure(base_url):
-            self.client = AsyncAzureOpenAI(api_key=entry.data[CONF_API_KEY], azure_endpoint=base_url, api_version=entry.data.get(CONF_API_VERSION))
+            self.client = AsyncAzureOpenAI(
+                api_key=entry.data[CONF_API_KEY],
+                azure_endpoint=base_url,
+                api_version=entry.data.get(CONF_API_VERSION),
+            )
         else:
-            self.client = AsyncOpenAI(api_key=entry.data[CONF_API_KEY], base_url=base_url)
+            self.client = AsyncOpenAI(
+                api_key=entry.data[CONF_API_KEY], base_url=base_url
+            )
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -305,8 +305,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             function_call=function_call,
         )
 
-
-        _LOGGER.info("Response %s", response)
+        _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
         choice: Choice = response.choices[0]
         message = choice.message
         if choice.finish_reason == "function_call":

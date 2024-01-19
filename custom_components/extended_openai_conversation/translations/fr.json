@@ -1,18 +1,18 @@
 {
     "config": {
         "error": {
-            "cannot_connect": "Verbinden mislukt",
-            "invalid_auth": "Ongeldige authenticatie",
-            "unknown": "Onverwachte fout"
+            "cannot_connect": "Échec de la connexion",
+            "invalid_auth": "Authentification invalide",
+            "unknown": "Erreur inconnue"
         },
         "step": {
             "user": {
                 "data": {
-                    "name": "Naam",
-                    "api_key": "API Sleutel",
-                    "base_url": "Basis URL",
-                    "api_version": "API Version",
-                    "skip_authentication": "Authenticatie overslaan"
+                    "name": "Nom",
+                    "api_key": "Clé d'API",
+                    "base_url": "Base de l'URL",
+                    "api_version": "Version de l'API",
+                    "skip_authentication": "Ignorer l'authentification"
                 }
             }
         }
@@ -21,15 +21,15 @@
         "step": {
             "init": {
                 "data": {
-                    "max_tokens": "Maximale aantal tokens dat mag worden gegenereerd",
-                    "model": "Completion Model",
-                    "prompt": "Prompt Sjabloon",
-                    "temperature": "Temperatuur",
+                    "max_tokens": "Nombre maximum de jetons facturé pour la réponse",
+                    "model": "Modèle d'IA",
+                    "prompt": "Prompt",
+                    "temperature": "Température",
                     "top_p": "Top P",
-                    "max_function_calls_per_conversation": "Maximale keren functies mogen worden aangeroepen per conversatie",
-                    "functions": "Functies",
-                    "attach_username": "Gebruikersnaam aan bericht toevoegen",
-                    "model_key": "Model Sleutel"
+                    "max_function_calls_per_conversation": "Nombre maximal d'appels de fonction par conversation",
+                    "functions": "Fonctions",
+                    "attach_username": "Joindre le nom d'utilisateur au message",
+                    "model_key": "Clé du modèle"
                 }
             }
         }
