@@ -47,6 +47,8 @@ from .const import (
     CONF_API_VERSION,
     CONF_SKIP_AUTHENTICATION,
     CONF_USE_TOOLS,
+    CONF_CONTEXT_THRESHOLD,
+    CONF_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -57,6 +59,8 @@ from .const import (
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_USE_TOOLS,
+    DEFAULT_CONTEXT_THRESHOLD,
+    DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DOMAIN,
 )
 
@@ -271,6 +275,22 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         except:
             raise FunctionLoadFailed()
 
+    async def truncate_message_history(self, messages):
+        """Truncate message history."""
+        strategy = self.entry.options.get(
+            CONF_CONTEXT_TRUNCATE_STRATEGY, DEFAULT_CONTEXT_TRUNCATE_STRATEGY
+        )
+
+        if strategy == "clear":
+            last_user_message_index = None
+            for i in reversed(range(len(messages))):
+                if messages[i]["role"] == "user":
+                    last_user_message_index = i
+                    break
+
+            if last_user_message_index is not None:
+                del messages[1:last_user_message_index]
+
     async def query(
         self,
         user_input: conversation.ConversationInput,
@@ -284,6 +304,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
         use_tools = self.entry.options.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)
+        context_threshold = self.entry.options.get(
+            CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
+        )
         functions = list(map(lambda s: s["spec"], self.get_functions()))
         function_call = "auto"
         if n_requests == self.entry.options.get(
@@ -315,6 +338,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
 
         _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
+
+        if response.usage.total_tokens > context_threshold:
+            await self.truncate_message_history(messages)
+
         choice: Choice = response.choices[0]
         message = choice.message
 
