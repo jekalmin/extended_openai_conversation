@@ -19,7 +19,6 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     TemplateSelector,
-    AttributeSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectOptionDict,
@@ -41,6 +40,8 @@ from .const import (
     CONF_API_VERSION,
     CONF_SKIP_AUTHENTICATION,
     CONF_USE_TOOLS,
+    CONF_CONTEXT_THRESHOLD,
+    CONF_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -52,6 +53,9 @@ from .const import (
     DEFAULT_CONF_BASE_URL,
     DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_USE_TOOLS,
+    DEFAULT_CONTEXT_THRESHOLD,
+    DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    CONTEXT_TRUNCATE_STRATEGIES,
     DOMAIN,
     DEFAULT_NAME,
 )
@@ -83,6 +87,8 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
         CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
         CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
+        CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
+        CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     }
 )
 
@@ -230,4 +236,24 @@ class OptionsFlow(config_entries.OptionsFlow):
                 description={"suggested_value": options.get(CONF_USE_TOOLS)},
                 default=DEFAULT_USE_TOOLS,
             ): BooleanSelector(),
+            vol.Optional(
+                CONF_CONTEXT_THRESHOLD,
+                description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
+                default=DEFAULT_CONTEXT_THRESHOLD,
+            ): int,
+            vol.Optional(
+                CONF_CONTEXT_TRUNCATE_STRATEGY,
+                description={
+                    "suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)
+                },
+                default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
+                        for strategy in CONTEXT_TRUNCATE_STRATEGIES
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
         }
