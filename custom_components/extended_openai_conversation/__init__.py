@@ -159,7 +159,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
     async def async_process(
         self, user_input: conversation.ConversationInput
     ) -> conversation.ConversationResult:
-        raw_prompt = self.entry.options.get(CONF_PROMPT, DEFAULT_PROMPT)
         exposed_entities = self.get_exposed_entities()
 
         if user_input.conversation_id in self.history:
@@ -169,8 +168,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             conversation_id = ulid.ulid()
             user_input.conversation_id = conversation_id
             try:
-                prompt = self._async_generate_prompt(
-                    raw_prompt, exposed_entities, user_input
+                system_message = self._generate_system_message(
+                    exposed_entities, user_input
                 )
             except TemplateError as err:
                 _LOGGER.error("Error rendering prompt: %s", err)
@@ -182,7 +181,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 return conversation.ConversationResult(
                     response=intent_response, conversation_id=conversation_id
                 )
-            messages = [{"role": "system", "content": prompt}]
+            messages = [system_message]
         user_message = {"role": "user", "content": user_input.text}
         if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
             user = await self.hass.auth.async_get_user(user_input.context.user_id)
@@ -222,6 +221,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         return conversation.ConversationResult(
             response=intent_response, conversation_id=conversation_id
         )
+
+    def _generate_system_message(
+        self, exposed_entities, user_input: conversation.ConversationInput
+    ):
+        raw_prompt = self.entry.options.get(CONF_PROMPT, DEFAULT_PROMPT)
+        prompt = self._async_generate_prompt(raw_prompt, exposed_entities, user_input)
+        return {"role": "system", "content": prompt}
 
     def _async_generate_prompt(
         self,
@@ -283,7 +289,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         except:
             raise FunctionLoadFailed()
 
-    async def truncate_message_history(self, messages):
+    async def truncate_message_history(
+        self, messages, exposed_entities, user_input: conversation.ConversationInput
+    ):
         """Truncate message history."""
         strategy = self.entry.options.get(
             CONF_CONTEXT_TRUNCATE_STRATEGY, DEFAULT_CONTEXT_TRUNCATE_STRATEGY
@@ -298,6 +306,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
             if last_user_message_index is not None:
                 del messages[1:last_user_message_index]
+                # refresh system prompt when all messages are deleted
+                messages[0] = self._generate_system_message(
+                    exposed_entities, user_input
+                )
 
     async def query(
         self,
@@ -348,7 +360,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
 
         if response.usage.total_tokens > context_threshold:
-            await self.truncate_message_history(messages)
+            await self.truncate_message_history(messages, exposed_entities, user_input)
 
         choice: Choice = response.choices[0]
         message = choice.message
