@@ -8,7 +8,7 @@
 
 ## Function
 
-### get_attributes
+### execute_services
 ```yaml
 - spec:
     name: execute_services
