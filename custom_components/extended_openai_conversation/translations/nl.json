@@ -29,7 +29,9 @@
                     "max_function_calls_per_conversation": "Maximale keren functies mogen worden aangeroepen per conversatie",
                     "functions": "Functies",
                     "attach_username": "Gebruikersnaam aan bericht toevoegen",
-                    "model_key": "Model Sleutel"
+                    "use_tools": "Use Tools",
+                    "context_threshold": "Context Threshold",
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
                 }
             }
         }

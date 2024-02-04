@@ -29,7 +29,9 @@
                     "max_function_calls_per_conversation": "Maximale Anzahl an Funktionsaufrufen pro Konversation",
                     "functions": "Funktionen",
                     "attach_username": "Benutzernamen mitgeben",
-                    "model_key": "Model Key"
+                    "use_tools": "Use Tools",
+                    "context_threshold": "Context Threshold",
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
                 }
             }
         }

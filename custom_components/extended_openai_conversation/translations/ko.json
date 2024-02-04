@@ -29,7 +29,9 @@
                     "max_function_calls_per_conversation": "Maximum function calls per conversation",
                     "functions": "Functions",
                     "attach_username": "Attach Username to Message",
-                    "model_key": "Model Key"
+                    "use_tools": "Use Tools",
+                    "context_threshold": "Context Threshold",
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
                 }
             }
         }

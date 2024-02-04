@@ -29,7 +29,9 @@
                     "max_function_calls_per_conversation": "Maksymalna ilość wywołań funkcji na rozmowę",
                     "functions": "Funkcje",
                     "attach_username": "Dodaj nazwę użytkownika do wiadomości",
-                    "model_key": "Klucz modelu"
+                    "use_tools": "Use Tools",
+                    "context_threshold": "Context Threshold",
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
                 }
             }
         }
