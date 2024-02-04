@@ -16,7 +16,7 @@ Extended OpenAI Conversation uses OpenAI API's feature of [function calling](htt
 Since "gpt-3.5-turbo" model already knows how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/jekalmin/extended_openai_conversation#preparation)
 
 ## Installation
-1. Install via HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`
+1. Install via registering as a custom repository of HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`
 2. Restart Home Assistant
 3. Go to Settings > Devices & Services.
 4. In the bottom right corner, select the Add Integration button.
