@@ -72,7 +72,6 @@ from .exceptions import (
 from .helpers import (
     get_function_executor,
     is_azure,
-    is_exposed,
     validate_authentication,
 )
 from .services import async_setup_services
