@@ -12,6 +12,7 @@
                     "api_key": "API Key",
                     "base_url": "Base Url",
                     "api_version": "Api Version",
+                    "organization": "Organization",
                     "skip_authentication": "Authentifizierung überspringen"
                 }
             }

@@ -3,62 +3,62 @@ from __future__ import annotations
 
 import logging
 import types
-import yaml
 from types import MappingProxyType
 from typing import Any
 
 from openai._exceptions import APIConnectionError, AuthenticationError
 import voluptuous as vol
+import yaml
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_NAME, CONF_API_KEY
+from homeassistant.const import CONF_API_KEY, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
-    TemplateSelector,
+    SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
-    SelectOptionDict,
     SelectSelectorMode,
+    TemplateSelector,
 )
-
-from .helpers import validate_authentication
 
 from .const import (
-    CONF_ATTACH_USERNAME,
-    CONF_CHAT_MODEL,
-    CONF_MAX_TOKENS,
-    CONF_PROMPT,
-    CONF_TEMPERATURE,
-    CONF_TOP_P,
-    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-    CONF_FUNCTIONS,
-    CONF_BASE_URL,
     CONF_API_VERSION,
-    CONF_SKIP_AUTHENTICATION,
-    CONF_USE_TOOLS,
+    CONF_ATTACH_USERNAME,
+    CONF_BASE_URL,
+    CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_FUNCTIONS,
+    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    CONF_MAX_TOKENS,
+    CONF_ORGANIZATION,
+    CONF_PROMPT,
+    CONF_SKIP_AUTHENTICATION,
+    CONF_TEMPERATURE,
+    CONF_TOP_P,
+    CONF_USE_TOOLS,
+    CONTEXT_TRUNCATE_STRATEGIES,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_PROMPT,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_TOP_P,
-    DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-    DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONF_BASE_URL,
-    DEFAULT_SKIP_AUTHENTICATION,
-    DEFAULT_USE_TOOLS,
+    DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
-    CONTEXT_TRUNCATE_STRATEGIES,
-    DOMAIN,
+    DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
+    DEFAULT_PROMPT,
+    DEFAULT_SKIP_AUTHENTICATION,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_P,
+    DEFAULT_USE_TOOLS,
+    DOMAIN,
 )
+from .helpers import validate_authentication
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_API_KEY): str,
         vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
         vol.Optional(CONF_API_VERSION): str,
+        vol.Optional(CONF_ORGANIZATION): str,
         vol.Optional(
             CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
         ): bool,
@@ -101,6 +102,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     api_key = data[CONF_API_KEY]
     base_url = data.get(CONF_BASE_URL)
     api_version = data.get(CONF_API_VERSION)
+    organization = data.get(CONF_ORGANIZATION)
     skip_authentication = data.get(CONF_SKIP_AUTHENTICATION)
 
     if base_url == DEFAULT_CONF_BASE_URL:
@@ -113,6 +115,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
         api_key=api_key,
         base_url=base_url,
         api_version=api_version,
+        organization=organization,
         skip_authentication=skip_authentication,
     )
 

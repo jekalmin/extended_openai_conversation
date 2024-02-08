@@ -12,6 +12,7 @@
                     "api_key": "Klucz API",
                     "base_url": "Bazowy URL",
                     "api_version": "Wersja API",
+                    "organization": "Organization",
                     "skip_authentication": "Pomiń authentykację"
                 }
             }

@@ -122,6 +122,7 @@ async def validate_authentication(
     api_key: str,
     base_url: str,
     api_version: str,
+    organization: str = None,
     skip_authentication=False,
 ) -> None:
     if skip_authentication:
@@ -129,10 +130,15 @@ async def validate_authentication(
 
     if is_azure(base_url):
         client = AsyncAzureOpenAI(
-            api_key=api_key, azure_endpoint=base_url, api_version=api_version
+            api_key=api_key,
+            azure_endpoint=base_url,
+            api_version=api_version,
+            organization=organization,
         )
     else:
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, organization=organization
+        )
 
     await client.models.list(timeout=10)
 
