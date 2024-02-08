@@ -12,6 +12,7 @@
                     "api_key": "API Sleutel",
                     "base_url": "Basis URL",
                     "api_version": "API Version",
+                    "organization": "Organization",
                     "skip_authentication": "Authenticatie overslaan"
                 }
             }
