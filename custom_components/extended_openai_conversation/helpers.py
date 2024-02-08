@@ -1,60 +1,50 @@
 from abc import ABC, abstractmethod
+from datetime import timedelta
 import logging
 import os
-import yaml
-import time
-import sqlite3
-from openai import AsyncOpenAI, AsyncAzureOpenAI
 import re
-import voluptuous as vol
-from bs4 import BeautifulSoup
+import sqlite3
+import time
 from typing import Any
 from urllib import parse
 
-from datetime import timedelta
-import homeassistant.util.dt as dt_util
-from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
-from homeassistant.components import (
-    automation,
-    rest,
-    scrape,
-    conversation,
-    recorder,
-)
+from bs4 import BeautifulSoup
+from openai import AsyncAzureOpenAI, AsyncOpenAI
+import voluptuous as vol
+import yaml
+
+from homeassistant.components import automation, conversation, recorder, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
+from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
+from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.const import (
-    SERVICE_RELOAD,
+    CONF_ATTRIBUTE,
     CONF_METHOD,
-    CONF_TIMEOUT,
-    CONF_VERIFY_SSL,
-    CONF_VALUE_TEMPLATE,
+    CONF_NAME,
     CONF_RESOURCE,
     CONF_RESOURCE_TEMPLATE,
-    CONF_NAME,
-    CONF_ATTRIBUTE,
+    CONF_PAYLOAD,
+    CONF_TIMEOUT,
+    CONF_VALUE_TEMPLATE,
+    CONF_VERIFY_SSL,
+    SERVICE_RELOAD,
 )
-from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.template import Template
-from homeassistant.helpers.script import Script
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.script import Script
+from homeassistant.helpers.template import Template
+import homeassistant.util.dt as dt_util
 
-
+from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, CONF_PAYLOAD_TEMPLATE
 from .exceptions import (
-    EntityNotFound,
-    EntityNotExposed,
     CallServiceError,
-    NativeNotFound,
-    InvalidFunction,
+    EntityNotExposed,
+    EntityNotFound,
     FunctionNotFound,
+    InvalidFunction,
+    NativeNotFound,
 )
-
-from .const import (
-    DOMAIN,
-    EVENT_AUTOMATION_REGISTERED,
-)
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,16 +100,17 @@ def _get_rest_data(hass, rest_config, arguments):
     rest_config.setdefault(CONF_TIMEOUT, rest.data.DEFAULT_TIMEOUT)
     rest_config.setdefault(rest.const.CONF_ENCODING, rest.const.DEFAULT_ENCODING)
 
-    convert_to_template(
-        rest_config,
-        template_keys=[CONF_VALUE_TEMPLATE, CONF_RESOURCE_TEMPLATE],
-        hass=hass,
-    )
-
     resource_template: Template | None = rest_config.get(CONF_RESOURCE_TEMPLATE)
     if resource_template is not None:
         rest_config.pop(CONF_RESOURCE_TEMPLATE)
         rest_config[CONF_RESOURCE] = resource_template.async_render(
+            arguments, parse_result=False
+        )
+
+    payload_template: Template | None = rest_config.get(CONF_PAYLOAD_TEMPLATE)
+    if payload_template is not None:
+        rest_config.pop(CONF_PAYLOAD_TEMPLATE)
+        rest_config[CONF_PAYLOAD] = payload_template.async_render(
             arguments, parse_result=False
         )
 
@@ -417,7 +408,10 @@ class RestFunctionExecutor(FunctionExecutor):
         """initialize Rest function"""
         super().__init__(
             vol.Schema(rest.RESOURCE_SCHEMA).extend(
-                {vol.Optional("value_template"): cv.template}
+                {
+                    vol.Optional("value_template"): cv.template,
+                    vol.Optional("payload_template"): cv.template,
+                }
             )
         )
 
@@ -448,7 +442,12 @@ class ScrapeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Scrape function"""
         super().__init__(
-            scrape.COMBINED_SCHEMA.extend({vol.Optional("value_template"): cv.template})
+            scrape.COMBINED_SCHEMA.extend(
+                {
+                    vol.Optional("value_template"): cv.template,
+                    vol.Optional("payload_template"): cv.template,
+                }
+            )
         )
 
     async def execute(
