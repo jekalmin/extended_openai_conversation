@@ -62,6 +62,7 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
     DOMAIN,
+    EVENT_CONVERSATION_FINISHED,
 )
 from .exceptions import (
     FunctionLoadFailed,
@@ -191,7 +192,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages.append(user_message)
 
         try:
-            response = await self.query(user_input, messages, exposed_entities, 0)
+            query_response = await self.query(user_input, messages, exposed_entities, 0)
         except OpenAIError as err:
             _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
@@ -213,11 +214,20 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 response=intent_response, conversation_id=conversation_id
             )
 
-        messages.append(response.model_dump(exclude_none=True))
+        messages.append(query_response.message.model_dump(exclude_none=True))
         self.history[conversation_id] = messages
 
+        self.hass.bus.async_fire(
+            EVENT_CONVERSATION_FINISHED,
+            {
+                "response": query_response.response.model_dump(),
+                "user_input": user_input,
+                "messages": messages,
+            },
+        )
+
         intent_response = intent.IntentResponse(language=user_input.language)
-        intent_response.async_set_speech(response.content)
+        intent_response.async_set_speech(query_response.message.content)
         return conversation.ConversationResult(
             response=intent_response, conversation_id=conversation_id
         )
@@ -317,7 +327,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         """Process a sentence."""
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
@@ -366,14 +376,16 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message = choice.message
 
         if choice.finish_reason == "function_call":
-            message = await self.execute_function_call(
+            return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
         if choice.finish_reason == "tool_calls":
-            message = await self.execute_tool_calls(
+            return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        return message
+
+        return OpenAIQueryResponse(response=response, message=message)
+        # return message
 
     async def execute_function_call(
         self,
@@ -382,7 +394,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         function_name = message.function_call.name
         function = next(
             (s for s in self.get_functions() if s["spec"]["name"] == function_name),
@@ -407,7 +419,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
         function,
-    ):
+    ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
         try:
@@ -435,7 +447,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
             function_name = tool.function.name
@@ -469,7 +481,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         tool,
         exposed_entities,
         function,
-    ):
+    ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
         try:
@@ -481,3 +493,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             self.hass, function["function"], arguments, user_input, exposed_entities
         )
         return result
+
+
+class OpenAIQueryResponse:
+    """OpenAI query response value object."""
+
+    def __init__(
+        self, response: ChatCompletion, message: ChatCompletionMessage
+    ) -> None:
+        """Initialize OpenAI query response value object."""
+        self.response = response
+        self.message = message
