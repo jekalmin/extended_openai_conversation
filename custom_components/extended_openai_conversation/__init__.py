@@ -69,6 +69,7 @@ from .exceptions import (
     FunctionNotFound,
     InvalidFunction,
     ParseArgumentsFailed,
+    TokenLengthExceededError,
 )
 from .helpers import (
     get_function_executor,
@@ -383,9 +384,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
+        if choice.finish_reason == "length":
+            raise TokenLengthExceededError(response.usage.completion_tokens)
 
         return OpenAIQueryResponse(response=response, message=message)
-        # return message
 
     async def execute_function_call(
         self,
