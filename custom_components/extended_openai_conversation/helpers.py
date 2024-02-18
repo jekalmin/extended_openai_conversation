@@ -13,7 +13,14 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 import voluptuous as vol
 import yaml
 
-from homeassistant.components import automation, conversation, recorder, rest, scrape
+from homeassistant.components import (
+    automation,
+    conversation,
+    energy,
+    recorder,
+    rest,
+    scrape,
+)
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.config import AUTOMATION_CONFIG_PATH
@@ -21,9 +28,9 @@ from homeassistant.const import (
     CONF_ATTRIBUTE,
     CONF_METHOD,
     CONF_NAME,
+    CONF_PAYLOAD,
     CONF_RESOURCE,
     CONF_RESOURCE_TEMPLATE,
-    CONF_PAYLOAD,
     CONF_TIMEOUT,
     CONF_VALUE_TEMPLATE,
     CONF_VERIFY_SSL,
@@ -36,7 +43,7 @@ from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
-from .const import DOMAIN, EVENT_AUTOMATION_REGISTERED, CONF_PAYLOAD_TEMPLATE
+from .const import CONF_PAYLOAD_TEMPLATE, DOMAIN, EVENT_AUTOMATION_REGISTERED
 from .exceptions import (
     CallServiceError,
     EntityNotExposed,
@@ -208,6 +215,14 @@ class NativeFunctionExecutor(FunctionExecutor):
             return await self.get_history(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "get_energy":
+            return await self.get_energy(
+                hass, function, arguments, user_input, exposed_entities
+            )
+        if name == "get_statistics":
+            return await self.get_statistics(
+                hass, function, arguments, user_input, exposed_entities
+            )
 
         raise NativeNotFound(name)
 
@@ -346,6 +361,40 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
 
+    async def get_energy(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
+        return energy_manager.data
+
+    async def get_statistics(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        statistic_ids = arguments.get("statistic_ids", [])
+        start_time = dt_util.as_utc(dt_util.parse_datetime(arguments["start_time"]))
+        end_time = dt_util.as_utc(dt_util.parse_datetime(arguments["end_time"]))
+
+        return await recorder.get_instance(hass).async_add_executor_job(
+            recorder.statistics.statistics_during_period,
+            hass,
+            start_time,
+            end_time,
+            statistic_ids,
+            arguments.get("period", "day"),
+            arguments.get("units"),
+            arguments.get("types", {"change"}),
+        )
+
     def as_utc(self, value: str, default_value, parse_error_message: str):
         if value is None:
             return default_value
@@ -393,7 +442,14 @@ class ScriptFunctionExecutor(FunctionExecutor):
 class TemplateFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize template function"""
-        super().__init__(vol.Schema({vol.Required("value_template"): cv.template}))
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("value_template"): cv.template,
+                    vol.Optional("parse_result"): bool,
+                }
+            )
+        )
 
     async def execute(
         self,
@@ -405,7 +461,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
     ):
         return function["value_template"].async_render(
             arguments,
-            parse_result=False,
+            parse_result=function.get("parse_result", False),
         )
 
 

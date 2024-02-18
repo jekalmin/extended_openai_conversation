@@ -7,6 +7,7 @@
   "config_flow": true,
   "dependencies": [
     "conversation",
+    "energy",
     "history",
     "recorder",
     "rest",

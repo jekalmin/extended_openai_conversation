@@ -103,6 +103,22 @@ class ParseArgumentsFailed(HomeAssistantError):
         return f"failed to parse arguments `{self.arguments}`. Increase maximum token to avoid the issue."
 
 
+class TokenLengthExceededError(HomeAssistantError):
+    """When openai return 'length' as 'finish_reason'."""
+
+    def __init__(self, token: int) -> None:
+        """Initialize error."""
+        super().__init__(
+            self,
+            f"token length(`{token}`) exceeded. Increase maximum token to avoid the issue.",
+        )
+        self.token = token
+
+    def __str__(self) -> str:
+        """Return string representation."""
+        return f"token length(`{self.token}`) exceeded. Increase maximum token to avoid the issue."
+
+
 class InvalidFunction(HomeAssistantError):
     """When function validation failed."""
 
