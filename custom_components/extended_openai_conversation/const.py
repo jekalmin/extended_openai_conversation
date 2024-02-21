@@ -2,6 +2,7 @@
 
 DOMAIN = "extended_openai_conversation"
 DEFAULT_NAME = "Extended OpenAI Conversation"
+CONF_ORGANIZATION = "organization"
 CONF_BASE_URL = "base_url"
 DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
 CONF_API_VERSION = "api_version"
@@ -9,6 +10,7 @@ CONF_SKIP_AUTHENTICATION = "skip_authentication"
 DEFAULT_SKIP_AUTHENTICATION = False
 
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
+EVENT_CONVERSATION_FINISHED = "extended_openai_conversation.conversation.finished"
 
 CONF_PROMPT = "prompt"
 DEFAULT_PROMPT = """I want you to act as smart home manager of Home Assistant.
@@ -93,3 +95,5 @@ CONF_CONTEXT_TRUNCATE_STRATEGY = "context_truncate_strategy"
 DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 
 SERVICE_QUERY_IMAGE = "query_image"
+
+CONF_PAYLOAD_TEMPLATE = "payload_template"

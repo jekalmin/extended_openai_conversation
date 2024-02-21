@@ -1,60 +1,57 @@
 from abc import ABC, abstractmethod
+from datetime import timedelta
 import logging
 import os
-import yaml
-import time
-import sqlite3
-from openai import AsyncOpenAI, AsyncAzureOpenAI
 import re
-import voluptuous as vol
-from bs4 import BeautifulSoup
+import sqlite3
+import time
 from typing import Any
 from urllib import parse
 
-from datetime import timedelta
-import homeassistant.util.dt as dt_util
-from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
+from bs4 import BeautifulSoup
+from openai import AsyncAzureOpenAI, AsyncOpenAI
+import voluptuous as vol
+import yaml
+
 from homeassistant.components import (
     automation,
+    conversation,
+    energy,
+    recorder,
     rest,
     scrape,
-    conversation,
-    recorder,
 )
 from homeassistant.components.automation.config import _async_validate_config_item
+from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
+from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.const import (
-    SERVICE_RELOAD,
+    CONF_ATTRIBUTE,
     CONF_METHOD,
-    CONF_TIMEOUT,
-    CONF_VERIFY_SSL,
-    CONF_VALUE_TEMPLATE,
+    CONF_NAME,
+    CONF_PAYLOAD,
     CONF_RESOURCE,
     CONF_RESOURCE_TEMPLATE,
-    CONF_NAME,
-    CONF_ATTRIBUTE,
+    CONF_TIMEOUT,
+    CONF_VALUE_TEMPLATE,
+    CONF_VERIFY_SSL,
+    SERVICE_RELOAD,
 )
-from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.template import Template
-from homeassistant.helpers.script import Script
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.script import Script
+from homeassistant.helpers.template import Template
+import homeassistant.util.dt as dt_util
 
-
+from .const import CONF_PAYLOAD_TEMPLATE, DOMAIN, EVENT_AUTOMATION_REGISTERED
 from .exceptions import (
-    EntityNotFound,
-    EntityNotExposed,
     CallServiceError,
-    NativeNotFound,
-    InvalidFunction,
+    EntityNotExposed,
+    EntityNotFound,
     FunctionNotFound,
+    InvalidFunction,
+    NativeNotFound,
 )
-
-from .const import (
-    DOMAIN,
-    EVENT_AUTOMATION_REGISTERED,
-)
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -110,16 +107,17 @@ def _get_rest_data(hass, rest_config, arguments):
     rest_config.setdefault(CONF_TIMEOUT, rest.data.DEFAULT_TIMEOUT)
     rest_config.setdefault(rest.const.CONF_ENCODING, rest.const.DEFAULT_ENCODING)
 
-    convert_to_template(
-        rest_config,
-        template_keys=[CONF_VALUE_TEMPLATE, CONF_RESOURCE_TEMPLATE],
-        hass=hass,
-    )
-
     resource_template: Template | None = rest_config.get(CONF_RESOURCE_TEMPLATE)
     if resource_template is not None:
         rest_config.pop(CONF_RESOURCE_TEMPLATE)
         rest_config[CONF_RESOURCE] = resource_template.async_render(
+            arguments, parse_result=False
+        )
+
+    payload_template: Template | None = rest_config.get(CONF_PAYLOAD_TEMPLATE)
+    if payload_template is not None:
+        rest_config.pop(CONF_PAYLOAD_TEMPLATE)
+        rest_config[CONF_PAYLOAD] = payload_template.async_render(
             arguments, parse_result=False
         )
 
@@ -131,6 +129,7 @@ async def validate_authentication(
     api_key: str,
     base_url: str,
     api_version: str,
+    organization: str = None,
     skip_authentication=False,
 ) -> None:
     if skip_authentication:
@@ -138,10 +137,15 @@ async def validate_authentication(
 
     if is_azure(base_url):
         client = AsyncAzureOpenAI(
-            api_key=api_key, azure_endpoint=base_url, api_version=api_version
+            api_key=api_key,
+            azure_endpoint=base_url,
+            api_version=api_version,
+            organization=organization,
         )
     else:
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, organization=organization
+        )
 
     await client.models.list(timeout=10)
 
@@ -209,6 +213,14 @@ class NativeFunctionExecutor(FunctionExecutor):
             )
         if name == "get_history":
             return await self.get_history(
+                hass, function, arguments, user_input, exposed_entities
+            )
+        if name == "get_energy":
+            return await self.get_energy(
+                hass, function, arguments, user_input, exposed_entities
+            )
+        if name == "get_statistics":
+            return await self.get_statistics(
                 hass, function, arguments, user_input, exposed_entities
             )
 
@@ -349,6 +361,40 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         return [[self.as_dict(item) for item in sublist] for sublist in result.values()]
 
+    async def get_energy(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
+        return energy_manager.data
+
+    async def get_statistics(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        statistic_ids = arguments.get("statistic_ids", [])
+        start_time = dt_util.as_utc(dt_util.parse_datetime(arguments["start_time"]))
+        end_time = dt_util.as_utc(dt_util.parse_datetime(arguments["end_time"]))
+
+        return await recorder.get_instance(hass).async_add_executor_job(
+            recorder.statistics.statistics_during_period,
+            hass,
+            start_time,
+            end_time,
+            statistic_ids,
+            arguments.get("period", "day"),
+            arguments.get("units"),
+            arguments.get("types", {"change"}),
+        )
+
     def as_utc(self, value: str, default_value, parse_error_message: str):
         if value is None:
             return default_value
@@ -396,7 +442,14 @@ class ScriptFunctionExecutor(FunctionExecutor):
 class TemplateFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize template function"""
-        super().__init__(vol.Schema({vol.Required("value_template"): cv.template}))
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("value_template"): cv.template,
+                    vol.Optional("parse_result"): bool,
+                }
+            )
+        )
 
     async def execute(
         self,
@@ -408,7 +461,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
     ):
         return function["value_template"].async_render(
             arguments,
-            parse_result=False,
+            parse_result=function.get("parse_result", False),
         )
 
 
@@ -417,7 +470,10 @@ class RestFunctionExecutor(FunctionExecutor):
         """initialize Rest function"""
         super().__init__(
             vol.Schema(rest.RESOURCE_SCHEMA).extend(
-                {vol.Optional("value_template"): cv.template}
+                {
+                    vol.Optional("value_template"): cv.template,
+                    vol.Optional("payload_template"): cv.template,
+                }
             )
         )
 
@@ -448,7 +504,12 @@ class ScrapeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize Scrape function"""
         super().__init__(
-            scrape.COMBINED_SCHEMA.extend({vol.Optional("value_template"): cv.template})
+            scrape.COMBINED_SCHEMA.extend(
+                {
+                    vol.Optional("value_template"): cv.template,
+                    vol.Optional("payload_template"): cv.template,
+                }
+            )
         )
 
     async def execute(

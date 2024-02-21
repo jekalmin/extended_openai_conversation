@@ -33,37 +33,6 @@
       response_variable: _function_result
 ```
 
-### 1. get_events
-```yaml
-- spec:
-    name: get_events
-    description: Use this function to get list of calendar events.
-    parameters:
-      type: object
-      properties:
-        start_date_time:
-          type: string
-          description: The start date time in '%Y-%m-%dT%H:%M:%S%z' format
-        end_date_time:
-          type: string
-          description: The end date time in '%Y-%m-%dT%H:%M:%S%z' format
-      required:
-      - start_date_time
-      - end_date_time
-  function:
-    type: script
-    sequence:
-    - service: calendar.get_events
-      data:
-        start_date_time: "{{start_date_time}}"
-        end_date_time: "{{end_date_time}}"
-      target:
-        entity_id:
-        - calendar.[YourCalendarHere]
-        - calendar.[MoreCalendarsArePossible]
-      response_variable: _function_result
-```
-
 ### 2. create_event
 ```yaml
 - spec:

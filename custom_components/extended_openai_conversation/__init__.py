@@ -1,84 +1,82 @@
 """The OpenAI Conversation integration."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import Literal
-import json
-import yaml
 
-from openai import AsyncOpenAI, AsyncAzureOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._exceptions import AuthenticationError, OpenAIError
 from openai.types.chat.chat_completion import (
-    Choice,
     ChatCompletion,
     ChatCompletionMessage,
+    Choice,
 )
-from openai._exceptions import OpenAIError, AuthenticationError
+import yaml
 
 from homeassistant.components import conversation
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_KEY, MATCH_ALL, ATTR_NAME
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
-from homeassistant.util import ulid
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
     TemplateError,
 )
-
 from homeassistant.helpers import (
     config_validation as cv,
+    entity_registry as er,
     intent,
     template,
-    entity_registry as er,
 )
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.util import ulid
 
 from .const import (
-    CONF_ATTACH_USERNAME,
-    CONF_CHAT_MODEL,
-    CONF_MAX_TOKENS,
-    CONF_PROMPT,
-    CONF_TEMPERATURE,
-    CONF_TOP_P,
-    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-    CONF_FUNCTIONS,
-    CONF_BASE_URL,
     CONF_API_VERSION,
-    CONF_SKIP_AUTHENTICATION,
-    CONF_USE_TOOLS,
+    CONF_ATTACH_USERNAME,
+    CONF_BASE_URL,
+    CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_FUNCTIONS,
+    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    CONF_MAX_TOKENS,
+    CONF_ORGANIZATION,
+    CONF_PROMPT,
+    CONF_SKIP_AUTHENTICATION,
+    CONF_TEMPERATURE,
+    CONF_TOP_P,
+    CONF_USE_TOOLS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_PROMPT,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_TOP_P,
-    DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_CONF_FUNCTIONS,
-    DEFAULT_SKIP_AUTHENTICATION,
-    DEFAULT_USE_TOOLS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_PROMPT,
+    DEFAULT_SKIP_AUTHENTICATION,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_TOP_P,
+    DEFAULT_USE_TOOLS,
     DOMAIN,
+    EVENT_CONVERSATION_FINISHED,
 )
-
 from .exceptions import (
-    FunctionNotFound,
     FunctionLoadFailed,
-    ParseArgumentsFailed,
+    FunctionNotFound,
     InvalidFunction,
+    ParseArgumentsFailed,
+    TokenLengthExceededError,
 )
-
 from .helpers import (
-    validate_authentication,
     get_function_executor,
     is_azure,
+    validate_authentication,
 )
-
 from .services import async_setup_services
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -104,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             api_key=entry.data[CONF_API_KEY],
             base_url=entry.data.get(CONF_BASE_URL),
             api_version=entry.data.get(CONF_API_VERSION),
+            organization=entry.data.get(CONF_ORGANIZATION),
             skip_authentication=entry.data.get(
                 CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
             ),
@@ -145,10 +144,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 api_key=entry.data[CONF_API_KEY],
                 azure_endpoint=base_url,
                 api_version=entry.data.get(CONF_API_VERSION),
+                organization=entry.data.get(CONF_ORGANIZATION),
             )
         else:
             self.client = AsyncOpenAI(
-                api_key=entry.data[CONF_API_KEY], base_url=base_url
+                api_key=entry.data[CONF_API_KEY],
+                base_url=base_url,
+                organization=entry.data.get(CONF_ORGANIZATION),
             )
 
     @property
@@ -191,7 +193,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages.append(user_message)
 
         try:
-            response = await self.query(user_input, messages, exposed_entities, 0)
+            query_response = await self.query(user_input, messages, exposed_entities, 0)
         except OpenAIError as err:
             _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
@@ -213,11 +215,20 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 response=intent_response, conversation_id=conversation_id
             )
 
-        messages.append(response.model_dump(exclude_none=True))
+        messages.append(query_response.message.model_dump(exclude_none=True))
         self.history[conversation_id] = messages
 
+        self.hass.bus.async_fire(
+            EVENT_CONVERSATION_FINISHED,
+            {
+                "response": query_response.response.model_dump(),
+                "user_input": user_input,
+                "messages": messages,
+            },
+        )
+
         intent_response = intent.IntentResponse(language=user_input.language)
-        intent_response.async_set_speech(response.content)
+        intent_response.async_set_speech(query_response.message.content)
         return conversation.ConversationResult(
             response=intent_response, conversation_id=conversation_id
         )
@@ -317,7 +328,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         """Process a sentence."""
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
@@ -366,14 +377,17 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message = choice.message
 
         if choice.finish_reason == "function_call":
-            message = await self.execute_function_call(
+            return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
         if choice.finish_reason == "tool_calls":
-            message = await self.execute_tool_calls(
+            return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        return message
+        if choice.finish_reason == "length":
+            raise TokenLengthExceededError(response.usage.completion_tokens)
+
+        return OpenAIQueryResponse(response=response, message=message)
 
     async def execute_function_call(
         self,
@@ -382,7 +396,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         function_name = message.function_call.name
         function = next(
             (s for s in self.get_functions() if s["spec"]["name"] == function_name),
@@ -407,7 +421,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
         function,
-    ):
+    ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
         try:
@@ -435,7 +449,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
-    ):
+    ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
             function_name = tool.function.name
@@ -469,7 +483,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         tool,
         exposed_entities,
         function,
-    ):
+    ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
         try:
@@ -481,3 +495,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             self.hass, function["function"], arguments, user_input, exposed_entities
         )
         return result
+
+
+class OpenAIQueryResponse:
+    """OpenAI query response value object."""
+
+    def __init__(
+        self, response: ChatCompletion, message: ChatCompletionMessage
+    ) -> None:
+        """Initialize OpenAI query response value object."""
+        self.response = response
+        self.message = message

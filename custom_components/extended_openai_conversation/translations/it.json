@@ -1,0 +1,71 @@
+{
+    "config": {
+        "error": {
+            "cannot_connect": "Connessione non riuscita",
+            "invalid_auth": "Autenticazione non valida",
+            "unknown": "Errore imprevisto"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "name": "Nome",
+                    "api_key": "Chiave API",
+                    "base_url": "URL di base",
+                    "api_version": "Versione API",
+                    "skip_authentication": "Ignora autenticazione"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "max_tokens": "Numero massimo token da restituire nella risposta",
+                    "model": "Modello di completamento",
+                    "prompt": "Modello di prompt",
+                    "temperature": "Temperatura",
+                    "top_p": "Top P",
+                    "max_function_calls_per_conversation": "Numero massimo di chiamate di funzioni per conversazione",
+                    "functions": "Funzioni",
+                    "attach_username": "Allega nome utente al messaggio",
+                    "use_tools": "Utilizza strumenti",
+                    "context_threshold": "Soglia di contesto",
+                    "context_truncate_strategy": "Strategia di troncamento del contesto quando superata la soglia"
+                }
+            }
+        }
+    },
+    "services": {
+        "query_image": {
+            "name": "Interrogazione immagine",
+            "description": "Prendi le immagini e rispondi alle domande su di esse",
+            "fields": {
+                "config_entry": {
+                    "name": "Voce di configurazione",
+                    "description": "La voce di configurazione da utilizzare per questo servizio"
+                },
+                "model": {
+                    "name": "Modello",
+                    "description": "Il modello",
+                    "example": "gpt-4-vision-preview"
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Il testo da chiedere riguardo all'immagine",
+                    "example": "Cosa c'è in questa immagine?"
+                },
+                "images": {
+                    "name": "Immagini",
+                    "description": "Un elenco delle immagini richieste",
+                    "example": "{\"url\": \"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg\"}"
+                },
+                "max_tokens": {
+                    "name": "Max Token",
+                    "description": "I token massimi",
+                    "example": "300"
+                }
+            }
+        }
+    }
+}
