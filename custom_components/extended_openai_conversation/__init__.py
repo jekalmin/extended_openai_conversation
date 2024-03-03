@@ -186,9 +186,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             messages = [system_message]
         user_message = {"role": "user", "content": user_input.text}
         if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
-            user = await self.hass.auth.async_get_user(user_input.context.user_id)
-            if user is not None and user.name is not None:
-                user_message[ATTR_NAME] = user.name
+            user = user_input.context.user_id
+            if user is not None:
+                user_message[ATTR_NAME] = user
 
         messages.append(user_message)
 
