@@ -433,6 +433,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
             logger=_LOGGER,
         )
 
+        arguments['device_id'] = user_input.device_id
         result = await script.async_run(
             run_variables=arguments, context=user_input.context
         )
