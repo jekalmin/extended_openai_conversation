@@ -1,8 +1,15 @@
+import base64
 import logging
+import mimetypes
+from pathlib import Path
+from urllib.parse import urlparse
 
-import voluptuous as vol
 from openai import AsyncOpenAI
 from openai._exceptions import OpenAIError
+from openai.types.chat.chat_completion_content_part_image_param import (
+    ChatCompletionContentPartImageParam,
+)
+import voluptuous as vol
 
 from homeassistant.core import (
     HomeAssistant,
@@ -11,8 +18,8 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers import selector, config_validation as cv
 
 from .const import DOMAIN, SERVICE_QUERY_IMAGE
 
@@ -25,7 +32,7 @@ QUERY_IMAGE_SCHEMA = vol.Schema(
         ),
         vol.Required("model", default="gpt-4-vision-preview"): cv.string,
         vol.Required("prompt"): cv.string,
-        vol.Required("images"): vol.All(cv.ensure_list, [{"url": cv.url}]),
+        vol.Required("images"): vol.All(cv.ensure_list, [{"url": cv.string}]),
         vol.Optional("max_tokens", default=300): cv.positive_int,
     }
 )
@@ -41,7 +48,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         try:
             model = call.data["model"]
             images = [
-                {"type": "image_url", "image_url": image}
+                {"type": "image_url", "image_url": to_image_param(hass, image)}
                 for image in call.data["images"]
             ]
 
@@ -74,3 +81,32 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         schema=QUERY_IMAGE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
+
+
+def to_image_param(hass: HomeAssistant, image) -> ChatCompletionContentPartImageParam:
+    """Convert url to base64 encoded image if local."""
+    url = image["url"]
+
+    if urlparse(url).scheme in cv.EXTERNAL_URL_PROTOCOL_SCHEMA_LIST:
+        return image
+
+    if not hass.config.is_allowed_path(url):
+        raise HomeAssistantError(
+            f"Cannot read `{url}`, no access to path; "
+            "`allowlist_external_dirs` may need to be adjusted in "
+            "`configuration.yaml`"
+        )
+    if not Path(url).exists():
+        raise HomeAssistantError(f"`{url}` does not exist")
+    mime_type, _ = mimetypes.guess_type(url)
+    if mime_type is None or not mime_type.startswith("image"):
+        raise HomeAssistantError(f"`{url}` is not an image")
+
+    image["url"] = f"data:{mime_type};base64,{encode_image(url)}"
+    return image
+
+
+def encode_image(image_path):
+    """Convert to base64 encoded image."""
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")

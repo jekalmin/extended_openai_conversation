@@ -91,14 +91,14 @@ script:
         media_content_type: url
         media_content_id: >-
           {% if kind == 'video' %}
-            "youtube://www.youtube.com/watch?v={{content_id}}"
+            youtube://www.youtube.com/watch?v={{content_id}}
           {% elif kind == 'channel' %}
-            "youtube://www.youtube.com/channel/{{content_id}}"
+            youtube://www.youtube.com/channel/{{content_id}}
           {% else %} 
-            "youtube://www.youtube.com/playlist?list={{content_id}}"
+            youtube://www.youtube.com/playlist?list={{content_id}}
           {% endif %}
-        target:
-          entity_id: "{{ entity_id }}"
+      target:
+        entity_id: "{{ entity_id }}"
 ```
 
 #### Android TV
@@ -145,11 +145,11 @@ script:
       data:
         activity: >-
           {% if kind == 'video' %}
-            "https://www.youtube.com/watch?v={{content_id}}"
+            https://www.youtube.com/watch?v={{content_id}}
           {% elif kind == 'channel' %}
-            "https://www.youtube.com/channel/{{content_id}}"
+            https://www.youtube.com/channel/{{content_id}}
           {% else %}  {# playlist kind #}
-            "https://www.youtube.com/playlist?list={{content_id}}"
+            https://www.youtube.com/playlist?list={{content_id}}
           {% endif %}
       target:
         entity_id: "{{ player }}"
