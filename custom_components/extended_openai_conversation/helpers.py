@@ -252,6 +252,10 @@ class NativeFunctionExecutor(FunctionExecutor):
             return await self.get_statistics(
                 hass, function, arguments, user_input, exposed_entities
             )
+        if name == "get_user_from_user_id":
+            return await self.get_user_from_user_id(
+                hass, function, arguments, user_input, exposed_entities
+            )
 
         raise NativeNotFound(name)
 
@@ -401,6 +405,17 @@ class NativeFunctionExecutor(FunctionExecutor):
         energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
         return energy_manager.data
 
+    async def get_user_from_user_id(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        user = await hass.auth.async_get_user(user_input.context.user_id)
+        return {'name': user.name if user and hasattr(user, 'name') else 'Unknown'}
+    
     async def get_statistics(
         self,
         hass: HomeAssistant,
