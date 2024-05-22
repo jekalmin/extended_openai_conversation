@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 import voluptuous as vol
 import yaml
+import asyncio
 
 from homeassistant.components import (
     automation,
@@ -57,6 +58,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
+
+def is_exposed(entity_id, exposed_entities) -> bool:
+    return any(
+        exposed_entity["entity_id"] == entity_id
+        for exposed_entity in exposed_entities
+    )
 
 
 def get_function_executor(value: str):
@@ -132,9 +139,25 @@ async def validate_authentication(
     organization: str = None,
     skip_authentication=False,
 ) -> None:
+    """
+    Validate the authentication with OpenAI or Azure.
+
+    Parameters:
+    hass (HomeAssistant): The Home Assistant instance.
+    api_key (str): The API key for OpenAI or Azure.
+    base_url (str): The base URL for the API.
+    api_version (str): The API version to use.
+    organization (str): The organization ID for the API (optional).
+    skip_authentication (bool): If True, skip the authentication check.
+
+    Returns:
+    None
+    """
+    # If skip_authentication is True, return immediately
     if skip_authentication:
         return
 
+    # Determine if the base URL is for Azure or OpenAI and create the appropriate client
     if is_azure(base_url):
         client = AsyncAzureOpenAI(
             api_key=api_key,
@@ -147,7 +170,13 @@ async def validate_authentication(
             api_key=api_key, base_url=base_url, organization=organization
         )
 
-    await client.models.list(timeout=10)
+    # Define an asynchronous function that lists models with a timeout using asyncio.to_thread
+    async def list_models_with_timeout():
+        # Use asyncio.to_thread to run the blocking call in a separate thread
+        return await asyncio.to_thread(client.models.list, timeout=10)
+
+    # Await the execution of the list_models_with_timeout function
+    await list_models_with_timeout()
 
 
 class FunctionExecutor(ABC):
@@ -221,10 +250,6 @@ class NativeFunctionExecutor(FunctionExecutor):
             )
         if name == "get_statistics":
             return await self.get_statistics(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "get_user_from_user_id":
-            return await self.get_user_from_user_id(
                 hass, function, arguments, user_input, exposed_entities
             )
 
@@ -376,17 +401,6 @@ class NativeFunctionExecutor(FunctionExecutor):
         energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
         return energy_manager.data
 
-    async def get_user_from_user_id(
-        self,
-        hass: HomeAssistant,
-        function,
-        arguments,
-        user_input: conversation.ConversationInput,
-        exposed_entities,
-    ):
-        user = await hass.auth.async_get_user(user_input.context.user_id)
-        return {'name': user.name if user and hasattr(user, 'name') else 'Unknown'}
-
     async def get_statistics(
         self,
         hass: HomeAssistant,
@@ -439,6 +453,10 @@ class ScriptFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
+        script_context = {
+            "is_exposed": lambda e: is_exposed(e, exposed_entities),
+        }
+        run_variables = {**arguments, **script_context}
         script = Script(
             hass,
             function["sequence"],
@@ -449,7 +467,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
         )
 
         result = await script.async_run(
-            run_variables=arguments, context=user_input.context
+            run_variables=run_variables, context=user_input.context
         )
         return result.variables.get("_function_result", "Success")
 
@@ -474,9 +492,13 @@ class TemplateFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
+        template_context = {
+            "is_exposed": lambda e: is_exposed(e, exposed_entities),
+        }
+        variables = {**arguments, **template_context}
         return function["value_template"].async_render(
-            arguments,
-            parse_result=function.get("parse_result", False),
+            variables,
+            parse_result=function.get("parse_result", False)
         )
 
 
@@ -668,10 +690,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
         )
 
     def is_exposed(self, entity_id, exposed_entities) -> bool:
-        return any(
-            exposed_entity["entity_id"] == entity_id
-            for exposed_entity in exposed_entities
-        )
+        return is_exposed(entity_id, exposed_entities)
 
     def is_exposed_entity_in_query(self, query: str, exposed_entities) -> bool:
         exposed_entity_ids = list(
@@ -711,7 +730,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
         query = function.get("query", "{{query}}")
 
         template_arguments = {
-            "is_exposed": lambda e: self.is_exposed(e, exposed_entities),
+            "is_exposed": lambda e: is_exposed(e, exposed_entities),
             "is_exposed_entity_in_query": lambda q: self.is_exposed_entity_in_query(
                 q, exposed_entities
             ),
