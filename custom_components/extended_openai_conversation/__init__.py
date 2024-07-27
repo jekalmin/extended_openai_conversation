@@ -167,8 +167,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             conversation_id = user_input.conversation_id
             messages = self.history[conversation_id]
         else:
-            conversation_id = ulid.ulid()
-            user_input.conversation_id = conversation_id
+            conversation_id = user_input.conversation_id
+            if user_input.conversation_id is None:
+                conversation_id = ulid.ulid()
+                user_input.conversation_id = conversation_id
             try:
                 system_message = self._generate_system_message(
                     exposed_entities, user_input
