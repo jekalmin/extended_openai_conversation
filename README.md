@@ -22,7 +22,7 @@ Since "gpt-3.5-turbo" model already knows how to call service of Home Assistant 
 4. In the bottom right corner, select the Add Integration button.
 5. Follow the instructions on screen to complete the setup (API Key is required).
     - [Generating an API Key](https://www.home-assistant.io/integrations/openai_conversation/#generate-an-api-key)
-    - Specify "Base Url" if using OpenAI compatible servers like LocalAI, otherwise leave as it is.
+    - Specify "Base Url" if using OpenAI compatible servers like Azure OpenAI (also with APIM), LocalAI, otherwise leave as it is.
 6. Go to Settings > [Voice Assistants](https://my.home-assistant.io/redirect/voice_assistants/).
 7. Click to edit Assistant (named "Home Assistant" by default).
 8. Select "Extended OpenAI Conversation" from "Conversation agent" tab.
