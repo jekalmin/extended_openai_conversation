@@ -453,7 +453,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
+        tool_responses = []
         error_occurred = False
+
         for tool in message.tool_calls:
             function_name = tool.function.name
             function = next(
@@ -474,7 +476,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                         "name": function_name,
                         "content": str(result),
                     }
-                    messages.append(tool_response)
                 except Exception as e:
                     _LOGGER.error(f"Error executing tool function {function_name}: {str(e)}")
                     error_occurred = True
@@ -484,7 +485,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                         "name": function_name,
                         "content": f"Error: {str(e)}",
                     }
-                    messages.append(tool_response)
             else:
                 _LOGGER.error(f"Function not found: {function_name}")
                 error_occurred = True
@@ -494,7 +494,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     "name": function_name,
                     "content": f"Error: Function not found",
                 }
-                messages.append(tool_response)
+            
+            tool_responses.append(tool_response)
+        
+        # Add all tool responses to messages
+        messages.extend(tool_responses)
         
         if error_occurred:
             error_message = {
