@@ -453,7 +453,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         n_requests,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
-        tool_responses = []
         for tool in message.tool_calls:
             function_name = tool.function.name
             function = next(
@@ -467,7 +466,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     exposed_entities,
                     function,
                 )
-                tool_responses.append({
+                messages.append({
                     "tool_call_id": tool.id,
                     "role": "tool",
                     "name": function_name,
@@ -475,9 +474,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 })
             else:
                 raise FunctionNotFound(function_name)
-        
-        # Add all tool responses as separate messages
-        messages.extend(tool_responses)
         
         return await self.query(user_input, messages, exposed_entities, n_requests)
 
