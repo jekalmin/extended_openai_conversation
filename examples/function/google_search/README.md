@@ -2,7 +2,7 @@
 - Search from Google
 
 ## Prerequisite
-Needs Google API Key
+Needs Google API key and CX code.
 
 ## Function
 
@@ -11,27 +11,26 @@ Needs Google API Key
 ```yaml
 - spec:
     name: search_google
-    description: Search Google using the Custom Search API.
+    description: Execute Google Custom Search to find and refine relevant information. Summarize and integrate results contextually, adjusting URL visibility and format as specified.
     parameters:
       type: object
       properties:
         query:
           type: string
-          description: The search query.
+          description: Enter search query with context.
+        results_count:
+          type: integer
+          description: Number of results to retrieve, default is 3.
       required:
       - query
   function:
     type: rest
-    resource_template: "https://www.googleapis.com/customsearch/v1?key=[GOOGLE_API_KEY]&cx=[GOOGLE_PROGRAMMING_SEARCH_ENGINE]:omuauf_lfve&q={{ query }}&num=3"
-    value_template: >-
-      {% if value_json.items %}
-      ```csv
-      title,link
-      {% for item in value_json.items %}
-      "{{ item.title | replace(',', ' ') }}","{{ item.link }}"
-      {% endfor %}
-      ```
-      {% else %}
-      No results found,
-      {% endif %}
+    resource_template: "https://www.googleapis.com/customsearch/v1?key=[API-KEY]&cx=[CX-CODE]&q={{ query | urlencode }}&num={{ results_count | default(3) }}"
+    value_template: >
+      {%- set items = value_json['items'] if value_json['items'] is iterable else [] %}
+      {%- if items -%}
+        {{ items | tojson }}
+      {%- else -%}
+        No data found or data is not iterable.        
+      {%- endif -%}
 ```
