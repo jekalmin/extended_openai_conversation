@@ -145,14 +145,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 azure_endpoint=base_url,
                 api_version=entry.data.get(CONF_API_VERSION),
                 organization=entry.data.get(CONF_ORGANIZATION),
-                timeout=360.0,  # Set timeout to 6 minutes
+                timeout=480.0,  # Set timeout to 8 minutes
             )
         else:
             self.client = AsyncOpenAI(
                 api_key=entry.data[CONF_API_KEY],
                 base_url=base_url,
                 organization=entry.data.get(CONF_ORGANIZATION),
-                timeout=360.0,  # Set timeout to 6 minutes
+                timeout=480.0,  # Set timeout to 8 minutes
             )
 
     @property
