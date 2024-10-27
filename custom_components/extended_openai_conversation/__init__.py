@@ -30,6 +30,7 @@ from homeassistant.helpers import (
     intent,
     template,
 )
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 
@@ -145,12 +146,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 azure_endpoint=base_url,
                 api_version=entry.data.get(CONF_API_VERSION),
                 organization=entry.data.get(CONF_ORGANIZATION),
+                http_client=get_async_client(hass),
             )
         else:
             self.client = AsyncOpenAI(
                 api_key=entry.data[CONF_API_KEY],
                 base_url=base_url,
                 organization=entry.data.get(CONF_ORGANIZATION),
+                http_client=get_async_client(hass),
             )
 
     @property

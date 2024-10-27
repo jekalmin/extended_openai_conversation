@@ -39,6 +39,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
@@ -141,10 +142,14 @@ async def validate_authentication(
             azure_endpoint=base_url,
             api_version=api_version,
             organization=organization,
+            http_client=get_async_client(hass),
         )
     else:
         client = AsyncOpenAI(
-            api_key=api_key, base_url=base_url, organization=organization
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            http_client=get_async_client(hass),
         )
 
     await client.models.list(timeout=10)
