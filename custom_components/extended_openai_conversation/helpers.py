@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
+from functools import partial
 import logging
 import os
 import re
@@ -152,7 +153,7 @@ async def validate_authentication(
             http_client=get_async_client(hass),
         )
 
-    await client.models.list(timeout=10)
+    await hass.async_add_executor_job(partial(client.models.list, timeout=10))
 
 
 class FunctionExecutor(ABC):
