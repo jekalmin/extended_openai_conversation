@@ -30,6 +30,7 @@ from homeassistant.helpers import (
     intent,
     template,
 )
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 
@@ -145,12 +146,14 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 azure_endpoint=base_url,
                 api_version=entry.data.get(CONF_API_VERSION),
                 organization=entry.data.get(CONF_ORGANIZATION),
+                http_client=get_async_client(hass),
             )
         else:
             self.client = AsyncOpenAI(
                 api_key=entry.data[CONF_API_KEY],
                 base_url=base_url,
                 organization=entry.data.get(CONF_ORGANIZATION),
+                http_client=get_async_client(hass),
             )
 
     @property
@@ -186,9 +189,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             messages = [system_message]
         user_message = {"role": "user", "content": user_input.text}
         if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
-            user = await self.hass.auth.async_get_user(user_input.context.user_id)
-            if user is not None and user.name is not None:
-                user_message[ATTR_NAME] = user.name
+            user = user_input.context.user_id
+            if user is not None:
+                user_message[ATTR_NAME] = user
 
         messages.append(user_message)
 
@@ -356,7 +359,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         if len(functions) == 0:
             tool_kwargs = {}
 
-        _LOGGER.info("Prompt for %s: %s", model, messages)
+        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
         response: ChatCompletion = await self.client.chat.completions.create(
             model=model,
@@ -368,7 +371,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             **tool_kwargs,
         )
 
-        _LOGGER.info("Response %s", response.model_dump(exclude_none=True))
+        _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
 
         if response.usage.total_tokens > context_threshold:
             await self.truncate_message_history(messages, exposed_entities, user_input)

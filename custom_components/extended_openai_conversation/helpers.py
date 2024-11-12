@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
+from functools import partial
 import logging
 import os
 import re
@@ -39,6 +40,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
@@ -56,7 +58,7 @@ from .exceptions import (
 _LOGGER = logging.getLogger(__name__)
 
 
-AZURE_DOMAIN_PATTERN = r"\.openai\.azure\.com"
+AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net)"
 
 
 def get_function_executor(value: str):
@@ -141,13 +143,17 @@ async def validate_authentication(
             azure_endpoint=base_url,
             api_version=api_version,
             organization=organization,
+            http_client=get_async_client(hass),
         )
     else:
         client = AsyncOpenAI(
-            api_key=api_key, base_url=base_url, organization=organization
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            http_client=get_async_client(hass),
         )
 
-    await client.models.list(timeout=10)
+    await hass.async_add_executor_job(partial(client.models.list, timeout=10))
 
 
 class FunctionExecutor(ABC):
@@ -221,6 +227,10 @@ class NativeFunctionExecutor(FunctionExecutor):
             )
         if name == "get_statistics":
             return await self.get_statistics(
+                hass, function, arguments, user_input, exposed_entities
+            )
+        if name == "get_user_from_user_id":
+            return await self.get_user_from_user_id(
                 hass, function, arguments, user_input, exposed_entities
             )
 
@@ -371,6 +381,17 @@ class NativeFunctionExecutor(FunctionExecutor):
     ):
         energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
         return energy_manager.data
+
+    async def get_user_from_user_id(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        user = await hass.auth.async_get_user(user_input.context.user_id)
+        return {'name': user.name if user and hasattr(user, 'name') else 'Unknown'}
 
     async def get_statistics(
         self,
