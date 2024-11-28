@@ -12,7 +12,7 @@
                     "api_key": "Klucz API",
                     "base_url": "Bazowy URL",
                     "api_version": "Wersja API",
-                    "organization": "Organization",
+                    "organization": "Organizacja",
                     "skip_authentication": "Pomiń authentykację"
                 }
             }
@@ -22,17 +22,17 @@
         "step": {
             "init": {
                 "data": {
-                    "max_tokens": "Maksymalna ilość tokenów w odpowiedzi",
+                    "max_tokens": "Maksymalna liczba tokenów w odpowiedzi",
                     "model": "Model",
                     "prompt": "Prompt",
                     "temperature": "Temperatura",
                     "top_p": "Top P",
-                    "max_function_calls_per_conversation": "Maksymalna ilość wywołań funkcji na rozmowę",
+                    "max_function_calls_per_conversation": "Maksymalna liczba wywołań funkcji na rozmowę",
                     "functions": "Funkcje",
                     "attach_username": "Dodaj nazwę użytkownika do wiadomości",
-                    "use_tools": "Use Tools",
-                    "context_threshold": "Context Threshold",
-                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+                    "use_tools": "Używaj narzędzi",
+                    "context_threshold": "Limit kontekstu",
+                    "context_truncate_strategy": "Co zrobić z kontekstem, gdy przekroczony limit"
                 }
             }
         }
