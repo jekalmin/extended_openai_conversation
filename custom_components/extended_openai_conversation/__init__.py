@@ -196,7 +196,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages.append(user_message)
 
         try:
-            query_response = await self.query(user_input, messages, exposed_entities)
+            query_response = await self.query(user_input, messages, exposed_entities, 0)
         except OpenAIError as err:
             _LOGGER.error(err)
             intent_response = intent.IntentResponse(language=user_input.language)
@@ -330,9 +330,9 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         user_input: conversation.ConversationInput,
         messages,
         exposed_entities,
+        n_requests,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
-
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
@@ -343,97 +343,107 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
         functions = list(map(lambda s: s["spec"], self.get_functions()))
         function_call = "auto"
-            
-        n_requests = 0
-        while True:
-            if n_requests == self.entry.options.get(
-                CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-            ):
-                function_call = "none"
+        if n_requests == self.entry.options.get(
+            CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+            DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+        ):
+            function_call = "none"
 
-            if len(functions) == 0:
-                tool_kwargs = {}
-            elif use_tools:
-                tool_kwargs = {
-                    "tools": [{"type": "function", "function": func} for func in functions],
-                    "tool_choice": function_call,
-                }
-            else:
-                tool_kwargs = {
-                    "functions": functions, "function_call": function_call
-                }
-                
-            _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
-            _LOGGER.debug("tool_kwargs: %s", tool_kwargs)
-            response: ChatCompletion = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                top_p=top_p,
-                temperature=temperature,
-                user=user_input.conversation_id,
-                **tool_kwargs,
+        tool_kwargs = {"functions": functions, "function_call": function_call}
+        if use_tools:
+            tool_kwargs = {
+                "tools": [{"type": "function", "function": func} for func in functions],
+                "tool_choice": function_call,
+            }
+
+        if len(functions) == 0:
+            tool_kwargs = {}
+
+        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+
+        response: ChatCompletion = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            temperature=temperature,
+            user=user_input.conversation_id,
+            **tool_kwargs,
+        )
+
+        _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
+
+        if response.usage.total_tokens > context_threshold:
+            await self.truncate_message_history(messages, exposed_entities, user_input)
+
+        choice: Choice = response.choices[0]
+        message = choice.message
+
+        if choice.finish_reason == "function_call":
+            return await self.execute_function_call(
+                user_input, messages, message, exposed_entities, n_requests + 1
             )
-            _LOGGER.debug("Response %s", json.dumps(response.model_dump(exclude_none=True)))
+        if choice.finish_reason == "tool_calls":
+            return await self.execute_tool_calls(
+                user_input, messages, message, exposed_entities, n_requests + 1
+            )
+        if choice.finish_reason == "length":
+            raise TokenLengthExceededError(response.usage.completion_tokens)
 
-            if response.usage.total_tokens > context_threshold:
-                await self.truncate_message_history(messages, exposed_entities, user_input)
-            choice: Choice = response.choices[0]
-            message = choice.message
+        return OpenAIQueryResponse(response=response, message=message)
 
-            if choice.finish_reason == "length":
-                raise TokenLengthExceededError(response.usage.completion_tokens)
-            if choice.finish_reason == "function_call":
-                result = await self.handle_function_call(message.function_call, exposed_entities, user_input)
-                messages.append(
-                    {
-                        "role": "function",
-                        "name": message.function_call.name,
-                        "content": str(result),
-                    }
-                )
-                n_requests += 1
-                continue
-            elif choice.finish_reason == "tool_calls":
-                messages.append(message.model_dump(exclude_none=True))
-                for tool_call in message.tool_calls:
-                    if tool_call.type == "function":
-                        result = await self.handle_function_call(tool_call.function, exposed_entities, user_input)
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "name": tool_call.name,
-                                "content": str(result),
-                            }
-                        )
-                n_requests += 1
-                continue
-            return OpenAIQueryResponse(response=response, message=message)
-
-    async def handle_function_call(
-        self, function_call, exposed_entities, user_input: conversation.ConversationInput
-    ):
-        function_name = function_call.name
+    async def execute_function_call(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        message: ChatCompletionMessage,
+        exposed_entities,
+        n_requests,
+    ) -> OpenAIQueryResponse:
+        function_name = message.function_call.name
         function = next(
             (s for s in self.get_functions() if s["spec"]["name"] == function_name),
             None,
         )
+        if function is not None:
+            return await self.execute_function(
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_requests,
+                function,
+            )
+        raise FunctionNotFound(function_name)
 
-        if function is None:
-            raise FunctionNotFound(function_name)
-
+    async def execute_function(
+        self,
+        user_input: conversation.ConversationInput,
+        messages,
+        message: ChatCompletionMessage,
+        exposed_entities,
+        n_requests,
+        function,
+    ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
+
         try:
-            arguments = json.loads(function_call.arguments)
+            arguments = json.loads(message.function_call.arguments)
         except json.decoder.JSONDecodeError as err:
-            raise ParseArgumentsFailed(function_call.arguments) from err
+            raise ParseArgumentsFailed(message.function_call.arguments) from err
 
         result = await function_executor.execute(
             self.hass, function["function"], arguments, user_input, exposed_entities
         )
-        return result
+
+        messages.append(
+            {
+                "role": "function",
+                "name": message.function_call.name,
+                "content": str(result),
+            }
+        )
+        return await self.query(user_input, messages, exposed_entities, n_requests)
 
     async def execute_tool_calls(
         self,
@@ -441,6 +451,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages,
         message: ChatCompletionMessage,
         exposed_entities,
+        n_requests,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
@@ -467,7 +478,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 )
             else:
                 raise FunctionNotFound(function_name)
-        return await self.query(user_input, messages, exposed_entities)
+        return await self.query(user_input, messages, exposed_entities, n_requests)
 
     async def execute_tool_function(
         self,
