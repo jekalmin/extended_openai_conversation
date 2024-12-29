@@ -6,6 +6,7 @@ import os
 import re
 import sqlite3
 import time
+import aiofiles
 from typing import Any
 from urllib import parse
 
@@ -195,6 +196,17 @@ class NativeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize native function"""
         super().__init__(vol.Schema({vol.Required("name"): str}))
+        self.native_functions = {
+            "execute_service": self.execute_service,
+            "execute_service_single": self.execute_service_single,
+            "add_automation": self.add_automation,
+            "get_history": self.get_history,
+            "get_energy": self.get_energy,
+            "get_statistics": self.get_statistics,
+            "get_user_from_user_id": self.get_user_from_user_id,
+            "write_to_file": self.write_to_file,
+            "read_from_file": self.read_from_file
+        }
 
     async def execute(
         self,
@@ -205,36 +217,15 @@ class NativeFunctionExecutor(FunctionExecutor):
         exposed_entities,
     ):
         name = function["name"]
-        if name == "execute_service":
-            return await self.execute_service(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "execute_service_single":
-            return await self.execute_service_single(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "add_automation":
-            return await self.add_automation(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "get_history":
-            return await self.get_history(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "get_energy":
-            return await self.get_energy(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "get_statistics":
-            return await self.get_statistics(
-                hass, function, arguments, user_input, exposed_entities
-            )
-        if name == "get_user_from_user_id":
-            return await self.get_user_from_user_id(
-                hass, function, arguments, user_input, exposed_entities
-            )
 
-        raise NativeNotFound(name)
+        native_function = self.native_functions.get(name)
+        if not native_function:
+            raise NativeNotFound(name)
+
+        result = await native_function(
+            hass, function, arguments, user_input, exposed_entities
+        )
+        return result
 
     async def execute_service_single(
         self,
@@ -416,6 +407,59 @@ class NativeFunctionExecutor(FunctionExecutor):
             arguments.get("types", {"change"}),
         )
 
+    async def write_to_file(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        """Write content to a file asynchronously.
+        
+        Args:
+            arguments: Dictionary containing:
+                filename: Path to the file
+                content: Content to write
+                open_mode: Optional file mode ('w', 'a', 'w+', 'a+'). Defaults to 'w'
+        """
+        filename = arguments["filename"]
+        content = arguments["content"]
+        open_mode = arguments.get("open_mode", "w")
+        
+        # Validate file mode for safety
+        allowed_modes = {"w", "a", "w+", "a+"}
+        if open_mode not in allowed_modes:
+            raise ValueError(f"Invalid open mode '{open_mode}'. Allowed modes are: {', '.join(allowed_modes)}")
+            
+        try:
+            full_path = os.path.abspath(filename)
+            _LOGGER.info("Writing to file: %s, open_mode: %s, content: %s", full_path, open_mode, content)
+            async with aiofiles.open(full_path, open_mode) as f:
+                await f.write(content)
+            return "Success"
+        except (IOError, OSError) as e:
+            error_msg = f"Failed to write to file {full_path}: {str(e)}"
+            _LOGGER.error(error_msg)
+            raise HomeAssistantError(error_msg) from e
+
+    async def read_from_file(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        user_input: conversation.ConversationInput,
+        exposed_entities,
+    ):
+        """Read content from a file asynchronously."""
+        filename = arguments["filename"]
+        full_path = os.path.abspath(filename)
+        _LOGGER.info("Reading from file: %s", full_path)
+        async with aiofiles.open(full_path, "r") as f:
+            content = await f.read()
+        _LOGGER.info("File content: %s", content)
+        return content
+
     def as_utc(self, value: str, default_value, parse_error_message: str):
         if value is None:
             return default_value
@@ -430,8 +474,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         if isinstance(state, State):
             return state.as_dict()
         return state
-
-
+    
 class ScriptFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize script function"""
@@ -742,7 +785,6 @@ class SqliteFunctionExecutor(FunctionExecutor):
             for row in rows:
                 result.append({name: val for name, val in zip(names, row)})
             return result
-
 
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "native": NativeFunctionExecutor(),
