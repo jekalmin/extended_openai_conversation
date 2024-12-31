@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
+import ast
 import logging
 import os
 import re
@@ -205,7 +206,8 @@ class NativeFunctionExecutor(FunctionExecutor):
             "get_statistics": self.get_statistics,
             "get_user_from_user_id": self.get_user_from_user_id,
             "write_to_file": self.write_to_file,
-            "read_from_file": self.read_from_file
+            "read_from_file": self.read_from_file,
+            "calculate": self.calculate
         }
 
     async def execute(
@@ -474,7 +476,38 @@ class NativeFunctionExecutor(FunctionExecutor):
         if isinstance(state, State):
             return state.as_dict()
         return state
-    
+
+    def calculate(self, hass: HomeAssistant, function, arguments, user_input: conversation.ConversationInput, exposed_entities):
+        expression = function["expression"]
+        try:
+            if not self.is_math_expr(expression):
+                raise HomeAssistantError("Expression is not a valid mathematical expression.")
+            result = eval(expression)
+            return result
+        except Exception as e:
+            raise HomeAssistantError(f"Error evaluating math expression: {str(e)}")
+
+    def is_math_expr(self, expr):
+        """
+        Determines if a given Python expression is a mathematical expression.
+
+        Args:
+            expr (str): The input expression as a string.
+
+        Returns:
+            bool: True if the expression is mathematical, False otherwise.
+        """
+        allowed_node_types = (
+            ast.Expression, ast.BinOp, ast.UnaryOp, ast.Module, ast.Constant,
+            ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.USub 
+            )
+
+        try:
+            tree = ast.parse(expr, mode='eval')
+            return all(isinstance(x, allowed_node_types) for x in ast.walk(tree))
+        except Exception: 
+            return False
+
 class ScriptFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize script function"""
