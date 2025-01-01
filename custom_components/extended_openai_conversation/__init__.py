@@ -378,11 +378,15 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         choice: Choice = response.choices[0]
         message = choice.message
 
-        if choice.finish_reason == "function_call":
+        if choice.finish_reason == "function_call" or (
+            choice.finish_reason == "stop" and choice.message.function_call is not None
+        ):
             return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        if choice.finish_reason == "tool_calls":
+        if choice.finish_reason == "tool_calls" or (
+            choice.finish_reason == "stop" and choice.message.tool_calls is not None
+        ):
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
