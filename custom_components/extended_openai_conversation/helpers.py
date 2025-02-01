@@ -37,7 +37,7 @@ from homeassistant.const import (
     CONF_TIMEOUT,
     CONF_VALUE_TEMPLATE,
     CONF_VERIFY_SSL,
-    SERVICE_RELOAD
+    SERVICE_RELOAD,
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
@@ -51,7 +51,7 @@ from .const import (
     CONF_PAYLOAD_TEMPLATE, 
     DOMAIN, 
     EVENT_AUTOMATION_REGISTERED,
-    DATA_FOLDER
+    DATA_FOLDER,
 )
 from .exceptions import (
     CallServiceError,
