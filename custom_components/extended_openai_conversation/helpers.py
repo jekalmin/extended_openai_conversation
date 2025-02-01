@@ -37,7 +37,7 @@ from homeassistant.const import (
     CONF_TIMEOUT,
     CONF_VALUE_TEMPLATE,
     CONF_VERIFY_SSL,
-    SERVICE_RELOAD,
+    SERVICE_RELOAD
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
@@ -47,7 +47,12 @@ from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
-from .const import CONF_PAYLOAD_TEMPLATE, DOMAIN, EVENT_AUTOMATION_REGISTERED
+from .const import (
+    CONF_PAYLOAD_TEMPLATE, 
+    DOMAIN, 
+    EVENT_AUTOMATION_REGISTERED,
+    DATA_FOLDER
+)
 from .exceptions import (
     CallServiceError,
     EntityNotExposed,
@@ -435,7 +440,9 @@ class NativeFunctionExecutor(FunctionExecutor):
             raise ValueError(f"Invalid open mode '{open_mode}'. Allowed modes are: {', '.join(allowed_modes)}")
             
         try:
-            full_path = os.path.abspath(filename)
+            os.makedirs(DATA_FOLDER, exist_ok=True)
+            safe_filename = os.path.basename(filename)
+            full_path = os.path.join(DATA_FOLDER, safe_filename)
             _LOGGER.info("Writing to file: %s, open_mode: %s, content: %s", full_path, open_mode, content)
             async with aiofiles.open(full_path, open_mode) as f:
                 await f.write(content)
@@ -455,7 +462,9 @@ class NativeFunctionExecutor(FunctionExecutor):
     ):
         """Read content from a file asynchronously."""
         filename = arguments["filename"]
-        full_path = os.path.abspath(filename)
+        os.makedirs(DATA_FOLDER, exist_ok=True)
+        safe_filename = os.path.basename(filename)
+        full_path = os.path.join(DATA_FOLDER, safe_filename)
         _LOGGER.info("Reading from file: %s", full_path)
         async with aiofiles.open(full_path, "r") as f:
             content = await f.read()
@@ -477,8 +486,8 @@ class NativeFunctionExecutor(FunctionExecutor):
             return state.as_dict()
         return state
 
-    def calculate(self, hass: HomeAssistant, function, arguments, user_input: conversation.ConversationInput, exposed_entities):
-        expression = function["expression"]
+    async def calculate(self, hass: HomeAssistant, function, arguments, user_input: conversation.ConversationInput, exposed_entities):
+        expression = arguments["expression"]
         try:
             if not self.is_math_expr(expression):
                 raise HomeAssistantError("Expression is not a valid mathematical expression.")
