@@ -448,7 +448,7 @@ class NativeFunctionExecutor(FunctionExecutor):
                 await f.write(content)
             return "Success"
         except (IOError, OSError) as e:
-            error_msg = f"Failed to write to file {full_path}: {str(e)}"
+            error_msg = f"Error encountered while writing to file {full_path}: {str(e)}"
             _LOGGER.error(error_msg)
             raise HomeAssistantError(error_msg) from e
 
@@ -461,13 +461,22 @@ class NativeFunctionExecutor(FunctionExecutor):
         exposed_entities,
     ):
         """Read content from a file asynchronously."""
+
         filename = arguments["filename"]
-        os.makedirs(DATA_FOLDER, exist_ok=True)
-        safe_filename = os.path.basename(filename)
-        full_path = os.path.join(DATA_FOLDER, safe_filename)
-        _LOGGER.info("Reading from file: %s", full_path)
-        async with aiofiles.open(full_path, "r") as f:
-            content = await f.read()
+        try:
+            os.makedirs(DATA_FOLDER, exist_ok=True)
+            safe_filename = os.path.basename(filename)
+            full_path = os.path.join(DATA_FOLDER, safe_filename)
+            _LOGGER.info("Reading from file: %s", full_path)
+            async with aiofiles.open(full_path, "r") as f:
+                content = await f.read()
+        except FileNotFoundError:
+            _LOGGER.warning("File not found: %s. Returning empty string.", full_path)
+            content = ""
+        except (IOError, OSError) as e:
+            error_msg = f"Error encountered while reading from file {full_path}: {str(e)}"
+            _LOGGER.error(error_msg)
+            raise HomeAssistantError(error_msg) from e
         _LOGGER.info("File content: %s", content)
         return content
 
