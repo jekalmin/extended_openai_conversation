@@ -30,40 +30,40 @@
                     "max_function_calls_per_conversation": "Maksymalna ilość wywołań funkcji na rozmowę",
                     "functions": "Funkcje",
                     "attach_username": "Dodaj nazwę użytkownika do wiadomości",
-                    "use_tools": "Use Tools",
-                    "context_threshold": "Context Threshold",
-                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+                    "use_tools": "Używaj narzędzi",
+                    "context_threshold": "Próg kontekstu",
+                    "context_truncate_strategy": "Strategia skracania kontekstu po przekroczeniu progu"
                 }
             }
         }
     },
     "services": {
         "query_image": {
-            "name": "Query image",
-            "description": "Take in images and answer questions about them",
+            "name": "Zapytanie o obraz",
+            "description": "Analizuje obrazy i odpowiada na pytania dotyczące ich zawartości",
             "fields": {
                 "config_entry": {
-                    "name": "Config Entry",
-                    "description": "The config entry to use for this service"
+                    "name": "Skonfigurowana integracja",
+                    "description": "Skonfigurowana integracja używany dla tej usługi"
                 },
                 "model": {
                     "name": "Model",
-                    "description": "The model",
+                    "description": "Model",
                     "example": "gpt-4-vision-preview"
                 },
                 "prompt": {
                     "name": "Prompt",
-                    "description": "The text to ask about image",
-                    "example": "What’s in this image?"
+                    "description": "Tekst pytania dotyczącego obrazu",
+                    "example": "Co znajduje się na tym obrazie?"
                 },
                 "images": {
-                    "name": "Images",
-                    "description": "A list of images that would be asked",
+                    "name": "Obrazy",
+                    "description": "Lista obrazów do analizy",
                     "example": "{\"url\": \"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg\"}"
                 },
                 "max_tokens": {
-                    "name": "Max Tokens",
-                    "description": "The maximum tokens",
+                    "name": "Maksymalna liczba tokenów",
+                    "description": "Maksymalna liczba tokenów",
                     "example": "300"
                 }
             }
