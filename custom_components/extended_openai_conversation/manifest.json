@@ -1,8 +1,8 @@
 {
-  "domain": "extended_openai_conversation",
-  "name": "Extended OpenAI Conversation",
+  "domain": "nothink_openai",
+  "name": "NoThink OpenAI Conversation",
   "codeowners": [
-    "@jekalmin"
+    "@k0walski8"
   ],
   "config_flow": true,
   "dependencies": [
