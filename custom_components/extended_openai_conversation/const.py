@@ -8,7 +8,8 @@ DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
 CONF_API_VERSION = "api_version"
 CONF_SKIP_AUTHENTICATION = "skip_authentication"
 DEFAULT_SKIP_AUTHENTICATION = False
-
+CONF_ENABLE_NEW_PATH = "enable_new_path"
+DEFAULT_ENABLE_NEW_PATH = False
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
 EVENT_CONVERSATION_FINISHED = "extended_openai_conversation.conversation.finished"
 

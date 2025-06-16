@@ -41,6 +41,7 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_USE_TOOLS,
+    CONF_ENABLE_NEW_PATH,
     CONTEXT_TRUNCATE_STRATEGIES,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
@@ -56,6 +57,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
+    DEFAULT_ENABLE_NEW_PATH,
     DOMAIN,
 )
 from .helpers import validate_authentication
@@ -71,6 +73,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_ORGANIZATION): str,
         vol.Optional(
             CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
+        ): bool,
+        vol.Optional(
+            CONF_ENABLE_NEW_PATH, default=DEFAULT_ENABLE_NEW_PATH
         ): bool,
     }
 )
