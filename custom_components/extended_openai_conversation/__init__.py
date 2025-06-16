@@ -51,7 +51,6 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_USE_TOOLS,
-    CONF_ENABLE_NEW_PATH,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
@@ -139,16 +138,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
-        enable_new_path = entry.options.get(CONF_ENABLE_NEW_PATH, DEFAULT_ENABLE_NEW_PATH)
-        
-        if enable_new_path:
-            self.client = OpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                base_url=base_url,
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
-        elif is_azure(base_url):
+ 
+        if is_azure(base_url):
             self.client = AsyncAzureOpenAI(
                 api_key=entry.data[CONF_API_KEY],
                 azure_endpoint=base_url,
