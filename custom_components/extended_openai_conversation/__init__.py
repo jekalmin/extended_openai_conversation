@@ -64,6 +64,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
+    DEFAULT_ENABLE_NEW_PATH,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
 )
@@ -139,7 +140,15 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
         enable_new_path = entry.options.get(CONF_ENABLE_NEW_PATH, DEFAULT_ENABLE_NEW_PATH)
-        if is_azure(base_url):
+        
+        if enable_new_path:
+            self.client = OpenAI(
+                api_key=entry.data[CONF_API_KEY],
+                base_url=base_url,
+                organization=entry.data.get(CONF_ORGANIZATION),
+                http_client=get_async_client(hass),
+            )
+        elif is_azure(base_url):
             self.client = AsyncAzureOpenAI(
                 api_key=entry.data[CONF_API_KEY],
                 azure_endpoint=base_url,
@@ -155,13 +164,6 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 http_client=get_async_client(hass),
             )
 
-        if enable_new_path:
-            self.client = OpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                base_url=base_url,
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
         # Cache current platform data which gets added to each request (caching done by library)
         _ = hass.async_add_executor_job(self.client.platform_headers)
 
