@@ -172,8 +172,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             conversation_id = user_input.conversation_id
             messages = self.history[conversation_id]
         else:
-            conversation_id = ulid.ulid()
-            user_input.conversation_id = conversation_id
+            # conversation_id = ulid.ulid()
+            # use the default conversation id  and load messages to maintain history during voice conversations
+            default_conversation_id = "V2JY2JWR4EY5A40WRPKHRD48V2"
+            user_input.conversation_id = default_conversation_id
+            messages = self.history[default_conversation_id]
             try:
                 system_message = self._generate_system_message(
                     exposed_entities, user_input
@@ -188,7 +191,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 return conversation.ConversationResult(
                     response=intent_response, conversation_id=conversation_id
                 )
-            messages = [system_message]
+            messages.append(system_message) 
         user_message = {"role": "user", "content": user_input.text}
         if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
             user = user_input.context.user_id
