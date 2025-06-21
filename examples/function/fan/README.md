@@ -17,6 +17,10 @@ This function is used to set a preset mode on a fan entity. Within this example 
         preset_mode:
           type: string
           description: preset mode you want to set
+          enum:
+            - off
+            - low
+            - high
       required:
       - entity_id
       - preset_mode
