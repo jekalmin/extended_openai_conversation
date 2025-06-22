@@ -51,7 +51,6 @@ from .const import (
     CONF_PAYLOAD_TEMPLATE, 
     DOMAIN, 
     EVENT_AUTOMATION_REGISTERED,
-    DATA_FOLDER,
 )
 from .exceptions import (
     CallServiceError,
@@ -63,6 +62,11 @@ from .exceptions import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def get_data_folder(hass: HomeAssistant) -> str:
+    """Get the data folder path for the extended_openai_conversation component."""
+    return os.path.join(hass.config.config_dir, "extended_openai_conversation")
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net)"
@@ -440,9 +444,9 @@ class NativeFunctionExecutor(FunctionExecutor):
             raise ValueError(f"Invalid open mode '{open_mode}'. Allowed modes are: {', '.join(allowed_modes)}")
             
         try:
-            os.makedirs(DATA_FOLDER, exist_ok=True)
+            os.makedirs(get_data_folder(hass), exist_ok=True)
             safe_filename = os.path.basename(filename)
-            full_path = os.path.join(DATA_FOLDER, safe_filename)
+            full_path = os.path.join(get_data_folder(hass), safe_filename)
             _LOGGER.info("Writing to file: %s, open_mode: %s, content: %s", full_path, open_mode, content)
             async with aiofiles.open(full_path, open_mode) as f:
                 await f.write(content)
@@ -464,9 +468,9 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         filename = arguments["filename"]
         try:
-            os.makedirs(DATA_FOLDER, exist_ok=True)
+            os.makedirs(get_data_folder(hass), exist_ok=True)
             safe_filename = os.path.basename(filename)
-            full_path = os.path.join(DATA_FOLDER, safe_filename)
+            full_path = os.path.join(get_data_folder(hass), safe_filename)
             _LOGGER.info("Reading from file: %s", full_path)
             async with aiofiles.open(full_path, "r") as f:
                 content = await f.read()
