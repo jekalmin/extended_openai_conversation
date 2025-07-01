@@ -24,10 +24,10 @@ Needs Google API Key
     type: rest
     resource_template: "https://www.googleapis.com/customsearch/v1?key=[GOOGLE_API_KEY]&cx=[GOOGLE_PROGRAMMING_SEARCH_ENGINE]:omuauf_lfve&q={{ query }}&num=3"
     value_template: >-
-      {% if value_json.items %}
+      {% if value_json["items"] %}
       ```csv
       title,link
-      {% for item in value_json.items %}
+      {% for item in value_json["items"] %}
       "{{ item.title | replace(',', ' ') }}","{{ item.link }}"
       {% endfor %}
       ```
