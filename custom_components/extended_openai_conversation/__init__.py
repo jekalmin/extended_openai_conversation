@@ -378,15 +378,18 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         choice: Choice = response.choices[0]
         message = choice.message
 
-        if choice.finish_reason == "function_call":
-            return await self.execute_function_call(
-                user_input, messages, message, exposed_entities, n_requests + 1
-            )
-        if choice.finish_reason == "tool_calls":
+        if choice.finish_reason == "tool_calls" and message.tool_calls:
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        if choice.finish_reason == "length":
+        elif choice.finish_reason == "tool_calls" and not message.tool_calls:
+            _LOGGER.warning("LocalAI returned 'tool_calls' reason but no tool calls were found. Falling back to treating as a standard message.")
+            return OpenAIQueryResponse(response=response, message=message)
+        elif choice.finish_reason == "function_call":
+            return await self.execute_function_call(
+                user_input, messages, message, exposed_entities, n_requests + 1
+            )
+        elif choice.finish_reason == "length":
             raise TokenLengthExceededError(response.usage.completion_tokens)
 
         return OpenAIQueryResponse(response=response, message=message)
