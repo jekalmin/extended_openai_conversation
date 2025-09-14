@@ -372,7 +372,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
 
-        if response.usage.total_tokens > context_threshold:
+        if response.usage and response.usage.total_tokens > context_threshold:
             await self.truncate_message_history(messages, exposed_entities, user_input)
 
         choice: Choice = response.choices[0]
