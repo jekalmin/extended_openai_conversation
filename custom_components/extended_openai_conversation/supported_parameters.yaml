@@ -1,0 +1,61 @@
+version: 1
+
+defaults:
+  parameters:
+    max_tokens:
+      supported: true
+      default: 150
+    max_completion_tokens:
+      supported: false
+      default: 150
+    top_p:
+      supported: true
+      default: 1.0
+    temperature:
+      supported: true
+      default: 0.5
+
+models:
+  - match: gpt-5*
+    parameters:
+      temperature:
+        supported: false
+      top_p:
+        supported: false
+      max_tokens:
+        supported: false
+      max_completion_tokens:
+        supported: true
+
+  - match: gpt-5-2025-08-07
+    parameters:
+      temperature:
+        supported: false
+      top_p:
+        supported: false
+      max_tokens:
+        supported: false
+      max_completion_tokens:
+        supported: true
+
+  - match: gpt-4*
+    parameters:
+      top_p:
+        supported: true
+      temperature:
+        supported: true
+
+  - match: gpt-4o*
+    parameters:
+      top_p:
+        supported: true
+      temperature:
+        supported: true
+
+  - match: gpt-3.5*
+    parameters:
+      top_p:
+        supported: true
+      temperature:
+        supported: true
+

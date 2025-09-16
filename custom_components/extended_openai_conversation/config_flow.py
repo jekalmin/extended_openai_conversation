@@ -58,7 +58,7 @@ from .const import (
     DEFAULT_USE_TOOLS,
     DOMAIN,
 )
-from .helpers import validate_authentication
+from .helpers import validate_authentication, is_parameter_supported
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -188,7 +188,9 @@ class OptionsFlow(config_entries.OptionsFlow):
         if not options:
             options = DEFAULT_OPTIONS
 
-        return {
+        model = options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+
+        schema: dict = {
             vol.Optional(
                 CONF_PROMPT,
                 description={"suggested_value": options[CONF_PROMPT]},
@@ -207,56 +209,67 @@ class OptionsFlow(config_entries.OptionsFlow):
                 description={"suggested_value": options[CONF_MAX_TOKENS]},
                 default=DEFAULT_MAX_TOKENS,
             ): int,
-            vol.Optional(
+        }
+
+        if is_parameter_supported(model, CONF_TOP_P):
+            schema[vol.Optional(
                 CONF_TOP_P,
                 description={"suggested_value": options[CONF_TOP_P]},
                 default=DEFAULT_TOP_P,
-            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
-            vol.Optional(
+            )] = NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05))
+
+        if is_parameter_supported(model, CONF_TEMPERATURE):
+            schema[vol.Optional(
                 CONF_TEMPERATURE,
                 description={"suggested_value": options[CONF_TEMPERATURE]},
                 default=DEFAULT_TEMPERATURE,
-            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
-            vol.Optional(
-                CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                description={
-                    "suggested_value": options[CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION]
-                },
-                default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-            ): int,
-            vol.Optional(
-                CONF_FUNCTIONS,
-                description={"suggested_value": options.get(CONF_FUNCTIONS)},
-                default=DEFAULT_CONF_FUNCTIONS_STR,
-            ): TemplateSelector(),
-            vol.Optional(
-                CONF_ATTACH_USERNAME,
-                description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
-                default=DEFAULT_ATTACH_USERNAME,
-            ): BooleanSelector(),
-            vol.Optional(
-                CONF_USE_TOOLS,
-                description={"suggested_value": options.get(CONF_USE_TOOLS)},
-                default=DEFAULT_USE_TOOLS,
-            ): BooleanSelector(),
-            vol.Optional(
-                CONF_CONTEXT_THRESHOLD,
-                description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
-                default=DEFAULT_CONTEXT_THRESHOLD,
-            ): int,
-            vol.Optional(
-                CONF_CONTEXT_TRUNCATE_STRATEGY,
-                description={
-                    "suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)
-                },
-                default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[
-                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
-                        for strategy in CONTEXT_TRUNCATE_STRATEGIES
-                    ],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-        }
+            )] = NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05))
+
+        schema.update(
+            {
+                vol.Optional(
+                    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                    description={
+                        "suggested_value": options[CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION]
+                    },
+                    default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                ): int,
+                vol.Optional(
+                    CONF_FUNCTIONS,
+                    description={"suggested_value": options.get(CONF_FUNCTIONS)},
+                    default=DEFAULT_CONF_FUNCTIONS_STR,
+                ): TemplateSelector(),
+                vol.Optional(
+                    CONF_ATTACH_USERNAME,
+                    description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
+                    default=DEFAULT_ATTACH_USERNAME,
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_USE_TOOLS,
+                    description={"suggested_value": options.get(CONF_USE_TOOLS)},
+                    default=DEFAULT_USE_TOOLS,
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_CONTEXT_THRESHOLD,
+                    description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
+                    default=DEFAULT_CONTEXT_THRESHOLD,
+                ): int,
+                vol.Optional(
+                    CONF_CONTEXT_TRUNCATE_STRATEGY,
+                    description={
+                        "suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)
+                    },
+                    default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=strategy["key"], label=strategy["label"])
+                            for strategy in CONTEXT_TRUNCATE_STRATEGIES
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+
+        return schema
