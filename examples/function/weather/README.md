@@ -26,3 +26,34 @@ Expose `weather.xxxxx` entity
     type: template
     value_template: "{{states[entity_id]}}"
 ```
+
+Or if you want to get forecasts (tested with [Met.no](https://www.home-assistant.io/integrations/met) and [Météo France](https://www.home-assistant.io/integrations/meteo_france)):
+
+### get_weather_forecasts
+```yaml
+- spec:
+    name: get_weather_forecasts
+    description: Get hourly and daily weather forecasts
+    parameters:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        type:
+          type: string
+          enum: ["daily", "hourly"]
+      required:
+      - entity_id
+      - type
+  function:
+    type: script
+    sequence:
+      - service: weather.get_forecasts
+        data:
+          type: "{{ type }}"
+        target:
+          entity_id: "{{ entity_id }}"
+        response_variable: forecast_data
+      - stop: ""
+        response_variable: forecast_data
+```
