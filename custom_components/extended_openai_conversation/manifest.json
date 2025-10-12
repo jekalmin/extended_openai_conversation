@@ -13,12 +13,12 @@
     "rest",
     "scrape"
   ],
-  "documentation": "https://github.com/jekalmin/extended_openai_conversation",
+  "documentation": "https://github.com/Da3dalusCode/extended_openai_conversation",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/jekalmin/extended_openai_conversation/issues",
+  "issue_tracker": "https://github.com/Da3dalusCode/extended_openai_conversation/issues",
   "requirements": [
     "openai>=2.3.0"
   ],
-  "version": "1.0.5"
+  "version": "1.1.0"
 }
