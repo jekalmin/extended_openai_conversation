@@ -31,8 +31,35 @@
                     "functions": "Functions",
                     "attach_username": "Attach Username to Message",
                     "use_tools": "Use Tools",
+                    "use_responses_api": "Use Responses API",
+                    "model_strategy": "Model strategy",
+                    "reasoning_effort": "Reasoning effort",
+                    "max_completion_tokens": "Max completion tokens",
                     "context_threshold": "Context Threshold",
-                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+                    "enable_streaming": "Enable streaming",
+                    "stream_min_chars": "Streaming minimum characters",
+                    "speak_confirmation_first": "Speak confirmation first",
+                    "proactivity_enabled": "Enable proactive memory search",
+                    "proactivity_k": "Proactive results (k)",
+                    "proactivity_min_score": "Proactive minimum score",
+                    "budget_profile": "Profile digest token budget",
+                    "budget_scratchpad": "Scratchpad token budget",
+                    "budget_retrieved": "Retrieved memory token budget",
+                    "memory_base_url": "Memory service base URL",
+          "memory_api_key": "Memory service API key",
+          "memory_default_namespace": "Default memory namespace",
+          "memory_write_path": "Memory service write path",
+          "memory_search_path": "Memory service search path",
+          "router_force_tools": "Force router tool choice",
+                    "router_write_regex": "Router pattern: write",
+                    "router_search_regex": "Router pattern: search",
+                    "dry_run": "Dry run (log only)"
+                },
+                "data_description": {
+                    "speak_confirmation_first": {
+                        "help": "Speak a 1-sentence ack before the full streamed answer when saving memory."
+                    }
                 }
             }
         }

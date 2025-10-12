@@ -29,17 +29,39 @@ from .const import (
     CONF_API_VERSION,
     CONF_ATTACH_USERNAME,
     CONF_BASE_URL,
+    CONF_BUDGET_PROFILE,
+    CONF_BUDGET_RETRIEVED,
+    CONF_BUDGET_SCRATCHPAD,
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_DRY_RUN,
+    CONF_ENABLE_STREAMING,
     CONF_FUNCTIONS,
+    CONF_MAX_COMPLETION_TOKENS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
+    CONF_MODEL_STRATEGY,
+    CONF_MEMORY_API_KEY,
+    CONF_MEMORY_BASE_URL,
+    CONF_MEMORY_DEFAULT_NAMESPACE,
+    CONF_MEMORY_WRITE_PATH,
+    CONF_MEMORY_SEARCH_PATH,
     CONF_ORGANIZATION,
+    CONF_PROACTIVITY_ENABLED,
+    CONF_PROACTIVITY_K,
+    CONF_PROACTIVITY_MIN_SCORE,
     CONF_PROMPT,
+    CONF_REASONING_EFFORT,
+    CONF_ROUTER_FORCE_TOOLS,
+    CONF_ROUTER_SEARCH_REGEX,
+    CONF_ROUTER_WRITE_REGEX,
     CONF_SKIP_AUTHENTICATION,
+    CONF_SPEAK_CONFIRMATION_FIRST,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_STREAM_MIN_CHARS,
+    CONF_USE_RESPONSES_API,
     CONF_USE_TOOLS,
     CONTEXT_TRUNCATE_STRATEGIES,
     DEFAULT_ATTACH_USERNAME,
@@ -48,15 +70,35 @@ from .const import (
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_ENABLE_STREAMING,
+    DEFAULT_MODEL_STRATEGY,
+    DEFAULT_MEMORY_DEFAULT_NAMESPACE,
+    DEFAULT_MEMORY_WRITE_PATH,
+    DEFAULT_MEMORY_SEARCH_PATH,
+    DEFAULT_PROACTIVITY_ENABLED,
+    DEFAULT_PROACTIVITY_K,
+    DEFAULT_PROACTIVITY_MIN_SCORE,
+    DEFAULT_ROUTER_FORCE_TOOLS,
+    DEFAULT_ROUTER_SEARCH_REGEX,
+    DEFAULT_ROUTER_WRITE_REGEX,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_BUDGET_PROFILE,
+    DEFAULT_BUDGET_RETRIEVED,
+    DEFAULT_BUDGET_SCRATCHPAD,
+    DEFAULT_SPEAK_CONFIRMATION_FIRST,
+    DEFAULT_STREAM_MIN_CHARS,
     DEFAULT_NAME,
     DEFAULT_PROMPT,
+    DEFAULT_REASONING_EFFORT,
     DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
+    DEFAULT_USE_RESPONSES_API,
     DEFAULT_USE_TOOLS,
+    MODEL_STRATEGY_OPTIONS,
     DOMAIN,
+    REASONING_EFFORT_OPTIONS,
 )
 from .helpers import validate_authentication
 
@@ -77,6 +119,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 DEFAULT_CONF_FUNCTIONS_STR = yaml.dump(DEFAULT_CONF_FUNCTIONS, sort_keys=False)
 
+MODEL_STRATEGY_LABELS = {
+    MODEL_STRATEGY_AUTO: "Auto (prefer Responses when supported)",
+    MODEL_STRATEGY_FORCE_CHAT: "Force Chat Completions",
+    MODEL_STRATEGY_FORCE_RESPONSES: "Force Responses",
+}
+
 DEFAULT_OPTIONS = types.MappingProxyType(
     {
         CONF_PROMPT: DEFAULT_PROMPT,
@@ -88,8 +136,30 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
         CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
         CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
+        CONF_USE_RESPONSES_API: DEFAULT_USE_RESPONSES_API,
+        CONF_MODEL_STRATEGY: DEFAULT_MODEL_STRATEGY,
+        CONF_REASONING_EFFORT: DEFAULT_REASONING_EFFORT,
+        CONF_MAX_COMPLETION_TOKENS: None,
         CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
         CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+        CONF_ENABLE_STREAMING: DEFAULT_ENABLE_STREAMING,
+        CONF_STREAM_MIN_CHARS: DEFAULT_STREAM_MIN_CHARS,
+        CONF_SPEAK_CONFIRMATION_FIRST: DEFAULT_SPEAK_CONFIRMATION_FIRST,
+        CONF_PROACTIVITY_ENABLED: DEFAULT_PROACTIVITY_ENABLED,
+        CONF_PROACTIVITY_K: DEFAULT_PROACTIVITY_K,
+        CONF_PROACTIVITY_MIN_SCORE: DEFAULT_PROACTIVITY_MIN_SCORE,
+        CONF_BUDGET_PROFILE: DEFAULT_BUDGET_PROFILE,
+        CONF_BUDGET_SCRATCHPAD: DEFAULT_BUDGET_SCRATCHPAD,
+        CONF_BUDGET_RETRIEVED: DEFAULT_BUDGET_RETRIEVED,
+        CONF_MEMORY_BASE_URL: "",
+        CONF_MEMORY_API_KEY: "",
+        CONF_MEMORY_DEFAULT_NAMESPACE: DEFAULT_MEMORY_DEFAULT_NAMESPACE,
+        CONF_MEMORY_WRITE_PATH: DEFAULT_MEMORY_WRITE_PATH,
+        CONF_MEMORY_SEARCH_PATH: DEFAULT_MEMORY_SEARCH_PATH,
+        CONF_ROUTER_FORCE_TOOLS: DEFAULT_ROUTER_FORCE_TOOLS,
+        CONF_ROUTER_WRITE_REGEX: DEFAULT_ROUTER_WRITE_REGEX,
+        CONF_ROUTER_SEARCH_REGEX: DEFAULT_ROUTER_SEARCH_REGEX,
+        CONF_DRY_RUN: False,
     }
 )
 
@@ -240,6 +310,58 @@ class OptionsFlow(config_entries.OptionsFlow):
                 default=DEFAULT_USE_TOOLS,
             ): BooleanSelector(),
             vol.Optional(
+                CONF_USE_RESPONSES_API,
+                description={
+                    "suggested_value": options.get(
+                        CONF_USE_RESPONSES_API, DEFAULT_USE_RESPONSES_API
+                    )
+                },
+                default=DEFAULT_USE_RESPONSES_API,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_MODEL_STRATEGY,
+                description={
+                    "suggested_value": options.get(
+                        CONF_MODEL_STRATEGY, DEFAULT_MODEL_STRATEGY
+                    )
+                },
+                default=DEFAULT_MODEL_STRATEGY,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=strategy,
+                            label=MODEL_STRATEGY_LABELS.get(strategy, strategy),
+                        )
+                        for strategy in MODEL_STRATEGY_OPTIONS
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_REASONING_EFFORT,
+                description={
+                    "suggested_value": options.get(
+                        CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
+                    )
+                },
+                default=DEFAULT_REASONING_EFFORT,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=effort, label=effort.title())
+                        for effort in REASONING_EFFORT_OPTIONS
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_MAX_COMPLETION_TOKENS,
+                description={
+                    "suggested_value": options.get(CONF_MAX_COMPLETION_TOKENS)
+                },
+            ): NumberSelector(NumberSelectorConfig(min=1)),
+            vol.Optional(
                 CONF_CONTEXT_THRESHOLD,
                 description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
                 default=DEFAULT_CONTEXT_THRESHOLD,
@@ -259,4 +381,149 @@ class OptionsFlow(config_entries.OptionsFlow):
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional(
+                CONF_ENABLE_STREAMING,
+                description={"suggested_value": options.get(CONF_ENABLE_STREAMING)},
+                default=DEFAULT_ENABLE_STREAMING,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_STREAM_MIN_CHARS,
+                description={
+                    "suggested_value": options.get(
+                        CONF_STREAM_MIN_CHARS, DEFAULT_STREAM_MIN_CHARS
+                    )
+                },
+                default=DEFAULT_STREAM_MIN_CHARS,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=1000, step=10)),
+            vol.Optional(
+                CONF_SPEAK_CONFIRMATION_FIRST,
+                description={
+                    "suggested_value": options.get(
+                        CONF_SPEAK_CONFIRMATION_FIRST,
+                        DEFAULT_SPEAK_CONFIRMATION_FIRST,
+                    )
+                },
+                default=DEFAULT_SPEAK_CONFIRMATION_FIRST,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_PROACTIVITY_ENABLED,
+                description={
+                    "suggested_value": options.get(
+                        CONF_PROACTIVITY_ENABLED, DEFAULT_PROACTIVITY_ENABLED
+                    )
+                },
+                default=DEFAULT_PROACTIVITY_ENABLED,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_PROACTIVITY_K,
+                description={"suggested_value": options.get(CONF_PROACTIVITY_K)},
+                default=DEFAULT_PROACTIVITY_K,
+            ): int,
+            vol.Optional(
+                CONF_PROACTIVITY_MIN_SCORE,
+                description={
+                    "suggested_value": options.get(
+                        CONF_PROACTIVITY_MIN_SCORE, DEFAULT_PROACTIVITY_MIN_SCORE
+                    )
+                },
+                default=DEFAULT_PROACTIVITY_MIN_SCORE,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.01)),
+            vol.Optional(
+                CONF_BUDGET_PROFILE,
+                description={"suggested_value": options.get(CONF_BUDGET_PROFILE)},
+                default=DEFAULT_BUDGET_PROFILE,
+            ): int,
+            vol.Optional(
+                CONF_BUDGET_SCRATCHPAD,
+                description={
+                    "suggested_value": options.get(
+                        CONF_BUDGET_SCRATCHPAD, DEFAULT_BUDGET_SCRATCHPAD
+                    )
+                },
+                default=DEFAULT_BUDGET_SCRATCHPAD,
+            ): int,
+            vol.Optional(
+                CONF_BUDGET_RETRIEVED,
+                description={
+                    "suggested_value": options.get(
+                        CONF_BUDGET_RETRIEVED, DEFAULT_BUDGET_RETRIEVED
+                    )
+                },
+                default=DEFAULT_BUDGET_RETRIEVED,
+            ): int,
+            vol.Optional(
+                CONF_MEMORY_BASE_URL,
+                description={"suggested_value": options.get(CONF_MEMORY_BASE_URL)},
+            ): str,
+            vol.Optional(
+                CONF_MEMORY_API_KEY,
+                description={"suggested_value": options.get(CONF_MEMORY_API_KEY)},
+            ): str,
+            vol.Optional(
+                CONF_MEMORY_DEFAULT_NAMESPACE,
+                description={
+                    "suggested_value": options.get(
+                        CONF_MEMORY_DEFAULT_NAMESPACE, DEFAULT_MEMORY_DEFAULT_NAMESPACE
+                    )
+                },
+                default=DEFAULT_MEMORY_DEFAULT_NAMESPACE,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value="corpus", label="Corpus"),
+                        SelectOptionDict(value="profile", label="Profile"),
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_MEMORY_WRITE_PATH,
+                description={
+                    "suggested_value": options.get(
+                        CONF_MEMORY_WRITE_PATH, DEFAULT_MEMORY_WRITE_PATH
+                    )
+                },
+                default=DEFAULT_MEMORY_WRITE_PATH,
+            ): str,
+            vol.Optional(
+                CONF_MEMORY_SEARCH_PATH,
+                description={
+                    "suggested_value": options.get(
+                        CONF_MEMORY_SEARCH_PATH, DEFAULT_MEMORY_SEARCH_PATH
+                    )
+                },
+                default=DEFAULT_MEMORY_SEARCH_PATH,
+            ): str,
+            vol.Optional(
+                CONF_ROUTER_FORCE_TOOLS,
+                description={
+                    "suggested_value": options.get(
+                        CONF_ROUTER_FORCE_TOOLS, DEFAULT_ROUTER_FORCE_TOOLS
+                    )
+                },
+                default=DEFAULT_ROUTER_FORCE_TOOLS,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_ROUTER_WRITE_REGEX,
+                description={
+                    "suggested_value": options.get(
+                        CONF_ROUTER_WRITE_REGEX, DEFAULT_ROUTER_WRITE_REGEX
+                    )
+                },
+                default=DEFAULT_ROUTER_WRITE_REGEX,
+            ): str,
+            vol.Optional(
+                CONF_ROUTER_SEARCH_REGEX,
+                description={
+                    "suggested_value": options.get(
+                        CONF_ROUTER_SEARCH_REGEX, DEFAULT_ROUTER_SEARCH_REGEX
+                    )
+                },
+                default=DEFAULT_ROUTER_SEARCH_REGEX,
+            ): str,
+            vol.Optional(
+                CONF_DRY_RUN,
+                description={"suggested_value": options.get(CONF_DRY_RUN)},
+                default=False,
+            ): BooleanSelector(),
         }

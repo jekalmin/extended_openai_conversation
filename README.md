@@ -54,16 +54,131 @@ https://github.com/jekalmin/extended_openai_conversation/assets/2917984/64ba656e
 
 ## Configuration
 ### Options
-By clicking a button from Edit Assist, Options can be customized.<br/>
-Options include [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) options and two new options. 
+By clicking **Edit Assist → Options**, you can fine-tune everything from token budgets to routing, streaming, and memory behaviour.<br/>
 
 - `Attach Username`: Pass the active user's name (if applicable) to OpenAI via the message payload. Currently, this only applies to conversations through the UI or REST API.
-
-- `Maximum Function Calls Per Conversation`: limit the number of function calls in a single conversation.
-(Sometimes function is called over and over again, possibly running into infinite loop) 
+- `Maximum Function Calls Per Conversation`: limit the number of function calls in a single conversation (prevents infinite loops when tools misbehave).
 - `Functions`: A list of mappings of function spec to function.
   - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
   - `function`: function that will be called.
+- `Model strategy`: Choose **Auto** (default – prefer Responses when a reasoning model is detected), **Force Chat Completions**, or **Force Responses** per assistant. Auto detection recognizes any model starting with `gpt-5`, any name containing `-thinking`, and the `o3`/`o4` families.
+- `Streaming minimum characters` and `Speak confirmation first`: buffer a short chunk before emitting streamed deltas and optionally speak a “Got it — saved.” acknowledgement before the full answer when `memory.write` is forced in a TTS pipeline.
+- Token budgets for Profile/Scratchpad/Retrieved context slices, Proactivity controls (`k`, minimum score), and Memory service configuration (base URL, API key, default namespace, configurable `/memories/write` + `/memories/search` paths).
+- Router patterns for explicit `remember...` / `what's my...` phrases, plus **Force router tool choice** to keep those calls deterministic.
+- `Dry run (log only)`: short-circuit the OpenAI call while logging the chosen path, token knobs, context slice sizes, and tool choices for troubleshooting.
+
+### Using GPT-5 / Responses API (reasoning)
+
+Extended OpenAI Conversation now supports OpenAI's Responses API so you can unlock GPT-5 Thinking and other reasoning-tier models while keeping the existing Chat Completions path for non-reasoning models. The integration automatically detects reasoning models (any model name starting with `gpt-5`, any name containing `-thinking`, anything starting with `o3`/`o4`, plus `gpt-4.1`) and routes them through the Responses API even if the toggle is off, ensuring `reasoning.effort` is always applied.
+
+> **Tip:** `o3-mini`, `o4-mini`, and future `gpt-5-*` releases are all matched automatically, so you can drop new models in without editing the configuration.
+
+**Enable the Responses API path**
+
+1. Go to **Settings → Voice Assistants → Edit Assist → Options**.
+2. Toggle **Use Responses API** on (optional for GPT-4o/GPT-4o-mini, but recommended when experimenting with GPT-5).
+3. Pick a **Model strategy** if you want to override the default (Auto prefers Responses when the model looks like a reasoning family; Force Chat / Force Responses let you pin the behaviour).
+4. Choose a **Reasoning Effort** (`low`, `medium`, or `high`). The default `low` is ideal for Home Assistant automations because it keeps latency manageable.
+5. (Optional) Set **Max completion tokens** when using reasoning models. The integration maps this to `max_output_tokens` on Responses, `max_completion_tokens` on reasoning-capable Chat models, and keeps `max_tokens` for classic Chat-only models.
+6. Ensure **Use Tools** is enabled so the model can continue to call `execute_service` via native Home Assistant services.
+
+For GPT-4o / GPT-4o mini nothing changes by default—those models stay on the Chat Completions API unless you explicitly toggle the Responses API.
+
+### Streaming (Responses API)
+
+Enable **Enable streaming** in Options to switch the Responses path over to the SDK's streaming interface. Home Assistant still receives the full answer once the stream finishes, but the integration logs first-token latency, total token counts, and buffers deltas safely so you can experiment with low-latency reasoning models without breaking voice pipelines. Tune **Streaming minimum characters** to avoid staccato TTS responses and toggle **Speak confirmation first** to emit a quick “Got it — saved.” acknowledgement before the full streamed answer whenever the router forces `memory.write` in a TTS pipeline.
+
+### Proactivity & Context Composer
+
+The Context Composer now assembles a structured system message with three slices:
+
+- **Profile Digest** (default budget 250 tokens)
+- **Session Scratchpad** (default budget 200 tokens, auto-filled with the last assistant turn)
+- **Retrieved Memory** (default budget 600 tokens of memory.search results)
+
+Use the new **Proactivity** options (`proactivity_enabled`, `proactivity_k`, `proactivity_min_score`) plus the token-budget sliders to tune how much context is injected per turn.
+
+### Memory Service Setup
+
+Two built-in tools, `memory.write` and `memory.search`, are registered on both Chat Completions and Responses calls. Configure **Memory service base URL**, optional **Memory service API key**, and the **Default memory namespace** in Options to point at your FastAPI memory backend. The integration automatically redacts obvious secrets (emails, credit-card numbers) before passing search snippets to the model and logs call durations at DEBUG level.
+
+Fine-tune the HTTP endpoints with **Memory service write path** (default `/memories/write`) and **Memory service search path** (default `/memories/search`) if your FastAPI service exposes different routes.
+
+Snippets returned from the memory service are automatically trimmed to your configured budgets, lowest-score hits fall off first, and obvious secrets (emails, phone numbers, API tokens, IP/MAC addresses, credentialed URLs) are redacted before the model sees them. Durable facts that include words such as “favorite”, “always”, “never”, “default”, or “preference” are automatically tagged with `importance="high"` when `memory.write` is called.
+
+**Memory via Home Assistant rest_command**
+
+GPT-5 Thinking can call Home Assistant services directly through the existing `execute_service` tool, which means you can integrate an external memory service with zero YAML intents:
+
+```yaml
+# configuration.yaml
+rest_command:
+  memory_write:
+    url: http://localhost:8000/memories/write
+    method: POST
+    content_type: application/json
+    payload: '{"content": "{{ content }}", "namespace": "companion"}'
+  memory_ask:
+    url: http://localhost:8000/memories/ask
+    method: POST
+    content_type: application/json
+    payload: '{"query": "{{ query }}", "k": 5}'
+```
+
+The model can write or query by calling the existing native tool:
+
+```json
+{
+  "domain": "rest_command",
+  "service": "memory_write",
+  "service_data": {"content": "my favorite tea is yerba mate"}
+}
+```
+
+```json
+{
+  "domain": "rest_command",
+  "service": "memory_ask",
+  "service_data": {"query": "what is my favorite tea?"}
+}
+```
+
+Suggested prompt template addition (paste into **Prompt Template** inside Options):
+
+```
+If the user says "remember ...", extract the fact and call `execute_service` with `domain="rest_command"`, `service="memory_write"`, and pass the extracted `content`. If the user asks about a preference ("what's my...", "do you remember..."), call `execute_service` with `domain="rest_command"`, `service="memory_ask"`, `query` equal to the user's question. After writes, confirm succinctly; after asks, summarize the results. Prefer local intents for lights/media; otherwise use Home Assistant services via tools.
+```
+
+**Troubleshooting**
+
+- Error `Unsupported parameter max_tokens`: you are still hitting the Chat Completions path—enable **Use Responses API** or switch to a reasoning model.
+- Error about `max_completion_tokens`: update Home Assistant to pick up the latest integration version and ensure you are on `openai>=1.40.0`.
+- No tool calls arriving: verify **Use Tools** is on and that your function schema still exposes `execute_services`.
+
+### Router patterns
+
+A lightweight router forces the model to call `memory.write` for phrases like “remember...” and `memory.search` for “what's my...” style questions. You can override the defaults with the **Router pattern** fields or disable forced routing entirely with **Force router tool choice**.
+
+### Debugging & dry-run
+
+To enable detailed debug logging (including path decisions, streaming timings, context budgets, and tool call counts), add the following to your Home Assistant `configuration.yaml`:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.extended_openai_conversation: debug
+```
+
+Need to test prompts without touching the API or memory service? Toggle **Dry run (log only)** in Options. The integration will log which context slices and tool choices would have been sent and respond with a synthetic assistant message so you can validate routing safely.
+
+**Quick validation**
+
+- Configure a temporary `rest_command` pointing at https://httpbin.org/post and ask GPT-5 Thinking to "remember" a fact—the Responses API path will call `execute_service` and you can inspect the Home Assistant log for the outbound POST.
+
+**Preview release tag**
+
+After upgrading, tag the branch with `v0.1.0-gpt5-preview` (or a later preview tag) so HACS users can install this reasoning-enabled build.
 
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |

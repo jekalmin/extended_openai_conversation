@@ -727,7 +727,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
         template_arguments.update(arguments)
 
         q = Template(query, hass).async_render(template_arguments)
-        _LOGGER.info("Rendered query: %s", q)
+        _LOGGER.debug("Rendered query: %s", q)
 
         with sqlite3.connect(db_url, uri=True) as conn:
             cursor = conn.cursor().execute(q)

@@ -58,7 +58,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                     "content": [{"type": "text", "text": call.data["prompt"]}] + images,
                 }
             ]
-            _LOGGER.info("Prompt for %s: %s", model, messages)
+            _LOGGER.debug("Prompt for %s: %s", model, messages)
 
             response = await AsyncOpenAI(
                 api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"]
@@ -68,7 +68,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 max_tokens=call.data["max_tokens"],
             )
             response_dict = response.model_dump()
-            _LOGGER.info("Response %s", response_dict)
+            _LOGGER.debug("Response %s", response_dict)
         except OpenAIError as err:
             raise HomeAssistantError(f"Error generating image: {err}") from err
 
