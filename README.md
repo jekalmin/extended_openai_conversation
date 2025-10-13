@@ -31,7 +31,9 @@ This integration now exposes an `ai_task` entity alongside the conversation agen
 3. (Optional) Add a selector-based schema to validate and coerce structured output.
 4. Submit the task to receive text or structured JSON data. The response is mirrored back into the conversation history for continuity.
 
-> **Note:** Attachments are not yet supported when submitting AI tasks.
+> **Note:** Attachments are supported for multimodal providers. You can attach up to five images per request (each ≤33 MP and ≤4 MB after base64 encoding).
+
+When you include an attachment (for example, a camera snapshot resolved via the Media selector), the integration converts the file to a base64 `image_url` block in the chat completion request so the configured model can analyze it.
 
 ## Vision and image understanding
 Ask the integration to describe or reason about images by calling the `extended_openai_conversation.query_image` service. The service reuses the API key, base URL, API version, and organization configured on the selected config entry, so any OpenAI-compatible provider with multimodal support (OpenAI, Groq, Azure, LocalAI, etc.) works out of the box.

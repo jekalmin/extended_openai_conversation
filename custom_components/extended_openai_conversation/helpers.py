@@ -1,12 +1,16 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
+import base64
+import io
 import json
 import logging
+import mimetypes
 import os
 import re
 import sqlite3
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from urllib import parse
@@ -58,6 +62,15 @@ from .exceptions import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover - optional dependency
+    Image = None
+
+MAX_IMAGE_PIXELS = 33_177_600
+MAX_BASE64_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_IMAGE_ATTACHMENTS = 5
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net)"
@@ -795,6 +808,83 @@ def create_conversation_input(
     )
 
 
+def _attachments_to_content_parts(attachments) -> list[dict[str, Any]]:
+    """Convert Home Assistant attachments into OpenAI multimodal content parts."""
+    attachment_list = list(attachments or [])
+    if not attachment_list:
+        return []
+
+    if len(attachment_list) > MAX_IMAGE_ATTACHMENTS:
+        raise HomeAssistantError(
+            f"A maximum of {MAX_IMAGE_ATTACHMENTS} image attachments is supported"
+        )
+
+    return [_attachment_to_image_part(attachment) for attachment in attachment_list]
+
+
+def _attachment_to_image_part(attachment: conversation.Attachment) -> dict[str, Any]:
+    """Convert a single attachment to an image content part."""
+    path = getattr(attachment, "path", None)
+    if not path:
+        raise HomeAssistantError("Attachment does not include a local path to read")
+
+    media_id = getattr(attachment, "media_content_id", None) or path
+    attachment_path = Path(path)
+    if not attachment_path.exists():
+        raise HomeAssistantError(f"Attachment `{media_id}` does not exist")
+
+    mime_type = getattr(attachment, "mime_type", None) or mimetypes.guess_type(
+        str(attachment_path)
+    )[0]
+    if not mime_type or not mime_type.startswith("image/"):
+        raise HomeAssistantError(
+            f"Attachment `{media_id}` is not an image; only image attachments are supported"
+        )
+
+    raw_bytes = attachment_path.read_bytes()
+    encoded_bytes = base64.b64encode(raw_bytes)
+    if len(encoded_bytes) > MAX_BASE64_IMAGE_BYTES:
+        raise HomeAssistantError(
+            f"Attachment `{media_id}` exceeds the 4MB base64 size limit"
+        )
+
+    if Image is not None:
+        with Image.open(io.BytesIO(raw_bytes)) as image_obj:
+            width, height = image_obj.size
+            if width * height > MAX_IMAGE_PIXELS:
+                raise HomeAssistantError(
+                    f"Attachment `{media_id}` exceeds the 33 megapixel limit"
+                )
+
+    data_url = f"data:{mime_type};base64,{encoded_bytes.decode('utf-8')}"
+
+    return {
+        "type": "image_url",
+        "image_url": {"url": data_url},
+    }
+
+
+def _user_content_to_message(content: conversation.UserContent) -> dict[str, Any]:
+    """Serialize user content (with optional attachments) into an OpenAI message."""
+    message: dict[str, Any] = {"role": "user"}
+
+    parts: list[dict[str, Any]] = []
+    if content.content:
+        parts.append({"type": "text", "text": content.content})
+
+    if getattr(content, "attachments", None):
+        parts.extend(_attachments_to_content_parts(content.attachments))
+
+    if not parts:
+        message["content"] = ""
+    elif len(parts) == 1 and parts[0].get("type") == "text":
+        message["content"] = parts[0]["text"]
+    else:
+        message["content"] = parts
+
+    return message
+
+
 def chat_log_to_messages(system_message: dict, chat_log: conversation.ChatLog) -> list[dict]:
     """Convert Home Assistant chat log entries into OpenAI chat completion messages."""
     messages: list[dict] = [dict(system_message)]
@@ -805,15 +895,7 @@ def chat_log_to_messages(system_message: dict, chat_log: conversation.ChatLog) -
             continue
 
         if isinstance(content, conversation.UserContent):
-            if content.attachments:
-                raise HomeAssistantError("Attachments are not supported yet for AI tasks")
-
-            messages.append(
-                {
-                    "role": "user",
-                    "content": content.content,
-                }
-            )
+            messages.append(_user_content_to_message(content))
             continue
 
         if isinstance(content, conversation.AssistantContent):

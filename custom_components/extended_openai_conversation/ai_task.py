@@ -49,7 +49,10 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
     """AI Task entity that reuses the Extended OpenAI conversation agent."""
 
     _attr_should_poll = False
-    _attr_supported_features = ai_task.AITaskEntityFeature.GENERATE_DATA
+    _attr_supported_features = (
+        ai_task.AITaskEntityFeature.GENERATE_DATA
+        | ai_task.AITaskEntityFeature.SUPPORT_ATTACHMENTS
+    )
 
     def __init__(self, entry: ConfigEntry, agent: "OpenAIAgent") -> None:
         """Initialize the entity."""
@@ -65,6 +68,7 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
     ) -> ai_task.GenDataTaskResult:
         """Handle a generate data task using the conversation agent."""
         instructions = task.instructions or ""
+        attachments = task.attachments
         user_id = None
         if chat_log.content and isinstance(chat_log.content[-1], conversation.UserContent):
             # Try to reuse the last user's metadata when possible.
@@ -72,11 +76,34 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
             if getattr(last_user, "user_id", None):
                 user_id = last_user.user_id
 
-        if not chat_log.content or not (
-            isinstance(chat_log.content[-1], conversation.UserContent)
-            and chat_log.content[-1].content == instructions
-        ):
-            chat_log.async_add_user_content(conversation.UserContent(content=instructions))
+        last_entry = chat_log.content[-1] if chat_log.content else None
+
+        def _attachments_equal(
+            first: list[conversation.Attachment] | None,
+            second: list[conversation.Attachment] | None,
+        ) -> bool:
+            """Compare two attachment lists."""
+            if not first and not second:
+                return True
+            if not first or not second:
+                return False
+
+            def _serialize(items):
+                return [
+                    (
+                        getattr(item, "media_content_id", None),
+                        getattr(item, "mime_type", None),
+                        getattr(item, "path", None),
+                    )
+                    for item in items
+                ]
+
+            return _serialize(first) == _serialize(second)
+
+        if not isinstance(last_entry, conversation.UserContent) or last_entry.content != instructions or not _attachments_equal(last_entry.attachments, attachments):
+            chat_log.async_add_user_content(
+                conversation.UserContent(content=instructions, attachments=attachments)
+            )
 
         exposed_entities = self._agent.get_exposed_entities()
         synthetic_input = create_conversation_input(

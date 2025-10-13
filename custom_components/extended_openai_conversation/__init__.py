@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from openai._exceptions import AuthenticationError, OpenAIError
 from openai.types.chat.chat_completion import (
@@ -354,7 +354,33 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         if len(functions) == 0:
             tool_kwargs = {}
 
-        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+        def _redact_data_urls(message: dict[str, Any]) -> dict[str, Any]:
+            """Mask inline base64 data before logging."""
+            message_copy = dict(message)
+            content = message_copy.get("content")
+            if isinstance(content, list):
+                redacted_parts = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        redacted_parts.append(part)
+                        continue
+                    if part.get("type") != "image_url":
+                        redacted_parts.append(part)
+                        continue
+                    image_url = dict(part.get("image_url", {}))
+                    url = image_url.get("url")
+                    if isinstance(url, str) and url.startswith("data:"):
+                        image_url["url"] = "<base64 image>"
+                        new_part = dict(part)
+                        new_part["image_url"] = image_url
+                        redacted_parts.append(new_part)
+                    else:
+                        redacted_parts.append(part)
+                message_copy["content"] = redacted_parts
+            return message_copy
+
+        safe_messages = [_redact_data_urls(message) for message in messages]
+        _LOGGER.info("Prompt for %s: %s", model, json.dumps(safe_messages))
 
         request_payload = {
             "model": model,
