@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
+import json
 import logging
 import os
 import re
 import sqlite3
 import time
+from types import SimpleNamespace
 from typing import Any
 from urllib import parse
 
@@ -753,3 +755,84 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "composite": CompositeFunctionExecutor(),
     "sqlite": SqliteFunctionExecutor(),
 }
+
+
+def create_conversation_input(
+    *,
+    text: str,
+    conversation_id: str,
+    language: str | None = None,
+    user_id: str | None = None,
+    device_id: str | None = None,
+):
+    """Create a lightweight conversation input substitute for non-conversation flows."""
+    return SimpleNamespace(
+        text=text,
+        conversation_id=conversation_id,
+        language=language or "en",
+        device_id=device_id,
+        context=SimpleNamespace(user_id=user_id),
+    )
+
+
+def chat_log_to_messages(system_message: dict, chat_log: conversation.ChatLog) -> list[dict]:
+    """Convert Home Assistant chat log entries into OpenAI chat completion messages."""
+    messages: list[dict] = [dict(system_message)]
+
+    for content in chat_log.content:
+        if isinstance(content, conversation.SystemContent):
+            # System prompt is regenerated per request.
+            continue
+
+        if isinstance(content, conversation.UserContent):
+            if content.attachments:
+                raise HomeAssistantError("Attachments are not supported yet for AI tasks")
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": content.content,
+                }
+            )
+            continue
+
+        if isinstance(content, conversation.AssistantContent):
+            assistant_message: dict[str, Any] = {"role": "assistant"}
+            if content.content:
+                assistant_message["content"] = content.content
+
+            if content.tool_calls:
+                tool_calls = []
+                for tool_call in content.tool_calls:
+                    if tool_call.external:
+                        # External calls should already be represented as ToolResultContent entries.
+                        continue
+                    tool_calls.append(
+                        {
+                            "id": tool_call.id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.tool_name,
+                                "arguments": json.dumps(tool_call.tool_args),
+                            },
+                        }
+                    )
+                if tool_calls:
+                    assistant_message.setdefault("content", "")
+                    assistant_message["tool_calls"] = tool_calls
+
+            if assistant_message.get("content") is not None or assistant_message.get("tool_calls"):
+                messages.append(assistant_message)
+            continue
+
+        if isinstance(content, conversation.ToolResultContent):
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": content.tool_call_id,
+                    "name": content.tool_name,
+                    "content": json.dumps(content.tool_result),
+                }
+            )
+
+    return messages

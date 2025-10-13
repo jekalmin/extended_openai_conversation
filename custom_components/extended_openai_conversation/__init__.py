@@ -18,7 +18,7 @@ import yaml
 from homeassistant.components import conversation
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
+from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
@@ -84,6 +84,8 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 # hass.data key for agent.
 DATA_AGENT = "agent"
 
+PLATFORMS = [Platform.AI_TASK]
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up OpenAI Conversation."""
@@ -118,14 +120,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data[DATA_AGENT] = agent
 
     conversation.async_set_agent(hass, entry, agent)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload OpenAI."""
-    hass.data[DOMAIN].pop(entry.entry_id)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     conversation.async_unset_agent(hass, entry)
-    return True
+    if unload_ok and entry.entry_id in hass.data.get(DOMAIN, {}):
+        hass.data[DOMAIN].pop(entry.entry_id)
+    return unload_ok
 
 
 class OpenAIAgent(conversation.AbstractConversationAgent):
@@ -330,6 +335,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages,
         exposed_entities,
         n_requests,
+        response_format: dict | None = None,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
         model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
@@ -360,13 +366,19 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
+        request_payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "top_p": top_p,
+            "temperature": temperature,
+            "user": user_input.conversation_id,
+        }
+        if response_format is not None:
+            request_payload["response_format"] = response_format
+
         response: ChatCompletion = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            user=user_input.conversation_id,
+            **request_payload,
             **tool_kwargs,
         )
 
@@ -380,11 +392,21 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         if choice.finish_reason == "function_call":
             return await self.execute_function_call(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_requests + 1,
+                response_format,
             )
         if choice.finish_reason == "tool_calls":
             return await self.execute_tool_calls(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_requests + 1,
+                response_format,
             )
         if choice.finish_reason == "length":
             raise TokenLengthExceededError(response.usage.completion_tokens)
@@ -398,6 +420,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         function_name = message.function_call.name
         function = next(
@@ -412,6 +435,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 exposed_entities,
                 n_requests,
                 function,
+                response_format,
             )
         raise FunctionNotFound(function_name)
 
@@ -423,6 +447,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
         function,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
@@ -442,7 +467,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 "content": str(result),
             }
         )
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(
+            user_input,
+            messages,
+            exposed_entities,
+            n_requests,
+            response_format=response_format,
+        )
 
     async def execute_tool_calls(
         self,
@@ -451,6 +482,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
@@ -477,7 +509,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 )
             else:
                 raise FunctionNotFound(function_name)
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(
+            user_input,
+            messages,
+            exposed_entities,
+            n_requests,
+            response_format=response_format,
+        )
 
     async def execute_tool_function(
         self,

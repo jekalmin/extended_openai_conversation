@@ -8,12 +8,29 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 - Ability to create automation
 - Ability to get data from external API or web page
 - Ability to retrieve state history of entities
+- AI Task entity for natural-language data generation and structured outputs
 - Option to pass the current user's name to OpenAI via the user message context
 
 ## How it works
 Extended OpenAI Conversation uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/function-calling) to call service of Home Assistant.
 
 Since OpenAI models already know how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/jekalmin/extended_openai_conversation#preparation)
+
+## Model requirements
+- An OpenAI-compatible chat completions endpoint that supports streaming responses and JSON mode.
+- Large-context models (≈200k input / 128k output tokens) are recommended for the best experience.
+- Tested against OpenAI SDK `openai~=1.55.0`.
+
+## AI Task entity
+This integration now exposes an `ai_task` entity alongside the conversation agent. The task entity allows you to send natural-language instructions and (optionally) a Home Assistant selector schema to request structured data.
+
+### Usage
+1. Go to **Settings → Developer Tools → AI Task** and pick the `Extended OpenAI Conversation` task entity.
+2. Provide instructions describing the data you want to generate.
+3. (Optional) Add a selector-based schema to validate and coerce structured output.
+4. Submit the task to receive text or structured JSON data. The response is mirrored back into the conversation history for continuity.
+
+> **Note:** Attachments are not yet supported when submitting AI tasks.
 
 ## Installation
 1. Install via registering as a custom repository of HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`
