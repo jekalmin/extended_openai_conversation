@@ -4,7 +4,7 @@ This is custom component of Home Assistant.
 Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with some new features such as call-service.
 
 ## Release Notes
-- **1.1.2** – Fix config_flow import (MODEL_STRATEGY_AUTO), use public OpenAI exceptions, pin OpenAI 1.x dependency.
+- **1.1.5** – Fix config_flow import (MODEL_STRATEGY_AUTO), use public OpenAI exceptions, pin OpenAI 1.x dependency.
 
 ## Additional Features
 - Ability to call service of Home Assistant
