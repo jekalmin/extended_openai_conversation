@@ -6,7 +6,11 @@ import types
 from types import MappingProxyType
 from typing import Any
 
-from openai._exceptions import APIConnectionError, AuthenticationError
+try:  # pragma: no cover - fallback for older OpenAI SDKs
+    from openai import APIConnectionError, AuthenticationError
+except Exception:  # pragma: no cover - fallback when exceptions move
+    APIConnectionError = Exception
+    AuthenticationError = Exception
 import voluptuous as vol
 import yaml
 
@@ -96,6 +100,7 @@ from .const import (
     DEFAULT_TOP_P,
     DEFAULT_USE_RESPONSES_API,
     DEFAULT_USE_TOOLS,
+    MODEL_STRATEGY_AUTO,
     MODEL_STRATEGY_OPTIONS,
     DOMAIN,
     REASONING_EFFORT_OPTIONS,

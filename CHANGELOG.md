@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2024-06-19
+### Fixed
+- Fix config_flow import (MODEL_STRATEGY_AUTO), use public OpenAI exceptions, pin OpenAI 1.x dependency.
+
 ## [1.1.0] - 2024-05-28
 ### Added
 - GPT-5 "Thinking" and Responses API flow with automatic reasoning detection, token budgeting, and router forcing support.

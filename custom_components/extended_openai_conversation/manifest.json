@@ -18,7 +18,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Da3dalusCode/extended_openai_conversation/issues",
   "requirements": [
-    "openai>=2.3.0"
+    "openai>=1.0.0,<2.0.0"
   ],
-  "version": "1.1.0"
+  "version": "1.1.2"
 }
