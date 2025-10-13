@@ -10,6 +10,7 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 - Ability to retrieve state history of entities
 - AI Task entity for natural-language data generation and structured outputs
 - Option to pass the current user's name to OpenAI via the user message context
+- Image question answering through the `extended_openai_conversation.query_image` service, honoring any OpenAI-compatible base URL (Groq, Azure, etc.)
 
 ## How it works
 Extended OpenAI Conversation uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/function-calling) to call service of Home Assistant.
@@ -31,6 +32,27 @@ This integration now exposes an `ai_task` entity alongside the conversation agen
 4. Submit the task to receive text or structured JSON data. The response is mirrored back into the conversation history for continuity.
 
 > **Note:** Attachments are not yet supported when submitting AI tasks.
+
+## Vision and image understanding
+Ask the integration to describe or reason about images by calling the `extended_openai_conversation.query_image` service. The service reuses the API key, base URL, API version, and organization configured on the selected config entry, so any OpenAI-compatible provider with multimodal support (OpenAI, Groq, Azure, LocalAI, etc.) works out of the box.
+
+### Usage
+1. Open **Developer Tools → Services** and choose `extended_openai_conversation.query_image`.
+2. Pick the same config entry you use for the conversation agent.
+3. Provide the target `model`, a text `prompt`, and one or more image URLs. Local image paths are automatically converted to base64 data URLs if the file is on Home Assistant’s allowlist.
+
+```yaml
+service: extended_openai_conversation.query_image
+data:
+  config_entry: 1234567890abcdef1234567890abcdef
+  model: meta-llama/llama-4-scout-17b-16e-instruct
+  prompt: "What landmarks are visible in this photo?"
+  images:
+    - url: https://upload.wikimedia.org/wikipedia/commons/f/f2/LPU-v1-die.jpg
+  max_tokens: 300
+```
+
+The service returns the raw chat-completions payload, so you can inspect the response JSON directly or feed it into automations. Up to five images per call are supported, and the usual provider limits (file size, resolution, etc.) still apply.
 
 ## Installation
 1. Install via registering as a custom repository of HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`

@@ -139,23 +139,43 @@ async def validate_authentication(
     if skip_authentication:
         return
 
+    client = create_openai_client(
+        hass=hass,
+        api_key=api_key,
+        base_url=base_url,
+        api_version=api_version,
+        organization=organization,
+    )
+
+    await hass.async_add_executor_job(partial(client.models.list, timeout=10))
+
+
+def create_openai_client(
+    hass: HomeAssistant,
+    api_key: str,
+    base_url: str | None,
+    api_version: str | None,
+    organization: str | None,
+):
+    """Return an Async OpenAI client honoring custom providers."""
     if is_azure(base_url):
-        client = AsyncAzureOpenAI(
+        return AsyncAzureOpenAI(
             api_key=api_key,
             azure_endpoint=base_url,
             api_version=api_version,
             organization=organization,
             http_client=get_async_client(hass),
         )
-    else:
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            organization=organization,
-            http_client=get_async_client(hass),
-        )
 
-    await hass.async_add_executor_job(partial(client.models.list, timeout=10))
+    client_kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "organization": organization,
+        "http_client": get_async_client(hass),
+    }
+    if base_url:
+        client_kwargs["base_url"] = base_url
+
+    return AsyncOpenAI(**client_kwargs)
 
 
 class FunctionExecutor(ABC):

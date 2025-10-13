@@ -6,7 +6,6 @@ import json
 import logging
 from typing import Literal
 
-from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import AuthenticationError, OpenAIError
 from openai.types.chat.chat_completion import (
     ChatCompletion,
@@ -31,7 +30,6 @@ from homeassistant.helpers import (
     intent,
     template,
 )
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 
@@ -73,7 +71,7 @@ from .exceptions import (
     ParseArgumentsFailed,
     TokenLengthExceededError,
 )
-from .helpers import get_function_executor, is_azure, validate_authentication
+from .helpers import create_openai_client, get_function_executor, validate_authentication
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -142,21 +140,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
-        if is_azure(base_url):
-            self.client = AsyncAzureOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                azure_endpoint=base_url,
-                api_version=entry.data.get(CONF_API_VERSION),
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
-        else:
-            self.client = AsyncOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                base_url=base_url,
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
+        self.client = create_openai_client(
+            hass=hass,
+            api_key=entry.data[CONF_API_KEY],
+            base_url=base_url,
+            api_version=entry.data.get(CONF_API_VERSION),
+            organization=entry.data.get(CONF_ORGANIZATION),
+        )
         # Cache current platform data which gets added to each request (caching done by library)
         _ = hass.async_add_executor_job(self.client.platform_headers)
 

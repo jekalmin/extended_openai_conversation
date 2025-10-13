@@ -4,13 +4,13 @@ import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
 
-from openai import AsyncOpenAI
 from openai._exceptions import OpenAIError
 from openai.types.chat.chat_completion_content_part_image_param import (
     ChatCompletionContentPartImageParam,
 )
 import voluptuous as vol
 
+from homeassistant.const import CONF_API_KEY
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -21,7 +21,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, SERVICE_QUERY_IMAGE
+from .const import (
+    CONF_API_VERSION,
+    CONF_BASE_URL,
+    CONF_ORGANIZATION,
+    DOMAIN,
+    SERVICE_QUERY_IMAGE,
+)
+from .helpers import create_openai_client
 
 QUERY_IMAGE_SCHEMA = vol.Schema(
     {
@@ -47,6 +54,26 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         """Query an image."""
         try:
             model = call.data["model"]
+            config_entry_id = call.data["config_entry"]
+            config_entry = hass.config_entries.async_get_entry(config_entry_id)
+            if config_entry is None:
+                raise HomeAssistantError(f"Config entry `{config_entry_id}` not found")
+
+            entry_data = config_entry.data
+            api_key = entry_data.get(CONF_API_KEY)
+            if not api_key:
+                raise HomeAssistantError(
+                    f"No API key configured for entry `{config_entry_id}`"
+                )
+
+            client = create_openai_client(
+                hass=hass,
+                api_key=api_key,
+                base_url=entry_data.get(CONF_BASE_URL),
+                api_version=entry_data.get(CONF_API_VERSION),
+                organization=entry_data.get(CONF_ORGANIZATION),
+            )
+
             images = [
                 {"type": "image_url", "image_url": to_image_param(hass, image)}
                 for image in call.data["images"]
@@ -60,9 +87,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
             ]
             _LOGGER.info("Prompt for %s: %s", model, messages)
 
-            response = await AsyncOpenAI(
-                api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"]
-            ).chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=call.data["max_tokens"],
