@@ -10,7 +10,12 @@ from typing import Any
 from urllib import parse
 
 from bs4 import BeautifulSoup
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+
+try:
+    from openai import AsyncAzureOpenAI, AsyncOpenAI
+except Exception:  # pragma: no cover
+    AsyncAzureOpenAI = None  # type: ignore[assignment]
+    AsyncOpenAI = None  # type: ignore[assignment]
 import voluptuous as vol
 import yaml
 
@@ -136,6 +141,14 @@ async def validate_authentication(
 ) -> None:
     if skip_authentication:
         return
+
+    global AsyncAzureOpenAI, AsyncOpenAI
+
+    if AsyncAzureOpenAI is None or AsyncOpenAI is None:
+        from openai import AsyncAzureOpenAI as _AsyncAzureOpenAI, AsyncOpenAI as _AsyncOpenAI
+
+        AsyncAzureOpenAI = _AsyncAzureOpenAI  # type: ignore[assignment]
+        AsyncOpenAI = _AsyncOpenAI  # type: ignore[assignment]
 
     if is_azure(base_url):
         client = AsyncAzureOpenAI(
