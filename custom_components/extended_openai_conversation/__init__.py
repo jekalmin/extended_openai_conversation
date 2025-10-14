@@ -390,6 +390,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 payload["max_completion_tokens"] = payload.pop("max_tokens")
             # Groq OpenAI-compatible endpoint rejects the `user` field.
             payload.pop("user", None)
+            response_format = payload.get("response_format") or {}
+            response_type = None
+            if isinstance(response_format, dict):
+                response_type = response_format.get("type")
             if "functions" in tool_kwargs:
                 functions = tool_kwargs.pop("functions")
                 tool_kwargs["tools"] = [
@@ -403,6 +407,12 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     }
                 else:
                     tool_kwargs["tool_choice"] = function_call
+            if response_type == "json_object" and tool_kwargs.get("tools"):
+                _LOGGER.debug(
+                    "Groq endpoint does not allow JSON mode with tools; dropping tool metadata"
+                )
+                tool_kwargs.pop("tools", None)
+                tool_kwargs.pop("tool_choice", None)
         elif "api.z.ai" in base_url_lower or "zhipu" in base_url_lower or "bigmodel" in base_url_lower:
             # GLM API expects `user_id` instead of `user`
             if "user" in payload and payload["user"]:
@@ -412,6 +422,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             # Ensure max_tokens fits their spec (no rename required but ensure int)
             if "max_tokens" in payload and payload["max_tokens"] is None:
                 payload.pop("max_tokens")
+            response_format = payload.get("response_format") or {}
+            response_type = None
+            if isinstance(response_format, dict):
+                response_type = response_format.get("type")
             # Map functions/tool params to GLM's `tools` format
             if "functions" in tool_kwargs:
                 functions = tool_kwargs.pop("functions")
@@ -426,6 +440,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     }
                 elif function_call is not None:
                     tool_kwargs["tool_choice"] = function_call
+            # GLM does not allow JSON mode with tool/function calling
+            if response_type == "json_object" and tool_kwargs.get("tools"):
+                _LOGGER.debug(
+                    "GLM endpoint does not allow JSON mode with tools; dropping tool metadata"
+                )
+                tool_kwargs.pop("tools", None)
+                tool_kwargs.pop("tool_choice", None)
             # GLM coding endpoint differs; ensure base path is correct handled via config
         return tool_kwargs
 
@@ -516,6 +537,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         model = primary_model
 
         if requires_vision:
+            _LOGGER.debug(
+                "Detected image attachments for conversation %s; primary vision support: %s; "
+                "fallback available: %s",
+                user_input.conversation_id,
+                self.primary_supports_vision,
+                bool(self.vision_client and self.vision_model),
+            )
             if self.primary_supports_vision:
                 _LOGGER.debug(
                     "Primary model %s marked as vision-capable, using primary client",
