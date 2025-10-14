@@ -1,5 +1,5 @@
 ## Objective
-<img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
+<img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
 
 ## Function
 ### 1. get_events

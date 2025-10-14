@@ -1,5 +1,5 @@
 ## Objective
-- Let gpt know about area information, so [execute_services](https://github.com/jekalmin/extended_openai_conversation/tree/v1.0.2/examples/function/area#execute_services) can be called using `area_id`
+- Let gpt know about area information, so [execute_services](https://github.com/johnneerdael/extended_openai_conversation/tree/v1.0.2/examples/function/area#execute_services) can be called using `area_id`
 - Use area awareness feature like [Year of Voice Chapter 5](https://www.home-assistant.io/blog/2023/12/13/year-of-the-voice-chapter-5/#area-awareness)
 
 ## How to use area awareness?

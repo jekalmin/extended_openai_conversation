@@ -8,12 +8,59 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 - Ability to create automation
 - Ability to get data from external API or web page
 - Ability to retrieve state history of entities
+- AI Task entity for natural-language data generation and structured outputs
 - Option to pass the current user's name to OpenAI via the user message context
+- Image question answering through the `extended_openai_conversation.query_image` service, honoring any OpenAI-compatible base URL (Groq, Azure, etc.)
+- Optional fallback vision model when the primary provider cannot consume image attachments (for example GLM)
 
 ## How it works
 Extended OpenAI Conversation uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/function-calling) to call service of Home Assistant.
 
-Since OpenAI models already know how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/jekalmin/extended_openai_conversation#preparation)
+Since OpenAI models already know how to call service of Home Assistant in general, you just have to let model know what devices you have by [exposing entities](https://github.com/johnneerdael/extended_openai_conversation#preparation)
+
+## Model requirements
+- An OpenAI-compatible chat completions endpoint that supports streaming responses and JSON mode.
+- Large-context models (≈200k input / 128k output tokens) are recommended for the best experience.
+- Tested against OpenAI SDK `openai~=1.55.0`.
+
+## AI Task entity
+This integration now exposes an `ai_task` entity alongside the conversation agent. The task entity allows you to send natural-language instructions and (optionally) a Home Assistant selector schema to request structured data.
+
+### Usage
+1. Go to **Settings → Developer Tools → AI Task** and pick the `Extended OpenAI Conversation` task entity.
+2. Provide instructions describing the data you want to generate.
+3. (Optional) Add a selector-based schema to validate and coerce structured output.
+4. Submit the task to receive text or structured JSON data. The response is mirrored back into the conversation history for continuity.
+
+> **Note:** Attachments are supported for multimodal providers. You can attach up to five images per request (each ≤33 MP and ≤4 MB after base64 encoding).
+
+### Vision fallback
+If your primary chat model cannot process images, open the integration options and disable **Primary model supports vision**. Provide the fallback model name (and optionally an alternate API key, base URL, API version, or organization). When a conversation or AI Task request includes attachments, the integration automatically routes it to the fallback model; if no fallback is configured, it returns a clear error instead of sending unusable data to the primary model.
+
+> **GLM providers:** When using Zhipu's GLM plans, set the base URL to their coding endpoint (`https://api.z.ai/api/coding/paas/v4`) so tools and structured output work correctly.
+
+When you include an attachment (for example, a camera snapshot resolved via the Media selector), the integration converts the file to a base64 `image_url` block in the chat completion request so the configured model can analyze it.
+
+## Vision and image understanding
+Ask the integration to describe or reason about images by calling the `extended_openai_conversation.query_image` service. The service reuses the API key, base URL, API version, and organization configured on the selected config entry, so any OpenAI-compatible provider with multimodal support (OpenAI, Groq, Azure, LocalAI, etc.) works out of the box.
+
+### Usage
+1. Open **Developer Tools → Services** and choose `extended_openai_conversation.query_image`.
+2. Pick the same config entry you use for the conversation agent.
+3. Provide the target `model`, a text `prompt`, and one or more image URLs. Local image paths are automatically converted to base64 data URLs if the file is on Home Assistant’s allowlist.
+
+```yaml
+service: extended_openai_conversation.query_image
+data:
+  config_entry: 1234567890abcdef1234567890abcdef
+  model: meta-llama/llama-4-scout-17b-16e-instruct
+  prompt: "What landmarks are visible in this photo?"
+  images:
+    - url: https://upload.wikimedia.org/wikipedia/commons/f/f2/LPU-v1-die.jpg
+  max_tokens: 300
+```
+
+The service returns the raw chat-completions payload, so you can inspect the response JSON directly or feed it into automations. Up to five images per call are supported, and the usual provider limits (file size, resolution, etc.) still apply.
 
 ## Installation
 1. Install via registering as a custom repository of HACS or by copying `extended_openai_conversation` folder into `<config directory>/custom_components`
@@ -29,7 +76,7 @@ Since OpenAI models already know how to call service of Home Assistant in genera
     <details>
 
     <summary>guide image</summary>
-    <img width="500" alt="스크린샷 2023-10-07 오후 6 15 29" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/0849d241-0b82-47f6-9956-fdb82d678aca">
+    <img width="500" alt="스크린샷 2023-10-07 오후 6 15 29" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/0849d241-0b82-47f6-9956-fdb82d678aca">
 
     </details>
 
@@ -38,19 +85,19 @@ After installed, you need to expose entities from "http://{your-home-assistant}/
 
 ## Examples
 ### 1. Turn on single entity
-https://github.com/jekalmin/extended_openai_conversation/assets/2917984/938dee95-8907-44fd-9fb8-dc8cd559fea2
+https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/938dee95-8907-44fd-9fb8-dc8cd559fea2
 
 ### 2. Turn on multiple entities
-https://github.com/jekalmin/extended_openai_conversation/assets/2917984/528f5965-94a7-4cbe-908a-e24f7bbb0a93
+https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/528f5965-94a7-4cbe-908a-e24f7bbb0a93
 
 ### 3. Hook with custom notify function
-https://github.com/jekalmin/extended_openai_conversation/assets/2917984/4a575ee7-0188-41eb-b2db-6eab61499a99
+https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/4a575ee7-0188-41eb-b2db-6eab61499a99
 
 ### 4. Add automation
-https://github.com/jekalmin/extended_openai_conversation/assets/2917984/04b93aa6-085e-450a-a554-34c1ed1fbb36
+https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/04b93aa6-085e-450a-a554-34c1ed1fbb36
 
 ### 5. Play Netflix 
-https://github.com/jekalmin/extended_openai_conversation/assets/2917984/64ba656e-3ae7-4003-9956-da71efaf06dc
+https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/64ba656e-3ae7-4003-9956-da71efaf06dc
 
 ## Configuration
 ### Options
@@ -68,7 +115,7 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |
 |----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img width="608" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="591" alt="스크린샷 2023-10-10 오후 10 53 57" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/431e4bc5-87a0-4d7b-8da0-6273f955877f"> |
+| <img width="608" alt="1" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56"> | <img width="591" alt="스크린샷 2023-10-10 오후 10 53 57" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/431e4bc5-87a0-4d7b-8da0-6273f955877f"> |
 
 
 ### Functions
@@ -145,7 +192,7 @@ Then you will be able to let OpenAI call your function.
 ### 1. template
 #### 1-1. Get current weather
 
-For real world example, see [weather](https://github.com/jekalmin/extended_openai_conversation/tree/main/examples/function/weather).<br/>
+For real world example, see [weather](https://github.com/johnneerdael/extended_openai_conversation/tree/main/examples/function/weather).<br/>
 This is just an example from [OpenAI documentation](https://platform.openai.com/docs/guides/function-calling/common-use-cases)
 
 ```yaml
@@ -170,7 +217,7 @@ This is just an example from [OpenAI documentation](https://platform.openai.com/
     value_template: The temperature in {{ location }} is 25 {{unit}}
 ```
 
-<img width="300" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8">
+<img width="300" alt="스크린샷 2023-10-07 오후 7 56 27" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/05e31ea5-daab-4759-b57d-9f5be546bac8">
 
 ### 2. script
 #### 2-1. Add item to shopping cart
@@ -194,11 +241,11 @@ This is just an example from [OpenAI documentation](https://platform.openai.com/
         name: '{{item}}'
 ```
 
-<img width="300" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
+<img width="300" alt="스크린샷 2023-10-07 오후 7 54 56" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
 
 #### 2-2. Send messages to another messenger
 
-In order to accomplish "send it to Line" like [example3](https://github.com/jekalmin/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.
+In order to accomplish "send it to Line" like [example3](https://github.com/johnneerdael/extended_openai_conversation#3-hook-with-custom-notify-function), register a notify function like below.
 
 ```yaml
 - spec:
@@ -220,7 +267,7 @@ In order to accomplish "send it to Line" like [example3](https://github.com/jeka
         message: "{{ message }}"
 ```
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/16dc4ca0-c823-4dfe-a2b7-1ba7623acc70">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/16dc4ca0-c823-4dfe-a2b7-1ba7623acc70">
 
 #### 2-3. Get events from calendar
 
@@ -256,7 +303,7 @@ In order to pass result of calling service to OpenAI, set response variable to `
       response_variable: _function_result
 ```
 
-<img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
+<img width="300" alt="스크린샷 2023-10-31 오후 9 04 56" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/7a6c6925-a53e-4363-a93c-45f63951d41b">
 
 #### 2-4. Play Youtube on TV
 
@@ -293,7 +340,7 @@ In order to pass result of calling service to OpenAI, set response variable to `
         button: ENTER
 ```
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
 
 #### 2-5. Play Netflix on TV
 
@@ -321,7 +368,7 @@ In order to pass result of calling service to OpenAI, set response variable to `
           contentId: "m=https://www.netflix.com/watch/{{video_id}}"
 ```
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/346065d3-7ab9-49c8-ba30-b79b37a5f084">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/346065d3-7ab9-49c8-ba30-b79b37a5f084">
 
 ### 3. native
 
@@ -333,7 +380,7 @@ Before adding automation, I highly recommend set notification on `automation_reg
 
 | Create Assistant                                                                                                                             | Notify on created                                                                                                                                                              |
 |----------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <img width="830" alt="1" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/b7030a46-9a4e-4ea8-a4ed-03d2eb3af0a9"> | <img width="1116" alt="스크린샷 2023-10-13 오후 6 01 40" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/7afa3709-1c1d-41d0-8847-70f2102d824f"> |
+| <img width="830" alt="1" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/b7030a46-9a4e-4ea8-a4ed-03d2eb3af0a9"> | <img width="1116" alt="스크린샷 2023-10-13 오후 6 01 40" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/7afa3709-1c1d-41d0-8847-70f2102d824f"> |
 
 
 Copy and paste below configuration into "Functions"
@@ -374,7 +421,7 @@ Copy and paste below configuration into "Functions"
     name: add_automation
 ```
 
-<img width="300" alt="스크린샷 2023-10-31 오후 9 32 27" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/55f5fe7e-b1fd-43c9-bce6-ac92e203598f">
+<img width="300" alt="스크린샷 2023-10-31 오후 9 32 27" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/55f5fe7e-b1fd-43c9-bce6-ac92e203598f">
 
 #### 3-2. Get History
 Get state history of entities
@@ -420,7 +467,7 @@ Get state history of entities
           {{ ns.result }}
 ```
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/32217f3d-10fc-4001-9028-717b1683573b">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/32217f3d-10fc-4001-9028-717b1683573b">
 
 ### 4. scrape
 #### 4-1. Get current HA version
@@ -451,7 +498,7 @@ Unlike [scrape](https://www.home-assistant.io/integrations/scrape/), "value_temp
         value_template: '{{ value.lower() }}'
 ```
 
-<img width="300" alt="스크린샷 2023-10-31 오후 9 46 07" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/e640c3f3-8d68-486b-818e-bd81bf71c2f7">
+<img width="300" alt="스크린샷 2023-10-31 오후 9 46 07" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/e640c3f3-8d68-486b-818e-bd81bf71c2f7">
 
 ### 5. rest
 #### 5-1. Get friend names
@@ -472,7 +519,7 @@ Unlike [scrape](https://www.home-assistant.io/integrations/scrape/), "value_temp
     value_template: '{{value_json | map(attribute="name") | list }}'
 ```
 
-<img width="300" alt="스크린샷 2023-10-31 오후 9 48 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/f968e328-5163-4c41-a479-76a5406522c1">
+<img width="300" alt="스크린샷 2023-10-31 오후 9 48 36" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/f968e328-5163-4c41-a479-76a5406522c1">
 
 
 ### 6. composite
@@ -509,7 +556,7 @@ When using [ytube_music_player](https://github.com/KoljaWindeler/ytube_music_pla
         {% endfor%}
 ```
 
-<img width="300" alt="스크린샷 2023-11-02 오후 8 40 36" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/648efef8-40d1-45d2-b3f9-9bac4a36c517">
+<img width="300" alt="스크린샷 2023-11-02 오후 8 40 36" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/648efef8-40d1-45d2-b3f9-9bac4a36c517">
 
 ### 7. sqlite
 #### 7-1. Let model generate a query
@@ -541,7 +588,7 @@ When using [ytube_music_player](https://github.com/KoljaWindeler/ytube_music_pla
 
 Get last changed date time of state | Get state at specific time
 --|--
-<img width="300" alt="스크린샷 2023-11-19 오후 5 32 56" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/5a25db59-f66c-4dfd-9e7b-ae6982ed3cd2"> |<img width="300" alt="스크린샷 2023-11-19 오후 5 32 30" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/51faaa26-3294-4f96-b115-c71b268b708e"> 
+<img width="300" alt="스크린샷 2023-11-19 오후 5 32 56" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/5a25db59-f66c-4dfd-9e7b-ae6982ed3cd2"> |<img width="300" alt="스크린샷 2023-11-19 오후 5 32 30" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/51faaa26-3294-4f96-b115-c71b268b708e"> 
 
 
 **FAQ**
@@ -612,7 +659,7 @@ Get last changed date time of state | Get state at specific time
 ```
 
 ## Practical Usage
-See more practical [examples](https://github.com/jekalmin/extended_openai_conversation/tree/main/examples).
+See more practical [examples](https://github.com/johnneerdael/extended_openai_conversation/tree/main/examples).
 
 ## Logging
 In order to monitor logs of API requests and responses, add following config to `configuration.yaml` file

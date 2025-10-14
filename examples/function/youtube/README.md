@@ -1,5 +1,5 @@
 ## Objective
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
 
 ## Prompt
 Add following text in your prompt

@@ -42,6 +42,13 @@ DEFAULT_TEMPERATURE = 0.5
 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION = "max_function_calls_per_conversation"
 DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION = 1
 CONF_FUNCTIONS = "functions"
+CONF_PRIMARY_SUPPORTS_VISION = "primary_supports_vision"
+DEFAULT_PRIMARY_SUPPORTS_VISION = True
+CONF_VISION_FALLBACK_MODEL = "vision_fallback_model"
+CONF_VISION_FALLBACK_API_KEY = "vision_fallback_api_key"
+CONF_VISION_FALLBACK_BASE_URL = "vision_fallback_base_url"
+CONF_VISION_FALLBACK_API_VERSION = "vision_fallback_api_version"
+CONF_VISION_FALLBACK_ORGANIZATION = "vision_fallback_organization"
 DEFAULT_CONF_FUNCTIONS = [
     {
         "spec": {

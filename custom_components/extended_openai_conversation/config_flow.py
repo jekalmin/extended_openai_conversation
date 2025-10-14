@@ -33,6 +33,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
+    CONF_PRIMARY_SUPPORTS_VISION,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
@@ -40,12 +41,18 @@ from .const import (
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_VISION_FALLBACK_API_KEY,
+    CONF_VISION_FALLBACK_API_VERSION,
+    CONF_VISION_FALLBACK_BASE_URL,
+    CONF_VISION_FALLBACK_MODEL,
+    CONF_VISION_FALLBACK_ORGANIZATION,
     CONF_USE_TOOLS,
     CONTEXT_TRUNCATE_STRATEGIES,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_BASE_URL,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_PRIMARY_SUPPORTS_VISION,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -86,6 +93,12 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
+        CONF_PRIMARY_SUPPORTS_VISION: DEFAULT_PRIMARY_SUPPORTS_VISION,
+        CONF_VISION_FALLBACK_MODEL: "",
+        CONF_VISION_FALLBACK_API_KEY: "",
+        CONF_VISION_FALLBACK_BASE_URL: "",
+        CONF_VISION_FALLBACK_API_VERSION: "",
+        CONF_VISION_FALLBACK_ORGANIZATION: "",
         CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
         CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
         CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
@@ -239,6 +252,64 @@ class OptionsFlow(config_entries.OptionsFlow):
                 description={"suggested_value": options.get(CONF_USE_TOOLS)},
                 default=DEFAULT_USE_TOOLS,
             ): BooleanSelector(),
+            vol.Optional(
+                CONF_PRIMARY_SUPPORTS_VISION,
+                description={
+                    "suggested_value": options.get(
+                        CONF_PRIMARY_SUPPORTS_VISION, DEFAULT_PRIMARY_SUPPORTS_VISION
+                    )
+                },
+                default=DEFAULT_PRIMARY_SUPPORTS_VISION,
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_VISION_FALLBACK_MODEL,
+                description={
+                    "suggested_value": options.get(
+                        CONF_VISION_FALLBACK_MODEL, DEFAULT_OPTIONS[CONF_VISION_FALLBACK_MODEL]
+                    )
+                },
+                default=DEFAULT_OPTIONS[CONF_VISION_FALLBACK_MODEL],
+            ): str,
+            vol.Optional(
+                CONF_VISION_FALLBACK_API_KEY,
+                description={
+                    "suggested_value": options.get(
+                        CONF_VISION_FALLBACK_API_KEY,
+                        DEFAULT_OPTIONS[CONF_VISION_FALLBACK_API_KEY],
+                    )
+                },
+                default=DEFAULT_OPTIONS[CONF_VISION_FALLBACK_API_KEY],
+            ): str,
+            vol.Optional(
+                CONF_VISION_FALLBACK_BASE_URL,
+                description={
+                    "suggested_value": options.get(
+                        CONF_VISION_FALLBACK_BASE_URL,
+                        DEFAULT_OPTIONS[CONF_VISION_FALLBACK_BASE_URL],
+                    )
+                },
+                default=DEFAULT_OPTIONS[CONF_VISION_FALLBACK_BASE_URL],
+            ): str,
+            vol.Optional(
+                CONF_VISION_FALLBACK_API_VERSION,
+                description={
+                    "suggested_value": options.get(
+                        CONF_VISION_FALLBACK_API_VERSION,
+                        DEFAULT_OPTIONS[CONF_VISION_FALLBACK_API_VERSION],
+                    )
+                },
+                default=DEFAULT_OPTIONS[CONF_VISION_FALLBACK_API_VERSION],
+            ): str,
+            vol.Optional(
+                CONF_VISION_FALLBACK_ORGANIZATION,
+                description={
+                    "suggested_value": options.get(
+                        CONF_VISION_FALLBACK_ORGANIZATION,
+                        DEFAULT_OPTIONS[CONF_VISION_FALLBACK_ORGANIZATION],
+                    )
+                },
+                default=DEFAULT_OPTIONS[CONF_VISION_FALLBACK_ORGANIZATION],
+            ): str,
             vol.Optional(
                 CONF_CONTEXT_THRESHOLD,
                 description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},

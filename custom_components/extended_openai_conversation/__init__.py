@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
-from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import AuthenticationError, OpenAIError
 from openai.types.chat.chat_completion import (
     ChatCompletion,
@@ -18,7 +17,7 @@ import yaml
 from homeassistant.components import conversation
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
+from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryNotReady,
@@ -31,7 +30,6 @@ from homeassistant.helpers import (
     intent,
     template,
 )
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 
@@ -43,6 +41,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
+    CONF_PRIMARY_SUPPORTS_VISION,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
@@ -50,10 +49,16 @@ from .const import (
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_VISION_FALLBACK_API_KEY,
+    CONF_VISION_FALLBACK_API_VERSION,
+    CONF_VISION_FALLBACK_BASE_URL,
+    CONF_VISION_FALLBACK_MODEL,
+    CONF_VISION_FALLBACK_ORGANIZATION,
     CONF_USE_TOOLS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_PRIMARY_SUPPORTS_VISION,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -73,7 +78,7 @@ from .exceptions import (
     ParseArgumentsFailed,
     TokenLengthExceededError,
 )
-from .helpers import get_function_executor, is_azure, validate_authentication
+from .helpers import create_openai_client, get_function_executor, validate_authentication
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +88,8 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # hass.data key for agent.
 DATA_AGENT = "agent"
+
+PLATFORMS = [Platform.AI_TASK]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -118,42 +125,96 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data[DATA_AGENT] = agent
 
     conversation.async_set_agent(hass, entry, agent)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload OpenAI."""
-    hass.data[DOMAIN].pop(entry.entry_id)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     conversation.async_unset_agent(hass, entry)
-    return True
+    if unload_ok and entry.entry_id in hass.data.get(DOMAIN, {}):
+        hass.data[DOMAIN].pop(entry.entry_id)
+    return unload_ok
 
 
 class OpenAIAgent(conversation.AbstractConversationAgent):
     """OpenAI conversation agent."""
+
+    @staticmethod
+    def _coerce_optional_str(value: Any) -> str | None:
+        """Normalize optional string settings."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return str(value)
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
+        self.primary_supports_vision = entry.options.get(
+            CONF_PRIMARY_SUPPORTS_VISION, DEFAULT_PRIMARY_SUPPORTS_VISION
+        )
+        self.vision_model: str | None = None
+        self.vision_client = None
+        self._primary_base_url = entry.data.get(CONF_BASE_URL)
+        self._vision_base_url: str | None = None
         base_url = entry.data.get(CONF_BASE_URL)
-        if is_azure(base_url):
-            self.client = AsyncAzureOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                azure_endpoint=base_url,
-                api_version=entry.data.get(CONF_API_VERSION),
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
-        else:
-            self.client = AsyncOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                base_url=base_url,
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
+        self.client = create_openai_client(
+            hass=hass,
+            api_key=entry.data[CONF_API_KEY],
+            base_url=base_url,
+            api_version=entry.data.get(CONF_API_VERSION),
+            organization=entry.data.get(CONF_ORGANIZATION),
+        )
         # Cache current platform data which gets added to each request (caching done by library)
         _ = hass.async_add_executor_job(self.client.platform_headers)
+
+        fallback_model = self._coerce_optional_str(
+            entry.options.get(CONF_VISION_FALLBACK_MODEL)
+        )
+        if fallback_model:
+            fallback_api_key = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_API_KEY)
+            ) or entry.data[CONF_API_KEY]
+            fallback_base_url = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_BASE_URL)
+            )
+            fallback_api_version = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_API_VERSION)
+            )
+            fallback_organization = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_ORGANIZATION)
+            )
+
+            fallback_base_url = fallback_base_url or base_url
+            fallback_api_version = fallback_api_version or entry.data.get(
+                CONF_API_VERSION
+            )
+            fallback_organization = fallback_organization or entry.data.get(
+                CONF_ORGANIZATION
+            )
+
+            try:
+                self.vision_client = create_openai_client(
+                    hass=hass,
+                    api_key=fallback_api_key,
+                    base_url=fallback_base_url,
+                    api_version=fallback_api_version,
+                    organization=fallback_organization,
+                )
+                _ = hass.async_add_executor_job(self.vision_client.platform_headers)
+                self.vision_model = fallback_model
+                self._vision_base_url = fallback_base_url
+            except Exception:  # pylint: disable=broad-except
+                self.vision_client = None
+                self.vision_model = None
+                self._vision_base_url = None
+                _LOGGER.exception("Failed to initialize fallback vision client")
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -302,6 +363,93 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         except:
             raise FunctionLoadFailed()
 
+    @staticmethod
+    def _messages_require_vision(messages: list[dict[str, Any]]) -> bool:
+        """Detect whether any messages include image content parts."""
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        return True
+        return False
+
+    def _apply_provider_overrides(
+        self,
+        payload: dict[str, Any],
+        tool_kwargs: dict[str, Any],
+        base_url: str | None,
+    ) -> dict[str, Any]:
+        """Tweaks request payload/tool configuration for specific providers."""
+        if not base_url:
+            return tool_kwargs
+        base_url_lower = base_url.lower()
+        if "groq.com" in base_url_lower:
+            # Groq expects `max_completion_tokens` instead of `max_tokens`
+            if "max_tokens" in payload and "max_completion_tokens" not in payload:
+                payload["max_completion_tokens"] = payload.pop("max_tokens")
+            # Groq OpenAI-compatible endpoint rejects the `user` field.
+            payload.pop("user", None)
+            response_format = payload.get("response_format") or {}
+            response_type = None
+            if isinstance(response_format, dict):
+                response_type = response_format.get("type")
+            if "functions" in tool_kwargs:
+                functions = tool_kwargs.pop("functions")
+                tool_kwargs["tools"] = [
+                    {"type": "function", "function": func} for func in functions
+                ]
+                function_call = tool_kwargs.pop("function_call", "auto")
+                if isinstance(function_call, dict):
+                    tool_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": function_call,
+                    }
+                else:
+                    tool_kwargs["tool_choice"] = function_call
+            if response_type == "json_object" and tool_kwargs.get("tools"):
+                _LOGGER.debug(
+                    "Groq endpoint does not allow JSON mode with tools; dropping tool metadata"
+                )
+                tool_kwargs.pop("tools", None)
+                tool_kwargs.pop("tool_choice", None)
+        elif "api.z.ai" in base_url_lower or "zhipu" in base_url_lower or "bigmodel" in base_url_lower:
+            # GLM API expects `user_id` instead of `user`
+            if "user" in payload and payload["user"]:
+                payload["user_id"] = payload.pop("user")
+            else:
+                payload.pop("user", None)
+            # Ensure max_tokens fits their spec (no rename required but ensure int)
+            if "max_tokens" in payload and payload["max_tokens"] is None:
+                payload.pop("max_tokens")
+            response_format = payload.get("response_format") or {}
+            response_type = None
+            if isinstance(response_format, dict):
+                response_type = response_format.get("type")
+            # Map functions/tool params to GLM's `tools` format
+            if "functions" in tool_kwargs:
+                functions = tool_kwargs.pop("functions")
+                tool_kwargs["tools"] = [
+                    {"type": "function", "function": func} for func in functions
+                ]
+                function_call = tool_kwargs.pop("function_call", None)
+                if isinstance(function_call, dict):
+                    tool_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": function_call,
+                    }
+                elif function_call is not None:
+                    tool_kwargs["tool_choice"] = function_call
+            # GLM does not allow JSON mode with tool/function calling
+            if response_type == "json_object" and tool_kwargs.get("tools"):
+                _LOGGER.debug(
+                    "GLM endpoint does not allow JSON mode with tools; dropping tool metadata"
+                )
+                tool_kwargs.pop("tools", None)
+                tool_kwargs.pop("tool_choice", None)
+            # GLM coding endpoint differs; ensure base path is correct handled via config
+        return tool_kwargs
+
     async def truncate_message_history(
         self, messages, exposed_entities, user_input: conversation.ConversationInput
     ):
@@ -330,9 +478,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         messages,
         exposed_entities,
         n_requests,
+        response_format: dict | None = None,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
-        model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        primary_model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
@@ -358,15 +507,85 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         if len(functions) == 0:
             tool_kwargs = {}
 
-        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+        def _redact_data_urls(message: dict[str, Any]) -> dict[str, Any]:
+            """Mask inline base64 data before logging."""
+            message_copy = dict(message)
+            content = message_copy.get("content")
+            if isinstance(content, list):
+                redacted_parts = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        redacted_parts.append(part)
+                        continue
+                    if part.get("type") != "image_url":
+                        redacted_parts.append(part)
+                        continue
+                    image_url = dict(part.get("image_url", {}))
+                    url = image_url.get("url")
+                    if isinstance(url, str) and url.startswith("data:"):
+                        image_url["url"] = "<base64 image>"
+                        new_part = dict(part)
+                        new_part["image_url"] = image_url
+                        redacted_parts.append(new_part)
+                    else:
+                        redacted_parts.append(part)
+                message_copy["content"] = redacted_parts
+            return message_copy
 
-        response: ChatCompletion = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            user=user_input.conversation_id,
+        requires_vision = self._messages_require_vision(messages)
+        client = self.client
+        model = primary_model
+
+        if requires_vision:
+            _LOGGER.debug(
+                "Detected image attachments for conversation %s; primary vision support: %s; "
+                "fallback available: %s",
+                user_input.conversation_id,
+                self.primary_supports_vision,
+                bool(self.vision_client and self.vision_model),
+            )
+            if self.primary_supports_vision:
+                _LOGGER.debug(
+                    "Primary model %s marked as vision-capable, using primary client",
+                    primary_model,
+                )
+            elif self.vision_client and self.vision_model:
+                client = self.vision_client
+                model = self.vision_model
+                _LOGGER.debug(
+                    "Routing request with attachments to fallback vision model %s",
+                    self.vision_model,
+                )
+            else:
+                raise HomeAssistantError(
+                    "Image attachments are not supported by the configured chat model "
+                    f"`{primary_model}`. Configure a vision-capable fallback model in the "
+                    "integration options before sending images."
+                )
+
+        safe_messages = [_redact_data_urls(message) for message in messages]
+        _LOGGER.info("Prompt for %s: %s", model, json.dumps(safe_messages))
+
+        request_payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "top_p": top_p,
+            "temperature": temperature,
+            "user": user_input.conversation_id,
+        }
+        if response_format is not None:
+            request_payload["response_format"] = response_format
+
+        base_url_for_request = (
+            self._vision_base_url if client is self.vision_client else self._primary_base_url
+        )
+        tool_kwargs = self._apply_provider_overrides(
+            request_payload, tool_kwargs, base_url_for_request
+        )
+
+        response: ChatCompletion = await client.chat.completions.create(
+            **request_payload,
             **tool_kwargs,
         )
 
@@ -380,11 +599,21 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         if choice.finish_reason == "function_call":
             return await self.execute_function_call(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_requests + 1,
+                response_format,
             )
         if choice.finish_reason == "tool_calls":
             return await self.execute_tool_calls(
-                user_input, messages, message, exposed_entities, n_requests + 1
+                user_input,
+                messages,
+                message,
+                exposed_entities,
+                n_requests + 1,
+                response_format,
             )
         if choice.finish_reason == "length":
             raise TokenLengthExceededError(response.usage.completion_tokens)
@@ -398,6 +627,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         function_name = message.function_call.name
         function = next(
@@ -412,6 +642,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 exposed_entities,
                 n_requests,
                 function,
+                response_format,
             )
         raise FunctionNotFound(function_name)
 
@@ -423,6 +654,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         exposed_entities,
         n_requests,
         function,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         function_executor = get_function_executor(function["function"]["type"])
 
@@ -442,7 +674,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 "content": str(result),
             }
         )
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(
+            user_input,
+            messages,
+            exposed_entities,
+            n_requests,
+            response_format=response_format,
+        )
 
     async def execute_tool_calls(
         self,
@@ -451,6 +689,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
+        response_format: dict | None,
     ) -> OpenAIQueryResponse:
         messages.append(message.model_dump(exclude_none=True))
         for tool in message.tool_calls:
@@ -477,7 +716,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 )
             else:
                 raise FunctionNotFound(function_name)
-        return await self.query(user_input, messages, exposed_entities, n_requests)
+        return await self.query(
+            user_input,
+            messages,
+            exposed_entities,
+            n_requests,
+            response_format=response_format,
+        )
 
     async def execute_tool_function(
         self,
