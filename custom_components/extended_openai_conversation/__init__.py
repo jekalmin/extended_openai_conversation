@@ -161,6 +161,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
         self.vision_model: str | None = None
         self.vision_client = None
+        self._primary_base_url = entry.data.get(CONF_BASE_URL)
+        self._vision_base_url: str | None = None
         base_url = entry.data.get(CONF_BASE_URL)
         self.client = create_openai_client(
             hass=hass,
@@ -207,9 +209,11 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 )
                 _ = hass.async_add_executor_job(self.vision_client.platform_headers)
                 self.vision_model = fallback_model
+                self._vision_base_url = fallback_base_url
             except Exception:  # pylint: disable=broad-except
                 self.vision_client = None
                 self.vision_model = None
+                self._vision_base_url = None
                 _LOGGER.exception("Failed to initialize fallback vision client")
 
     @property
@@ -370,6 +374,61 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                         return True
         return False
 
+    def _apply_provider_overrides(
+        self,
+        payload: dict[str, Any],
+        tool_kwargs: dict[str, Any],
+        base_url: str | None,
+    ) -> dict[str, Any]:
+        """Tweaks request payload/tool configuration for specific providers."""
+        if not base_url:
+            return tool_kwargs
+        base_url_lower = base_url.lower()
+        if "groq.com" in base_url_lower:
+            # Groq expects `max_completion_tokens` instead of `max_tokens`
+            if "max_tokens" in payload and "max_completion_tokens" not in payload:
+                payload["max_completion_tokens"] = payload.pop("max_tokens")
+            # Groq OpenAI-compatible endpoint rejects the `user` field.
+            payload.pop("user", None)
+            if "functions" in tool_kwargs:
+                functions = tool_kwargs.pop("functions")
+                tool_kwargs["tools"] = [
+                    {"type": "function", "function": func} for func in functions
+                ]
+                function_call = tool_kwargs.pop("function_call", "auto")
+                if isinstance(function_call, dict):
+                    tool_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": function_call,
+                    }
+                else:
+                    tool_kwargs["tool_choice"] = function_call
+        elif "api.z.ai" in base_url_lower or "zhipu" in base_url_lower or "bigmodel" in base_url_lower:
+            # GLM API expects `user_id` instead of `user`
+            if "user" in payload and payload["user"]:
+                payload["user_id"] = payload.pop("user")
+            else:
+                payload.pop("user", None)
+            # Ensure max_tokens fits their spec (no rename required but ensure int)
+            if "max_tokens" in payload and payload["max_tokens"] is None:
+                payload.pop("max_tokens")
+            # Map functions/tool params to GLM's `tools` format
+            if "functions" in tool_kwargs:
+                functions = tool_kwargs.pop("functions")
+                tool_kwargs["tools"] = [
+                    {"type": "function", "function": func} for func in functions
+                ]
+                function_call = tool_kwargs.pop("function_call", None)
+                if isinstance(function_call, dict):
+                    tool_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": function_call,
+                    }
+                elif function_call is not None:
+                    tool_kwargs["tool_choice"] = function_call
+            # GLM coding endpoint differs; ensure base path is correct handled via config
+        return tool_kwargs
+
     async def truncate_message_history(
         self, messages, exposed_entities, user_input: conversation.ConversationInput
     ):
@@ -489,6 +548,13 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         }
         if response_format is not None:
             request_payload["response_format"] = response_format
+
+        base_url_for_request = (
+            self._vision_base_url if client is self.vision_client else self._primary_base_url
+        )
+        tool_kwargs = self._apply_provider_overrides(
+            request_payload, tool_kwargs, base_url_for_request
+        )
 
         response: ChatCompletion = await client.chat.completions.create(
             **request_payload,

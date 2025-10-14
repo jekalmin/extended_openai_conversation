@@ -37,6 +37,8 @@ This integration now exposes an `ai_task` entity alongside the conversation agen
 ### Vision fallback
 If your primary chat model cannot process images, open the integration options and disable **Primary model supports vision**. Provide the fallback model name (and optionally an alternate API key, base URL, API version, or organization). When a conversation or AI Task request includes attachments, the integration automatically routes it to the fallback model; if no fallback is configured, it returns a clear error instead of sending unusable data to the primary model.
 
+> **GLM providers:** When using Zhipu's GLM plans, set the base URL to their coding endpoint (`https://api.z.ai/api/coding/paas/v4`) so tools and structured output work correctly.
+
 When you include an attachment (for example, a camera snapshot resolved via the Media selector), the integration converts the file to a base64 `image_url` block in the chat completion request so the configured model can analyze it.
 
 ## Vision and image understanding
