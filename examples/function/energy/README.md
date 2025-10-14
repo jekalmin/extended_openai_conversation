@@ -1,8 +1,8 @@
 ## Objective
 - Get energy statistics
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/04ef6eaa-f0be-4cf2-ae53-b11aecf88c4d">
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/a38e88e2-c5e5-4db9-a7d3-b3ee2cecb8c2">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/04ef6eaa-f0be-4cf2-ae53-b11aecf88c4d">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/a38e88e2-c5e5-4db9-a7d3-b3ee2cecb8c2">
 
 ## Function
 

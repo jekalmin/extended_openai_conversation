@@ -41,6 +41,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
+    CONF_PRIMARY_SUPPORTS_VISION,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
@@ -48,10 +49,16 @@ from .const import (
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_VISION_FALLBACK_API_KEY,
+    CONF_VISION_FALLBACK_API_VERSION,
+    CONF_VISION_FALLBACK_BASE_URL,
+    CONF_VISION_FALLBACK_MODEL,
+    CONF_VISION_FALLBACK_ORGANIZATION,
     CONF_USE_TOOLS,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
+    DEFAULT_PRIMARY_SUPPORTS_VISION,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -134,11 +141,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class OpenAIAgent(conversation.AbstractConversationAgent):
     """OpenAI conversation agent."""
 
+    @staticmethod
+    def _coerce_optional_str(value: Any) -> str | None:
+        """Normalize optional string settings."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return str(value)
+
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
+        self.primary_supports_vision = entry.options.get(
+            CONF_PRIMARY_SUPPORTS_VISION, DEFAULT_PRIMARY_SUPPORTS_VISION
+        )
+        self.vision_model: str | None = None
+        self.vision_client = None
         base_url = entry.data.get(CONF_BASE_URL)
         self.client = create_openai_client(
             hass=hass,
@@ -149,6 +171,46 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
         # Cache current platform data which gets added to each request (caching done by library)
         _ = hass.async_add_executor_job(self.client.platform_headers)
+
+        fallback_model = self._coerce_optional_str(
+            entry.options.get(CONF_VISION_FALLBACK_MODEL)
+        )
+        if fallback_model:
+            fallback_api_key = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_API_KEY)
+            ) or entry.data[CONF_API_KEY]
+            fallback_base_url = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_BASE_URL)
+            )
+            fallback_api_version = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_API_VERSION)
+            )
+            fallback_organization = self._coerce_optional_str(
+                entry.options.get(CONF_VISION_FALLBACK_ORGANIZATION)
+            )
+
+            fallback_base_url = fallback_base_url or base_url
+            fallback_api_version = fallback_api_version or entry.data.get(
+                CONF_API_VERSION
+            )
+            fallback_organization = fallback_organization or entry.data.get(
+                CONF_ORGANIZATION
+            )
+
+            try:
+                self.vision_client = create_openai_client(
+                    hass=hass,
+                    api_key=fallback_api_key,
+                    base_url=fallback_base_url,
+                    api_version=fallback_api_version,
+                    organization=fallback_organization,
+                )
+                _ = hass.async_add_executor_job(self.vision_client.platform_headers)
+                self.vision_model = fallback_model
+            except Exception:  # pylint: disable=broad-except
+                self.vision_client = None
+                self.vision_model = None
+                _LOGGER.exception("Failed to initialize fallback vision client")
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -297,6 +359,17 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         except:
             raise FunctionLoadFailed()
 
+    @staticmethod
+    def _messages_require_vision(messages: list[dict[str, Any]]) -> bool:
+        """Detect whether any messages include image content parts."""
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        return True
+        return False
+
     async def truncate_message_history(
         self, messages, exposed_entities, user_input: conversation.ConversationInput
     ):
@@ -328,7 +401,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         response_format: dict | None = None,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
-        model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        primary_model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
         top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
         temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
@@ -379,6 +452,30 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 message_copy["content"] = redacted_parts
             return message_copy
 
+        requires_vision = self._messages_require_vision(messages)
+        client = self.client
+        model = primary_model
+
+        if requires_vision:
+            if self.primary_supports_vision:
+                _LOGGER.debug(
+                    "Primary model %s marked as vision-capable, using primary client",
+                    primary_model,
+                )
+            elif self.vision_client and self.vision_model:
+                client = self.vision_client
+                model = self.vision_model
+                _LOGGER.debug(
+                    "Routing request with attachments to fallback vision model %s",
+                    self.vision_model,
+                )
+            else:
+                raise HomeAssistantError(
+                    "Image attachments are not supported by the configured chat model "
+                    f"`{primary_model}`. Configure a vision-capable fallback model in the "
+                    "integration options before sending images."
+                )
+
         safe_messages = [_redact_data_urls(message) for message in messages]
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(safe_messages))
 
@@ -393,7 +490,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         if response_format is not None:
             request_payload["response_format"] = response_format
 
-        response: ChatCompletion = await self.client.chat.completions.create(
+        response: ChatCompletion = await client.chat.completions.create(
             **request_payload,
             **tool_kwargs,
         )

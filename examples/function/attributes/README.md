@@ -1,8 +1,8 @@
 ## Objective
 - Get attributes of entity
 
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/5994c7a0-1370-4924-bed8-d2e77ec1d11d">
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/177f416e-2194-4a10-a3f6-39a94da942ce">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/5994c7a0-1370-4924-bed8-d2e77ec1d11d">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/177f416e-2194-4a10-a3f6-39a94da942ce">
 
 ## Function
 

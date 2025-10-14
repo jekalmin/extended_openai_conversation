@@ -1,5 +1,5 @@
 ## Objective
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
+<img width="300" src="https://github.com/johnneerdael/extended_openai_conversation/assets/2917984/89060728-4703-4e57-8423-354cdc47f0ee">
 
 ## Function
 

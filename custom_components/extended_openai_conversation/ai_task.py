@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
+import yaml
 
 from homeassistant.components import ai_task, conversation
 from homeassistant.config_entries import ConfigEntry
@@ -32,12 +33,18 @@ async def async_setup_entry(
     """Set up the AI Task entity."""
     integration_data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if not integration_data:
-        _LOGGER.debug("No stored data found for entry %s, skipping AI task setup", entry.entry_id)
+        _LOGGER.debug(
+            "No stored data found for entry %s, skipping AI task setup",
+            entry.entry_id,
+        )
         return
 
     agent: OpenAIAgent | None = integration_data.get(DATA_AGENT)
     if agent is None:
-        _LOGGER.debug("No agent cached for entry %s, skipping AI task setup", entry.entry_id)
+        _LOGGER.debug(
+            "No agent cached for entry %s, skipping AI task setup",
+            entry.entry_id,
+        )
         return
 
     async_add_entities(
@@ -70,7 +77,9 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
         instructions = task.instructions or ""
         attachments = task.attachments
         user_id = None
-        if chat_log.content and isinstance(chat_log.content[-1], conversation.UserContent):
+        if chat_log.content and isinstance(
+            chat_log.content[-1], conversation.UserContent
+        ):
             # Try to reuse the last user's metadata when possible.
             last_user = chat_log.content[-1]
             if getattr(last_user, "user_id", None):
@@ -100,7 +109,11 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
 
             return _serialize(first) == _serialize(second)
 
-        if not isinstance(last_entry, conversation.UserContent) or last_entry.content != instructions or not _attachments_equal(last_entry.attachments, attachments):
+        if (
+            not isinstance(last_entry, conversation.UserContent)
+            or last_entry.content != instructions
+            or not _attachments_equal(last_entry.attachments, attachments)
+        ):
             chat_log.async_add_user_content(
                 conversation.UserContent(content=instructions, attachments=attachments)
             )
@@ -113,7 +126,7 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
             user_id=user_id,
             device_id=None,
         )
-        system_message = self._agent._generate_system_message(  # noqa: SLF001 - Reuse existing prompt generator
+        system_message = self._agent._generate_system_message(  # noqa: SLF001 - reuse existing prompt generator
             exposed_entities,
             synthetic_input,
         )
@@ -151,10 +164,28 @@ class ExtendedOpenAIAITaskEntity(ai_task.AITaskEntity):
         else:
             try:
                 structured_payload = json.loads(message_text)
-            except json.JSONDecodeError as err:
+            except json.JSONDecodeError as json_error:
+                try:
+                    structured_payload = yaml.safe_load(message_text)
+                except yaml.YAMLError as yaml_error:
+                    raise HomeAssistantError(
+                        "Structured response could not be parsed as "
+                        f"JSON ({json_error}) or YAML ({yaml_error})"
+                    ) from yaml_error
+                if structured_payload is None:
+                    raise HomeAssistantError(
+                        "Structured response was empty; expected a JSON object"
+                    ) from json_error
+                _LOGGER.debug(
+                    "Structured response required YAML parsing fallback: %s",
+                    message_text,
+                )
+
+            if not isinstance(structured_payload, dict):
                 raise HomeAssistantError(
-                    f"Structured response was not valid JSON: {err}"
-                ) from err
+                    "Structured response must be a JSON object, "
+                    f"received {type(structured_payload).__name__}"
+                )
 
             try:
                 validated_payload = task.structure(structured_payload)
@@ -190,7 +221,13 @@ def _message_to_text(message) -> str:
     for part in content:
         text = getattr(part, "text", None)
         if text is None and isinstance(part, dict):
-            text = part.get("text")
+            if part.get("type") == "output_json" and "json" in part:
+                try:
+                    text = json.dumps(part["json"])
+                except TypeError:
+                    text = str(part["json"])
+            else:
+                text = part.get("text")
         if text:
             parts.append(text)
     return "".join(parts)
