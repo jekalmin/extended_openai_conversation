@@ -1,24 +1,13 @@
 {
   "domain": "extended_openai_conversation",
   "name": "Extended OpenAI Conversation",
-  "codeowners": [
-    "@jekalmin"
-  ],
+  "version": "1.2.0",
   "config_flow": true,
-  "dependencies": [
-    "conversation",
-    "energy",
-    "history",
-    "recorder",
-    "rest",
-    "scrape"
-  ],
   "documentation": "https://github.com/Da3dalusCode/extended_openai_conversation",
-  "integration_type": "service",
-  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Da3dalusCode/extended_openai_conversation/issues",
-  "requirements": [
-    "openai>=1.0.0,<2.0.0"
-  ],
-  "version": "1.1.5"
+  "iot_class": "cloud_polling",
+  "integration_type": "service",
+  "codeowners": ["@Da3dalusCode"],
+  "dependencies": ["conversation"],
+  "requirements": ["openai>=1.52.0,<2"]
 }
