@@ -1,15 +1,20 @@
 # Changelog
 
-## [Unreleased]
-
-## [1.1.2] - 2024-06-19
-### Fixed
-- Fix config_flow import (MODEL_STRATEGY_AUTO), use public OpenAI exceptions, pin OpenAI 1.x dependency.
-
-## [1.1.0] - 2024-05-28
+## 1.2.0 — 2025-10-20
 ### Added
-- GPT-5 "Thinking" and Responses API flow with automatic reasoning detection, token budgeting, and router forcing support.
-- Streaming controls with minimum-character thresholds, proactive speech confirmation, and compatibility fixes for TTS pipelines.
-- Memory toolkit including `memory.write`/`memory.search` adapters, sanitisation heuristics, snippet budgeting, and circuit breaker safeguards.
-- Expanded options UI covering Responses vs Chat, reasoning effort, proactivity budgets, telemetry controls, and memory service endpoints.
-- Updated README guidance and new unit tests for router behaviours, streaming paths, and Responses normalization.
+- **GPT‑5 support** via **Responses API**, with `reasoning.effort` (`low`, `medium`, `high`).
+- **Compat result** for Home Assistant Assist (`continue_conversation` + stable speech payload).
+- **Config entry migration handler** to prevent “Migration handler not found”. :contentReference[oaicite:3]{index=3}
+- **Single‑screen Options UI** (no more blank arrow pages / list schema errors). :contentReference[oaicite:4]{index=4}
+
+### Changed
+- Default to **non‑streaming** responses (streaming path will return later when fully hardened).
+- Suppress `temperature/top_p` for GPT‑5 (they’re not supported on reasoning models).
+
+### Fixed
+- Removed legacy imports that referenced missing constants in some forks (`CONF_PAYLOAD_TEMPLATE`, `DEFAULT_MEMORY_WRITE_PATH`, `SERVICE_QUERY_IMAGE`). 
+- Avoided blocking calls on the event loop for auth/client init by using HA’s shared HTTPX client.
+
+### Known limits
+- Dialog **history** is off (stateless per turn). Will be added behind a token budget.
+- Tools & memory are scaffolded but **disabled by default**.
