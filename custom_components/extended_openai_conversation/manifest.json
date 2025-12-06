@@ -18,7 +18,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/jekalmin/extended_openai_conversation/issues",
   "requirements": [
-    "openai~=2.2.0"
+    "openai~=2.8.0"
   ],
   "version": "1.2.0"
 }
