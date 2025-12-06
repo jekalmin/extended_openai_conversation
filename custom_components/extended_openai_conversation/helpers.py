@@ -58,7 +58,7 @@ from .exceptions import (
 _LOGGER = logging.getLogger(__name__)
 
 
-AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net)"
+AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
 
 
 def get_function_executor(value: str):
