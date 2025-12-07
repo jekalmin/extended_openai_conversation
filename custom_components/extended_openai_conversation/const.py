@@ -97,3 +97,7 @@ DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 SERVICE_QUERY_IMAGE = "query_image"
 
 CONF_PAYLOAD_TEMPLATE = "payload_template"
+
+# Responses API support (for GPT-5, GPT-5.1, etc.)
+CONF_USE_RESPONSES_API = "use_responses_api"
+DEFAULT_USE_RESPONSES_API = False

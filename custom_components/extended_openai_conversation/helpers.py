@@ -74,6 +74,18 @@ def is_azure(base_url: str):
     return False
 
 
+def is_responses_api(base_url: str) -> bool:
+    """Check if the base_url uses the Responses API (GPT-5, GPT-5.1, etc.).
+    
+    The Responses API uses /responses endpoint instead of /chat/completions.
+    It requires 'input' parameter instead of 'messages' and returns a different
+    response format with output[].content[].text instead of choices[].message.content.
+    """
+    if base_url and "/responses" in base_url:
+        return True
+    return False
+
+
 def convert_to_template(
     settings,
     template_keys=["data", "event_data", "target", "service"],

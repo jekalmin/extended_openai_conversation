@@ -32,6 +32,7 @@ from homeassistant.helpers import (
     template,
 )
 from homeassistant.helpers.httpx_client import get_async_client
+import httpx
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
 
@@ -51,6 +52,7 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_USE_TOOLS,
+    CONF_USE_RESPONSES_API,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTIONS,
@@ -63,6 +65,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
+    DEFAULT_USE_RESPONSES_API,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
 )
@@ -73,7 +76,7 @@ from .exceptions import (
     ParseArgumentsFailed,
     TokenLengthExceededError,
 )
-from .helpers import get_function_executor, is_azure, validate_authentication
+from .helpers import get_function_executor, is_azure, is_responses_api, validate_authentication
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -137,6 +140,8 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         self.entry = entry
         self.history: dict[str, list[dict]] = {}
         base_url = entry.data.get(CONF_BASE_URL)
+        self.base_url = base_url
+        self.use_responses_api = is_responses_api(base_url)
         if is_azure(base_url):
             self.client = AsyncAzureOpenAI(
                 api_key=entry.data[CONF_API_KEY],
@@ -360,19 +365,31 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
-        response: ChatCompletion = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            user=user_input.conversation_id,
-            **tool_kwargs,
-        )
+        if self.use_responses_api:
+            # Use Responses API (GPT-5, GPT-5.1, etc.)
+            response = await self._query_responses_api(
+                messages=messages,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                user_input=user_input,
+            )
+        else:
+            # Use standard Chat Completions API
+            response: ChatCompletion = await self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                temperature=temperature,
+                user=user_input.conversation_id,
+                **tool_kwargs,
+            )
 
         _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
 
-        if response.usage.total_tokens > context_threshold:
+        if response.usage and response.usage.total_tokens > context_threshold:
             await self.truncate_message_history(messages, exposed_entities, user_input)
 
         choice: Choice = response.choices[0]
@@ -394,6 +411,110 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             raise TokenLengthExceededError(response.usage.completion_tokens)
 
         return OpenAIQueryResponse(response=response, message=message)
+
+    async def _query_responses_api(
+        self,
+        messages: list,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        top_p: float,
+        user_input: conversation.ConversationInput,
+    ) -> ChatCompletion:
+        """Query using the Responses API (GPT-5, GPT-5.1, etc.).
+        
+        The Responses API uses a different format:
+        - Input: 'input' parameter with concatenated messages instead of 'messages' array
+        - Output: output[].content[].text instead of choices[].message.content
+        
+        This method converts the standard messages format to Responses API format,
+        makes the request, and converts the response back to ChatCompletion format.
+        """
+        # Convert messages array to a single input string
+        input_parts = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            msg_content = msg.get("content", "")
+            input_parts.append(f"{role}: {msg_content}")
+        
+        input_text = "\n\n".join(input_parts)
+        
+        # Build the request payload for Responses API
+        payload = {
+            "input": input_text,
+            "model": model,
+        }
+        
+        # Note: Responses API may have different parameter names
+        if max_tokens:
+            payload["max_output_tokens"] = max_tokens
+        if temperature is not None:
+            payload["temperature"] = temperature
+        
+        # Get API key and build URL
+        api_key = self.entry.data[CONF_API_KEY]
+        api_version = self.entry.data.get(CONF_API_VERSION, "2025-04-01-preview")
+        
+        # Build URL - if base_url already contains /responses, use it directly
+        if "/responses" in self.base_url:
+            url = self.base_url
+            if "?" not in url:
+                url = f"{url}?api-version={api_version}"
+        else:
+            url = f"{self.base_url}/responses?api-version={api_version}"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": api_key,
+        }
+        
+        _LOGGER.info("Responses API request to %s with payload: %s", url, json.dumps(payload))
+        
+        # Make async HTTP request
+        async with httpx.AsyncClient() as client:
+            http_response = await client.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=60.0,
+            )
+            if http_response.status_code != 200:
+                _LOGGER.error("Responses API error %s: %s", http_response.status_code, http_response.text)
+            if http_response.status_code != 200:
+                _LOGGER.error("Responses API error %s: %s", http_response.status_code, http_response.text)
+            http_response.raise_for_status()
+            response_data = http_response.json()
+        
+        _LOGGER.debug("Responses API raw response: %s", json.dumps(response_data))
+        
+        # Convert Responses API response to ChatCompletion format
+        # Responses API format: {"output": [{"content": [{"text": "..."}]}]}
+        output_text = ""
+        if "output" in response_data and len(response_data["output"]) > 0:
+            output_item = response_data["output"][0]
+            if "content" in output_item and len(output_item["content"]) > 0:
+                output_text = output_item["content"][0].get("text", "")
+        
+        # Build a mock ChatCompletion response
+        mock_response = ChatCompletion(
+            id=response_data.get("id", "responses-api"),
+            choices=[
+                Choice(
+                    finish_reason="stop",
+                    index=0,
+                    message=ChatCompletionMessage(
+                        content=output_text,
+                        role="assistant",
+                    ),
+                )
+            ],
+            created=response_data.get("created_at", 0),
+            model=response_data.get("model", model),
+            object="chat.completion",
+            usage=None,
+        )
+        
+        return mock_response
 
     async def execute_function_call(
         self,
