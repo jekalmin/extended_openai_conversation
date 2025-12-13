@@ -16,6 +16,12 @@ from openai.types.chat.chat_completion import (
 import yaml
 
 from homeassistant.components import conversation
+from homeassistant.components.conversation import (
+    ChatLog,
+    ConversationInput,
+    ConversationResult,
+    async_get_chat_log,
+)
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
@@ -31,6 +37,7 @@ from homeassistant.helpers import (
     intent,
     template,
 )
+from homeassistant.helpers.chat_session import async_get_chat_session
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
@@ -160,16 +167,26 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         """Return a list of supported languages."""
         return MATCH_ALL
 
-    async def async_process(
-        self, user_input: conversation.ConversationInput
-    ) -> conversation.ConversationResult:
+    async def async_process(self, user_input: ConversationInput) -> ConversationResult:
+        """Process a sentence."""
+        with (
+            async_get_chat_session(self.hass, user_input.conversation_id) as session,
+            async_get_chat_log(self.hass, session, user_input) as chat_log,
+        ):
+            return await self._async_handle_message(user_input, chat_log)
+
+    async def _async_handle_message(
+        self,
+        user_input: ConversationInput,
+        chat_log: ChatLog,
+    ) -> ConversationResult:
+        """Call the API."""
         exposed_entities = self.get_exposed_entities()
 
-        if user_input.conversation_id in self.history:
-            conversation_id = user_input.conversation_id
+        conversation_id = chat_log.conversation_id
+        if conversation_id in self.history:
             messages = self.history[conversation_id]
         else:
-            conversation_id = ulid.ulid()
             user_input.conversation_id = conversation_id
             try:
                 system_message = self._generate_system_message(
