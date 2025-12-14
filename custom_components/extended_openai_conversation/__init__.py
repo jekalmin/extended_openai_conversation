@@ -231,8 +231,22 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         intent_response = intent.IntentResponse(language=user_input.language)
         intent_response.async_set_speech(query_response.message.content)
+
+        # Detect if LLM is asking a follow-up question to enable continued conversation
+        response_text = query_response.message.content or ""
+        should_continue = (
+            response_text.rstrip().endswith("?") or
+            any(phrase in response_text.lower() for phrase in [
+                "which one", "would you like", "do you want", "would you prefer",
+                "which do you", "what would you", "shall i", "should i",
+                "choose from", "select from", "pick from"
+            ])
+        )
+
         return conversation.ConversationResult(
-            response=intent_response, conversation_id=conversation_id
+            response=intent_response,
+            conversation_id=conversation_id,
+            continue_conversation=should_continue
         )
 
     def _generate_system_message(
