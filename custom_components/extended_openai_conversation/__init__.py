@@ -16,6 +16,12 @@ from openai.types.chat.chat_completion import (
 import yaml
 
 from homeassistant.components import conversation
+from homeassistant.components.conversation import (
+    ChatLog,
+    ConversationInput,
+    ConversationResult,
+    async_get_chat_log,
+)
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
@@ -31,6 +37,7 @@ from homeassistant.helpers import (
     intent,
     template,
 )
+from homeassistant.helpers.chat_session import async_get_chat_session
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import ulid
@@ -160,16 +167,26 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         """Return a list of supported languages."""
         return MATCH_ALL
 
-    async def async_process(
-        self, user_input: conversation.ConversationInput
-    ) -> conversation.ConversationResult:
+    async def async_process(self, user_input: ConversationInput) -> ConversationResult:
+        """Process a sentence."""
+        with (
+            async_get_chat_session(self.hass, user_input.conversation_id) as session,
+            async_get_chat_log(self.hass, session, user_input) as chat_log,
+        ):
+            return await self._async_handle_message(user_input, chat_log)
+
+    async def _async_handle_message(
+        self,
+        user_input: ConversationInput,
+        chat_log: ChatLog,
+    ) -> ConversationResult:
+        """Call the API."""
         exposed_entities = self.get_exposed_entities()
 
-        if user_input.conversation_id in self.history:
-            conversation_id = user_input.conversation_id
+        conversation_id = chat_log.conversation_id
+        if conversation_id in self.history:
             messages = self.history[conversation_id]
         else:
-            conversation_id = ulid.ulid()
             user_input.conversation_id = conversation_id
             try:
                 system_message = self._generate_system_message(
@@ -231,8 +248,22 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         intent_response = intent.IntentResponse(language=user_input.language)
         intent_response.async_set_speech(query_response.message.content)
+
+        # Detect if LLM is asking a follow-up question to enable continued conversation
+        response_text = query_response.message.content or ""
+        should_continue = (
+            response_text.rstrip().endswith("?") or
+            any(phrase in response_text.lower() for phrase in [
+                "which one", "would you like", "do you want", "would you prefer",
+                "which do you", "what would you", "shall i", "should i",
+                "choose from", "select from", "pick from"
+            ])
+        )
+
         return conversation.ConversationResult(
-            response=intent_response, conversation_id=conversation_id
+            response=intent_response,
+            conversation_id=conversation_id,
+            continue_conversation=should_continue
         )
 
     def _generate_system_message(
@@ -372,7 +403,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
 
         _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
 
-        if response.usage.total_tokens > context_threshold:
+        if response.usage and response.usage.total_tokens > context_threshold:
             await self.truncate_message_history(messages, exposed_entities, user_input)
 
         choice: Choice = response.choices[0]
