@@ -53,7 +53,5 @@ Or if you want to get forecasts (tested with [Met.no](https://www.home-assistant
           type: "{{ type }}"
         target:
           entity_id: "{{ entity_id }}"
-        response_variable: forecast_data
-      - stop: ""
-        response_variable: forecast_data
+        response_variable: _function_result
 ```
