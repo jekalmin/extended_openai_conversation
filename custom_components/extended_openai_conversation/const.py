@@ -2,6 +2,8 @@
 
 DOMAIN = "extended_openai_conversation"
 DEFAULT_NAME = "Extended OpenAI Conversation"
+DEFAULT_CONVERSATION_NAME = "Extended OpenAI Conversation"
+
 CONF_ORGANIZATION = "organization"
 CONF_BASE_URL = "base_url"
 DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"

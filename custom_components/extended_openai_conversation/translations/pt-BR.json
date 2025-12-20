@@ -18,21 +18,28 @@
             }
         }
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "max_tokens": "Número máximo de tokens da resposta",
-                    "model": "Modelo da Conclusão",
-                    "prompt": "Template do Prompt",
-                    "temperature": "Temperatura",
-                    "top_p": "Top P",
-                    "max_function_calls_per_conversation": "Quantidade máxima de chamadas por conversação",
-                    "functions": "Funções",
-                    "attach_username": "Anexar nome do usuário na mensagem",
-                    "use_tools": "Use ferramentas",
-                    "context_threshold": "Limite do contexto",
-                    "context_truncate_strategy": "Estratégia de truncamento de contexto quando o limite é excedido"
+    "config_subentries": {
+        "conversation": {
+            "entry_type": "Conversation agent",
+            "initiate_flow": {
+                "reconfigure": "Reconfigure conversation agent",
+                "user": "Add conversation agent"
+            },
+            "step": {
+                "init": {
+                    "data": {
+                        "max_tokens": "Número máximo de tokens da resposta",
+                        "model": "Modelo da Conclusão",
+                        "prompt": "Template do Prompt",
+                        "temperature": "Temperatura",
+                        "top_p": "Top P",
+                        "max_function_calls_per_conversation": "Quantidade máxima de chamadas por conversação",
+                        "functions": "Funções",
+                        "attach_username": "Anexar nome do usuário na mensagem",
+                        "use_tools": "Use ferramentas",
+                        "context_threshold": "Limite do contexto",
+                        "context_truncate_strategy": "Estratégia de truncamento de contexto quando o limite é excedido"
+                    }
                 }
             }
         }
