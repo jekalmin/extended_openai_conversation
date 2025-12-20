@@ -373,7 +373,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         )
         functions = list(map(lambda s: s["spec"], self.get_functions()))
         function_call = "auto"
-        if n_requests == self.entry.options.get(
+        if n_requests >= self.entry.options.get(
             CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
