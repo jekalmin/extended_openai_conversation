@@ -1,3 +1,5 @@
+"""Helper functions for Extended OpenAI Conversation component."""
+
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
@@ -10,7 +12,7 @@ from typing import Any
 from urllib import parse
 
 from bs4 import BeautifulSoup
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
 import voluptuous as vol
 import yaml
 
@@ -68,7 +70,7 @@ def get_function_executor(value: str):
     return function_executor
 
 
-def is_azure(base_url: str):
+def is_azure(base_url: str | None) -> bool:
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
         return True
     return False
@@ -126,18 +128,17 @@ def _get_rest_data(hass, rest_config, arguments):
     return rest.create_rest_data_from_config(hass, rest_config)
 
 
-async def validate_authentication(
+async def get_authenticated_client(
     hass: HomeAssistant,
     api_key: str,
-    base_url: str,
-    api_version: str,
-    organization: str = None,
+    base_url: str | None,
+    api_version: str | None,
+    organization: str | None,
     skip_authentication=False,
-) -> None:
-    if skip_authentication:
-        return
+) -> AsyncClient:
+    """Validate OpenAI authentication."""
 
-    if is_azure(base_url):
+    if base_url and is_azure(base_url):
         client = AsyncAzureOpenAI(
             api_key=api_key,
             azure_endpoint=base_url,
@@ -153,12 +154,16 @@ async def validate_authentication(
             http_client=get_async_client(hass),
         )
 
+    if skip_authentication:
+        return client
+
     response = await hass.async_add_executor_job(
         partial(client.models.list, timeout=10)
     )
 
     async for _ in response:
         break
+    return client
 
 
 class FunctionExecutor(ABC):

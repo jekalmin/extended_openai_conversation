@@ -1,3 +1,5 @@
+"""Services for the extended openai conversation component."""
+
 import base64
 import logging
 import mimetypes

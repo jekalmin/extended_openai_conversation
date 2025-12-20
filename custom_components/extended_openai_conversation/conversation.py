@@ -1,16 +1,14 @@
+"""Extended OpenAI Conversation agent entity."""
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Literal
 
-from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai._exceptions import AuthenticationError, OpenAIError
-from openai.types.chat.chat_completion import (
-    ChatCompletion,
-    ChatCompletionMessage,
-    Choice,
-)
+from openai._exceptions import OpenAIError
+from openai.types.chat.chat_completion import ChatCompletion, Choice
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 import yaml
 
 from homeassistant.components import conversation
@@ -23,40 +21,29 @@ from homeassistant.components.conversation import (
     async_get_chat_log,
 )
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_NAME, CONF_API_KEY, MATCH_ALL
+from homeassistant.config_entries import ConfigSubentry
+from homeassistant.const import ATTR_NAME, MATCH_ALL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import (
-    ConfigEntryNotReady,
-    HomeAssistantError,
-    TemplateError,
-)
+from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import (
-    config_validation as cv,
     device_registry as dr,
     entity_registry as er,
     intent,
     template,
 )
 from homeassistant.helpers.chat_session import async_get_chat_session
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.typing import ConfigType
-from homeassistant.util import ulid
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from . import ExtendedOpenAIConfigEntry
 from .const import (
-    CONF_API_VERSION,
     CONF_ATTACH_USERNAME,
-    CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTIONS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
-    CONF_ORGANIZATION,
     CONF_PROMPT,
-    CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
     CONF_USE_TOOLS,
@@ -68,7 +55,6 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_PROMPT,
-    DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
@@ -82,89 +68,59 @@ from .exceptions import (
     ParseArgumentsFailed,
     TokenLengthExceededError,
 )
-from .helpers import get_function_executor, is_azure, validate_authentication
-from .services import async_setup_services
+from .helpers import get_function_executor
 
-DATA_AGENT = "agent"
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: ExtendedOpenAIConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the OpenAI Conversation entities."""
-    _LOGGER.info(
-        "Extended OpenAI Conversation async_setup_entry called: %s", config_entry.data
-    )
-    try:
-        await validate_authentication(
-            hass=hass,
-            api_key=config_entry.data[CONF_API_KEY],
-            base_url=config_entry.data.get(CONF_BASE_URL),
-            api_version=config_entry.data.get(CONF_API_VERSION),
-            organization=config_entry.data.get(CONF_ORGANIZATION),
-            skip_authentication=config_entry.data.get(
-                CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
-            ),
+    for subentry in config_entry.subentries.values():
+        if subentry.subentry_type != "conversation":
+            continue
+
+        async_add_entities(
+            [ExtendedOpenAIAgentEntity(hass, config_entry, subentry)],
+            config_subentry_id=subentry.subentry_id,
         )
-    except AuthenticationError as err:
-        _LOGGER.error("Invalid API key: %s", err)
-        raise ConfigEntryNotReady("Invalid API key") from err
-    except OpenAIError as err:
-        raise ConfigEntryNotReady(err) from err
-
-    agent = ExtendedOpenAIAgent(hass, config_entry)
-
-    data = hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})
-    data[CONF_API_KEY] = config_entry.data[CONF_API_KEY]
-    data[DATA_AGENT] = agent
-
-    async_add_entities([agent])
-    # conversation.async_set_agent(hass, config_entry, agent)
 
 
-class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationAgent):
+class ExtendedOpenAIAgentEntity(
+    ConversationEntity, conversation.AbstractConversationAgent
+):
     """OpenAI conversation agent."""
 
     _attr_has_entity_name = True
     _attr_name = None
     _attr_supported_features = ConversationEntityFeature.CONTROL
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ExtendedOpenAIConfigEntry,
+        subentry: ConfigSubentry,
+    ) -> None:
         """Initialize the agent."""
         self.hass = hass
         self.entry = entry
+        self.subentry = subentry
         self.history: dict[str, list[dict]] = {}
 
-        self._attr_unique_id = entry.entry_id
+        self.options = subentry.data
+        self._attr_unique_id = subentry.subentry_id
+
         self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=subentry.title,
             manufacturer="OpenAI",
-            model=self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL),
+            model=self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL),
             entry_type=dr.DeviceEntryType.SERVICE,
         )
-
-        base_url = entry.data.get(CONF_BASE_URL)
-        if is_azure(base_url):
-            self.client = AsyncAzureOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                azure_endpoint=base_url,
-                api_version=entry.data.get(CONF_API_VERSION),
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
-        else:
-            self.client = AsyncOpenAI(
-                api_key=entry.data[CONF_API_KEY],
-                base_url=base_url,
-                organization=entry.data.get(CONF_ORGANIZATION),
-                http_client=get_async_client(hass),
-            )
-        # Cache current platform data which gets added to each request (caching done by library)
-        _ = hass.async_add_executor_job(self.client.platform_headers)
+        self.client = entry.runtime_data
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -208,7 +164,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
                 )
             messages = [system_message]
         user_message = {"role": "user", "content": user_input.text}
-        if self.entry.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
+        if self.options.get(CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME):
             user = user_input.context.user_id
             if user is not None:
                 user_message[ATTR_NAME] = user
@@ -247,6 +203,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
                 "response": query_response.response.model_dump(),
                 "user_input": user_input,
                 "messages": messages,
+                "agent_id": self.subentry.subentry_id,
             },
         )
 
@@ -281,7 +238,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
     def _generate_system_message(
         self, exposed_entities, user_input: conversation.ConversationInput
     ):
-        raw_prompt = self.entry.options.get(CONF_PROMPT, DEFAULT_PROMPT)
+        raw_prompt = self.options.get(CONF_PROMPT, DEFAULT_PROMPT)
         prompt = self._async_generate_prompt(raw_prompt, exposed_entities, user_input)
         return {"role": "system", "content": prompt}
 
@@ -329,7 +286,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
 
     def get_functions(self):
         try:
-            function = self.entry.options.get(CONF_FUNCTIONS)
+            function = self.options.get(CONF_FUNCTIONS)
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
                 for setting in result:
@@ -349,7 +306,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
         self, messages, exposed_entities, user_input: conversation.ConversationInput
     ):
         """Truncate message history."""
-        strategy = self.entry.options.get(
+        strategy = self.options.get(
             CONF_CONTEXT_TRUNCATE_STRATEGY, DEFAULT_CONTEXT_TRUNCATE_STRATEGY
         )
 
@@ -375,17 +332,17 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
         n_requests,
     ) -> OpenAIQueryResponse:
         """Process a sentence."""
-        model = self.entry.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
-        max_tokens = self.entry.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
-        top_p = self.entry.options.get(CONF_TOP_P, DEFAULT_TOP_P)
-        temperature = self.entry.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
-        use_tools = self.entry.options.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)
-        context_threshold = self.entry.options.get(
+        model = self.options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        max_tokens = self.options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
+        top_p = self.options.get(CONF_TOP_P, DEFAULT_TOP_P)
+        temperature = self.options.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE)
+        use_tools = self.options.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)
+        context_threshold = self.options.get(
             CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
         )
         functions = list(map(lambda s: s["spec"], self.get_functions()))
         function_call = "auto"
-        if n_requests == self.entry.options.get(
+        if n_requests == self.options.get(
             CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         ):
@@ -403,7 +360,7 @@ class ExtendedOpenAIAgent(ConversationEntity, conversation.AbstractConversationA
 
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
-        response: ChatCompletion = await self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
             max_tokens=max_tokens,
