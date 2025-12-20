@@ -234,7 +234,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 response=intent_response, conversation_id=conversation_id
             )
 
-        messages.append(query_response.message.model_dump(exclude_none=True))
+        msg = query_response.message.model_dump(exclude_none=True)
+        if msg.get("tool_calls") == []:
+            msg.pop("tool_calls", None)
+        messages.append(msg)
         self.history[conversation_id] = messages
 
         self.hass.bus.async_fire(
