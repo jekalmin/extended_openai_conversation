@@ -415,8 +415,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        if choice.finish_reason == "tool_calls" or (
-            choice.finish_reason == "stop" and choice.message.tool_calls is not None
+        # Some OpenAI servers returns tool_calls=[] on normal "stop" completions.
+        # Only enter tool execution when tool_calls is present AND non-empty.
+        if message.tool_calls and (
+            choice.finish_reason == "tool_calls" or choice.finish_reason == "stop"
         ):
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
