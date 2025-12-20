@@ -153,7 +153,12 @@ async def validate_authentication(
             http_client=get_async_client(hass),
         )
 
-    await hass.async_add_executor_job(partial(client.models.list, timeout=10))
+    response = await hass.async_add_executor_job(
+        partial(client.models.list, timeout=10)
+    )
+
+    async for _ in response:
+        break
 
 
 class FunctionExecutor(ABC):
@@ -391,7 +396,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         exposed_entities,
     ):
         user = await hass.auth.async_get_user(user_input.context.user_id)
-        return {'name': user.name if user and hasattr(user, 'name') else 'Unknown'}
+        return {"name": user.name if user and hasattr(user, "name") else "Unknown"}
 
     async def get_statistics(
         self,
