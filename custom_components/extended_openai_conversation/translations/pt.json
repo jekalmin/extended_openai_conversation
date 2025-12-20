@@ -58,8 +58,7 @@
                 },
                 "images": {
                     "name": "Imagens",
-                    "description": "Uma lista de imagens que serão analisadas",
-                    "example": "{\"url\": \"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg\"}"
+                    "description": "Uma lista de imagens que serão analisadas"
                 },
                 "max_tokens": {
                     "name": "Max Tokens",
