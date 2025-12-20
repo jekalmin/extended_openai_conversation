@@ -130,7 +130,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
 class ExtendedOpenAIConversationConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OpenAI Conversation."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None

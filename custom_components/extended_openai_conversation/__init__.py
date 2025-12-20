@@ -7,11 +7,15 @@ import logging
 from openai import AsyncClient
 from openai._exceptions import AuthenticationError, OpenAIError
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -35,6 +39,7 @@ type ExtendedOpenAIConfigEntry = ConfigEntry[AsyncClient]
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up OpenAI Conversation."""
+    await async_migrate_integration(hass)
     await async_setup_services(hass, config)
     return True
 
@@ -76,3 +81,32 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_migrate_integration(hass: HomeAssistant) -> None:
+    """Migrate integration entry structure."""
+
+    # Make sure we get enabled config entries first
+    entries = sorted(
+        hass.config_entries.async_entries(DOMAIN),
+        key=lambda e: e.disabled_by is not None,
+    )
+    if not any(entry.version == 1 for entry in entries):
+        return
+
+    for entry in entries:
+        _LOGGER.warning(
+            "Migrating Extended OpenAI Conversation config entry %s from version %s to version 2",
+            entry.entry_id,
+            entry.version,
+        )
+        subentry = ConfigSubentry(
+            data=entry.options,
+            subentry_type="conversation",
+            title=entry.title,
+            unique_id=None,
+        )
+        hass.config_entries.async_add_subentry(entry, subentry)
+        hass.config_entries.async_update_entry(
+            entry, title=entry.title, options={}, version=2
+        )
