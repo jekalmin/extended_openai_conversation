@@ -80,7 +80,12 @@ from .exceptions import (
     ParseArgumentsFailed,
     TokenLengthExceededError,
 )
-from .helpers import get_function_executor, is_azure, validate_authentication
+from .helpers import (
+    get_function_executor,
+    is_azure,
+    validate_authentication,
+    filter_supported_chat_params,
+)
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -380,7 +385,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
             function_call = "none"
 
         tool_kwargs = {"functions": functions, "function_call": function_call}
-        if use_tools:
+        if function_call == "none":
+            # Avoid sending function/tool specs at all when function calls are disabled
+            tool_kwargs = {}
+        elif use_tools:
             tool_kwargs = {
                 "tools": [{"type": "function", "function": func} for func in functions],
                 "tool_choice": function_call,
@@ -389,19 +397,57 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         if len(functions) == 0:
             tool_kwargs = {}
 
-        _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
-
-        response: ChatCompletion = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            temperature=temperature,
-            user=user_input.conversation_id,
-            **tool_kwargs,
+        request_params = {
+            "model": model,
+            "messages": messages,
+            "user": user_input.conversation_id,
+        }
+        supported = filter_supported_chat_params(
+            model,
+            {
+                "max_tokens": max_tokens,
+                "max_completion_tokens": max_tokens,
+                "top_p": top_p,
+                "temperature": temperature,
+            },
         )
+        extra_body = {}
+        if "max_completion_tokens" in supported:
+            extra_body["max_completion_tokens"] = supported.pop("max_completion_tokens")
+        request_params.update(supported)
 
-        _LOGGER.info("Response %s", json.dumps(response.model_dump(exclude_none=True)))
+        response: ChatCompletion | None = None
+        tokens_value = max_tokens
+        max_cap = 4096
+        for attempt in range(4):
+            supported = filter_supported_chat_params(
+                model,
+                {
+                    "max_tokens": tokens_value,
+                    "max_completion_tokens": tokens_value,
+                    "top_p": top_p,
+                    "temperature": temperature,
+                },
+            )
+            extra_body = {}
+            if "max_completion_tokens" in supported:
+                extra_body["max_completion_tokens"] = supported.pop("max_completion_tokens")
+
+            call_params = dict(request_params)
+            call_params.update(supported)
+
+            response = await self.client.chat.completions.create(
+                **call_params,
+                **tool_kwargs,
+                extra_body=extra_body if extra_body else None,
+            )
+
+            if response.choices and response.choices[0].finish_reason == "length":
+                observed = response.usage.completion_tokens if response.usage else tokens_value
+                tokens_value = min(max(tokens_value * 2, observed + 256), max_cap)
+                if attempt < 3:
+                    continue
+            break
 
         if response.usage and response.usage.total_tokens > context_threshold:
             await self.truncate_message_history(messages, exposed_entities, user_input)
@@ -422,7 +468,10 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
         if choice.finish_reason == "length":
-            raise TokenLengthExceededError(response.usage.completion_tokens)
+            _LOGGER.warning(
+                "Completion cut off due to length after retries (tokens=%s)",
+                response.usage.completion_tokens if response.usage else "unknown",
+            )
 
         return OpenAIQueryResponse(response=response, message=message)
 

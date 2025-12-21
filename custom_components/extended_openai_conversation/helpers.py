@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
+import fnmatch
 import logging
 import os
 import re
@@ -59,6 +60,88 @@ _LOGGER = logging.getLogger(__name__)
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
+
+
+# In-memory cache for supported parameters spec
+_SUPPORTED_PARAMS_SPEC: dict | None = None
+
+
+def _load_supported_parameters_spec() -> dict:
+    """Load supported parameters spec from YAML file once and cache it.
+
+    Returns an empty dict if file does not exist or cannot be parsed.
+    """
+    global _SUPPORTED_PARAMS_SPEC
+    if _SUPPORTED_PARAMS_SPEC is not None:
+        return _SUPPORTED_PARAMS_SPEC
+
+    spec_path = os.path.join(os.path.dirname(__file__), "supported_parameters.yaml")
+    try:
+        with open(spec_path, "r", encoding="utf-8") as f:
+            _SUPPORTED_PARAMS_SPEC = yaml.safe_load(f) or {}
+    except Exception as err:  # pylint: disable=broad-except
+        _LOGGER.debug("Failed to load supported parameters spec: %s", err)
+        _SUPPORTED_PARAMS_SPEC = {}
+    return _SUPPORTED_PARAMS_SPEC
+
+
+def get_model_parameter_support(model: str) -> dict[str, dict]:
+    """Return merged parameter support map for a model.
+
+    Structure: {param_name: {supported: bool, default: any?}}
+    Applies defaults first, then the first matching model override.
+    """
+    spec = _load_supported_parameters_spec()
+    default_params: dict = ((spec.get("defaults") or {}).get("parameters") or {})
+
+    # Start with defaults
+    merged: dict[str, dict] = {name: dict(cfg or {}) for name, cfg in default_params.items()}
+
+    # Apply first matching model override
+    for model_entry in (spec.get("models") or []):
+        pattern = model_entry.get("match")
+        if not pattern:
+            continue
+        try:
+            if fnmatch.fnmatch(model, pattern):
+                override_params: dict = (model_entry.get("parameters") or {})
+                for param_name, param_cfg in override_params.items():
+                    base_cfg = merged.get(param_name, {})
+                    base_cfg.update(param_cfg or {})
+                    merged[param_name] = base_cfg
+                break
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.debug("Error applying model override for pattern %s: %s", pattern, err)
+
+    return merged
+
+
+def is_parameter_supported(model: str, param_name: str) -> bool:
+    """Check if a parameter is supported for the given model.
+
+    If the parameter is not listed, assume supported for backward compatibility.
+    """
+    support_map = get_model_parameter_support(model)
+    cfg = support_map.get(param_name)
+    if cfg is None:
+        return True
+    return bool(cfg.get("supported", True))
+
+
+def filter_supported_chat_params(model: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Filter chat completion params to those supported by the model.
+
+    Keeps values provided in params and drops unsupported ones. If a value is
+    None and a default exists in the spec, uses that default. Does not inject
+    new parameters not present in params.
+    """
+    support_map = get_model_parameter_support(model)
+    filtered: dict[str, Any] = {}
+    for name, value in params.items():
+        cfg = support_map.get(name, {"supported": True})
+        if bool(cfg.get("supported", True)) is True:
+            filtered[name] = value if value is not None else cfg.get("default")
+    return filtered
 
 
 def get_function_executor(value: str):
