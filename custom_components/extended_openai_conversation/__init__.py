@@ -310,6 +310,7 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
                     "entity_id": entity_id,
                     "name": state.name,
                     "state": self.hass.states.get(entity_id).state,
+                    "lastUpdated": self.hass.states.get(entity_id).last_updated,
                     "aliases": aliases,
                 }
             )
