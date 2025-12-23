@@ -194,7 +194,10 @@ class ExtendedOpenAIAgentEntity(
                 response=intent_response, conversation_id=conversation_id
             )
 
-        messages.append(query_response.message.model_dump(exclude_none=True))
+        msg = query_response.message.model_dump(exclude_none=True)
+        if msg.get("tool_calls") == []:
+            msg.pop("tool_calls", None)
+        messages.append(msg)
         self.history[conversation_id] = messages
 
         self.hass.bus.async_fire(
@@ -384,8 +387,10 @@ class ExtendedOpenAIAgentEntity(
             return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        if choice.finish_reason == "tool_calls" or (
-            choice.finish_reason == "stop" and choice.message.tool_calls is not None
+        # Some OpenAI servers returns tool_calls=[] on normal "stop" completions.
+        # Only enter tool execution when tool_calls is present AND non-empty.
+        if message.tool_calls and (
+            choice.finish_reason == "tool_calls" or choice.finish_reason == "stop"
         ):
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
