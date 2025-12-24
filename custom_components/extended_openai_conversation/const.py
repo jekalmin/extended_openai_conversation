@@ -10,6 +10,9 @@ DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
 CONF_API_VERSION = "api_version"
 CONF_SKIP_AUTHENTICATION = "skip_authentication"
 DEFAULT_SKIP_AUTHENTICATION = False
+CONF_API_PROVIDER = "api_provider"
+API_PROVIDERS = [{"key": "openai", "label": "OpenAI"}, {"key": "azure", "label": "Azure OpenAI"}]
+DEFAULT_API_PROVIDER = API_PROVIDERS[0]["key"]
 
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
 EVENT_CONVERSATION_FINISHED = "extended_openai_conversation.conversation.finished"

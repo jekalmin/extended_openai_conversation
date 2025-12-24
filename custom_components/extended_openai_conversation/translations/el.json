@@ -13,7 +13,8 @@
                     "base_url": "Βασική Διεύθυνση",
                     "api_version": "Έκδοση API",
                     "organization": "Οργανισμός",
-                    "skip_authentication": "Παράλειψη Ελέγχου Ταυτότητας"
+                    "skip_authentication": "Παράλειψη Ελέγχου Ταυτότητας",
+                    "api_provider": "Api Provider"
                 }
             }
         }

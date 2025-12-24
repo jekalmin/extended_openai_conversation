@@ -12,7 +12,8 @@
                     "api_key": "Chiave API",
                     "base_url": "URL di base",
                     "api_version": "Versione API",
-                    "skip_authentication": "Ignora autenticazione"
+                    "skip_authentication": "Ignora autenticazione",
+                    "api_provider": "Api Provider"
                 }
             }
         }
