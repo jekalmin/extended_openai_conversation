@@ -70,7 +70,8 @@ def get_function_executor(value: str):
     return function_executor
 
 
-def is_azure(base_url: str | None) -> bool:
+def is_azure_url(base_url: str | None) -> bool:
+    """Check if the base URL is an Azure OpenAI URL."""
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
         return True
     return False
@@ -134,11 +135,12 @@ async def get_authenticated_client(
     base_url: str | None,
     api_version: str | None,
     organization: str | None,
+    api_provider: str | None,
     skip_authentication=False,
 ) -> AsyncClient:
     """Validate OpenAI authentication."""
 
-    if base_url and is_azure(base_url):
+    if base_url and (is_azure_url(base_url) or api_provider == "azure"):
         client = AsyncAzureOpenAI(
             api_key=api_key,
             azure_endpoint=base_url,

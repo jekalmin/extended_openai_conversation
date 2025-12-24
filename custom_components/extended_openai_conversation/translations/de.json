@@ -13,7 +13,8 @@
                     "base_url": "Base Url",
                     "api_version": "Api Version",
                     "organization": "Organization",
-                    "skip_authentication": "Authentifizierung überspringen"
+                    "skip_authentication": "Authentifizierung überspringen",
+                    "api_provider": "Api Provider"
                 }
             }
         }

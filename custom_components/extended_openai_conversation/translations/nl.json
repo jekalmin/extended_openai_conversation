@@ -13,7 +13,8 @@
                     "base_url": "Basis URL",
                     "api_version": "API Version",
                     "organization": "Organization",
-                    "skip_authentication": "Authenticatie overslaan"
+                    "skip_authentication": "Authenticatie overslaan",
+                    "api_provider": "Api Provider"
                 }
             }
         }

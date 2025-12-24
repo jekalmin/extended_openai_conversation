@@ -24,6 +24,8 @@ from .const import (
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
     DEFAULT_SKIP_AUTHENTICATION,
+    CONF_API_PROVIDER,
+    DEFAULT_API_PROVIDER,
     DOMAIN,
 )
 from .helpers import get_authenticated_client
@@ -59,6 +61,7 @@ async def async_setup_entry(
             skip_authentication=entry.data.get(
                 CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
             ),
+            api_provider=entry.data.get(CONF_API_PROVIDER, DEFAULT_API_PROVIDER),
         )
     except AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)

@@ -13,7 +13,8 @@
                     "base_url": "Base Url",
                     "api_version": "API Verzió",
                     "organization": "Organization",
-                    "skip_authentication": "Azonosítás átugrása"
+                    "skip_authentication": "Azonosítás átugrása",
+                    "api_provider": "Api Provider"
                 }
             }
         }

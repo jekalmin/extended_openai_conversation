@@ -20,6 +20,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_API_KEY, CONF_NAME
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -32,6 +33,8 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    API_PROVIDERS,
+    CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_ATTACH_USERNAME,
     CONF_BASE_URL,
@@ -48,6 +51,7 @@ from .const import (
     CONF_TOP_P,
     CONF_USE_TOOLS,
     CONTEXT_TRUNCATE_STRATEGIES,
+    DEFAULT_API_PROVIDER,
     DEFAULT_ATTACH_USERNAME,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_BASE_URL,
@@ -79,6 +83,17 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
         ): bool,
+        vol.Optional(CONF_API_PROVIDER, default=DEFAULT_API_PROVIDER): SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(
+                        value=api_provider["key"], label=api_provider["label"]
+                    )
+                    for api_provider in API_PROVIDERS
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
     }
 )
 
@@ -111,11 +126,15 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     api_version = data.get(CONF_API_VERSION)
     organization = data.get(CONF_ORGANIZATION)
     skip_authentication = data.get(CONF_SKIP_AUTHENTICATION, False)
+    api_provider = data.get(CONF_API_PROVIDER)
 
     if base_url == DEFAULT_CONF_BASE_URL:
         # Do not set base_url if using OpenAI for case of OpenAI's base_url change
         base_url = None
         data.pop(CONF_BASE_URL)
+
+    if api_provider == "azure" and not base_url:
+        raise HomeAssistantError("Azure OpenAI requires a custom base URL.")
 
     await get_authenticated_client(
         hass=hass,
@@ -123,6 +142,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
         base_url=base_url,
         api_version=api_version,
         organization=organization,
+        api_provider=api_provider,
         skip_authentication=skip_authentication,
     )
 
