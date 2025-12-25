@@ -363,13 +363,22 @@ class ExtendedOpenAIAgentEntity(
 
         _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
 
+        # Determine which token parameter to use based on model
+        # Newer models (gpt-4o, gpt-5, o1, o3, etc.) require max_completion_tokens
+        model_lower = model.lower()
+        use_new_token_param = any(
+            model_lower.startswith(prefix) or f"-{prefix}" in model_lower
+            for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
+        )
+        token_kwargs = {"max_completion_tokens": max_tokens} if use_new_token_param else {"max_tokens": max_tokens}
+
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=max_tokens,
             top_p=top_p,
             temperature=temperature,
             user=user_input.conversation_id,
+            **token_kwargs,
             **tool_kwargs,
         )
 
