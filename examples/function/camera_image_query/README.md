@@ -33,7 +33,7 @@ of allowlist_external_dirs to /media or your choosen directory.
         sequence:
           - service: extended_openai_conversation.query_image
             data:
-              model: gpt-4-vision-preview
+              model: gpt-4.1-mini
               prompt: What's in this image?
               images:
                 - url: "{{url}}"
@@ -99,7 +99,7 @@ of allowlist_external_dirs to /media or your choosen directory.
               filename: '{{filename}}'
           - service: extended_openai_conversation.query_image
             data:
-              model: gpt-4-vision-preview
+              model: gpt-4.1-mini
               prompt: What's in this image?
               images:
                 - url: "{{filename}}"

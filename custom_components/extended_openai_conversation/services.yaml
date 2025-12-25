@@ -6,7 +6,7 @@ query_image:
         config_entry:
           integration: extended_openai_conversation
     model:
-      example: gpt-4-vision-preview
+      example: gpt-4.1-mini
       selector:
         text:
     prompt:

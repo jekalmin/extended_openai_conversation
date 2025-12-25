@@ -57,7 +57,7 @@
                 "model": {
                     "name": "Μοντέλο",
                     "description": "Το μοντέλο",
-                    "example": "gpt-4-vision-preview"
+                    "example": "gpt-4.1-mini"
                 },
                 "prompt": {
                     "name": "Προτροπή",
