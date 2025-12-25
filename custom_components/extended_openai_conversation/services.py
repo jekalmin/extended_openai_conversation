@@ -101,7 +101,11 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 model_lower.startswith(prefix) or f"-{prefix}" in model_lower
                 for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
             )
-            token_kwargs = {"max_completion_tokens": call.data["max_tokens"]} if use_new_token_param else {"max_tokens": call.data["max_tokens"]}
+            token_kwargs = (
+                {"max_completion_tokens": call.data["max_tokens"]}
+                if use_new_token_param
+                else {"max_tokens": call.data["max_tokens"]}
+            )
 
             response = await client.chat.completions.create(
                 model=model,
@@ -119,7 +123,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         """Change configuration."""
         entry_id = call.data["config_entry"]
         entry = hass.config_entries.async_get_entry(entry_id)
-        if not entry:
+        if not entry or entry.domain != DOMAIN:
             raise HomeAssistantError(f"Config entry {entry_id} not found")
 
         updates = {}
