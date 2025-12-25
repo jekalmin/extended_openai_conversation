@@ -11,7 +11,10 @@ CONF_API_VERSION = "api_version"
 CONF_SKIP_AUTHENTICATION = "skip_authentication"
 DEFAULT_SKIP_AUTHENTICATION = False
 CONF_API_PROVIDER = "api_provider"
-API_PROVIDERS = [{"key": "openai", "label": "OpenAI"}, {"key": "azure", "label": "Azure OpenAI"}]
+API_PROVIDERS = [
+    {"key": "openai", "label": "OpenAI"},
+    {"key": "azure", "label": "Azure OpenAI"},
+]
 DEFAULT_API_PROVIDER = API_PROVIDERS[0]["key"]
 
 EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
@@ -92,7 +95,7 @@ DEFAULT_CONF_FUNCTIONS = [
 CONF_ATTACH_USERNAME = "attach_username"
 DEFAULT_ATTACH_USERNAME = False
 CONF_USE_TOOLS = "use_tools"
-DEFAULT_USE_TOOLS = False
+DEFAULT_USE_TOOLS = True
 CONF_CONTEXT_THRESHOLD = "context_threshold"
 DEFAULT_CONTEXT_THRESHOLD = 13000
 CONTEXT_TRUNCATE_STRATEGIES = [{"key": "clear", "label": "Clear All Messages"}]
