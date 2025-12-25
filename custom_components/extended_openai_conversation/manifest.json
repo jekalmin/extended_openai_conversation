@@ -19,6 +19,7 @@
   "issue_tracker": "https://github.com/jekalmin/extended_openai_conversation/issues",
   "requirements": [
     "openai~=2.8.0"
+    "aiofiles>=24.1.0"
   ],
   "version": "1.2.2"
 }
