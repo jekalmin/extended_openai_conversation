@@ -74,6 +74,40 @@
                     "example": "300"
                 }
             }
+        },
+        "change_config": {
+            "name": "Change configuration",
+            "description": "Changes the configuration of the integration.",
+            "fields": {
+                "config_entry": {
+                    "name": "Config Entry",
+                    "description": "The config entry to update."
+                },
+                "api_key": {
+                    "name": "Chave API",
+                    "description": "The API key."
+                },
+                "base_url": {
+                    "name": "Base Url",
+                    "description": "The base URL."
+                },
+                "api_version": {
+                    "name": "Versão da API",
+                    "description": "The API version."
+                },
+                "organization": {
+                    "name": "Organização",
+                    "description": "The organization."
+                },
+                "skip_authentication": {
+                    "name": "Saltar autenticação",
+                    "description": "Skip authentication."
+                },
+                "api_provider": {
+                    "name": "Api Provider",
+                    "description": "The API provider. (OpenAI or Azure)"
+                }
+            }
         }
     }
 }
