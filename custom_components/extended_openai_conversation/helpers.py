@@ -69,7 +69,7 @@ def get_data_folder(hass: HomeAssistant) -> str:
     return os.path.join(hass.config.config_dir, "extended_openai_conversation")
 
 
-AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net)"
+AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
 
 
 def get_function_executor(value: str):

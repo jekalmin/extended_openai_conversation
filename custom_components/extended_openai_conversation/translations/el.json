@@ -1,0 +1,71 @@
+{
+    "config": {
+        "error": {
+            "cannot_connect": "Αποτυχία σύνδεσης",
+            "invalid_auth": "Μη έγκυρος έλεγχος ταυτότητας",
+            "unknown": "Απροσδόκητο σφάλμα"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "name": "Όνομα",
+                    "api_key": "Κλειδί API",
+                    "base_url": "Βασική Διεύθυνση",
+                    "api_version": "Έκδοση API",
+                    "organization": "Οργανισμός",
+                    "skip_authentication": "Παράλειψη Ελέγχου Ταυτότητας"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "max_tokens": "Μέγιστα tokens προς επιστροφή στην απάντηση",
+                    "model": "Μοντέλο Ολοκλήρωσης",
+                    "prompt": "Πρότυπο Προτροπής",
+                    "temperature": "Θερμοκρασία",
+                    "top_p": "Top P",
+                    "max_function_calls_per_conversation": "Μέγιστες κλήσεις συναρτήσεων ανά συνομιλία",
+                    "functions": "Συναρτήσεις",
+                    "attach_username": "Επισύναψη Ονόματος Χρήστη στο Μήνυμα",
+                    "use_tools": "Χρήση Εργαλείων",
+                    "context_threshold": "Όριο Περιεχομένου",
+                    "context_truncate_strategy": "Στρατηγική περικοπής περιεχομένου όταν ξεπεραστεί το όριο"
+                }
+            }
+        }
+    },
+    "services": {
+        "query_image": {
+            "name": "Ερώτημα εικόνας",
+            "description": "Λάβετε εικόνες και απαντήστε ερωτήσεις για αυτές",
+            "fields": {
+                "config_entry": {
+                    "name": "Καταχώρηση Διαμόρφωσης",
+                    "description": "Η καταχώρηση διαμόρφωσης που θα χρησιμοποιηθεί για αυτή την υπηρεσία"
+                },
+                "model": {
+                    "name": "Μοντέλο",
+                    "description": "Το μοντέλο",
+                    "example": "gpt-4-vision-preview"
+                },
+                "prompt": {
+                    "name": "Προτροπή",
+                    "description": "Το κείμενο για να ρωτήσετε σχετικά με την εικόνα",
+                    "example": "Τι υπάρχει σε αυτή την εικόνα;"
+                },
+                "images": {
+                    "name": "Εικόνες",
+                    "description": "Μια λίστα εικόνων που θα ερωτηθούν"
+                },
+                "max_tokens": {
+                    "name": "Μέγιστα Tokens",
+                    "description": "Τα μέγιστα tokens",
+                    "example": "300"
+                }
+            }
+        }
+    }
+} 
