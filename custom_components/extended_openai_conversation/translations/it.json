@@ -56,7 +56,7 @@
                 "model": {
                     "name": "Modello",
                     "description": "Il modello",
-                    "example": "gpt-4-vision-preview"
+                    "example": "gpt-4.1-mini"
                 },
                 "prompt": {
                     "name": "Prompt",
