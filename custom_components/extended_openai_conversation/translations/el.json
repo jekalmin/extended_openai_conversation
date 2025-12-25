@@ -40,6 +40,9 @@
                         "use_tools": "Χρήση Εργαλείων",
                         "context_threshold": "Όριο Περιεχομένου",
                         "context_truncate_strategy": "Στρατηγική περικοπής περιεχομένου όταν ξεπεραστεί το όριο"
+                    },
+                    "data_description": {
+                        "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
                     }
                 }
             }

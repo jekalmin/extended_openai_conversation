@@ -40,6 +40,9 @@
                         "use_tools": "Używaj narzędzi",
                         "context_threshold": "Limit kontekstu",
                         "context_truncate_strategy": "Co zrobić z kontekstem, gdy przekroczony limit"
+                    },
+                    "data_description": {
+                        "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
                     }
                 }
             }
