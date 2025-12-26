@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from openai._exceptions import OpenAIError
 from openai.types.chat.chat_completion import ChatCompletion, Choice
@@ -440,18 +440,34 @@ class ExtendedOpenAIAgentEntity(
         message: ChatCompletionMessage,
         exposed_entities,
         n_requests,
-        function,
+        functionSpec,
     ) -> OpenAIQueryResponse:
-        function_executor = get_function_executor(function["function"]["type"])
+        function = functionSpec["function"]
+        function_executor = get_function_executor(function["type"])
 
         try:
             arguments = json.loads(message.function_call.arguments)
         except json.decoder.JSONDecodeError as err:
             raise ParseArgumentsFailed(message.function_call.arguments) from err
 
-        result = await function_executor.execute(
-            self.hass, function["function"], arguments, user_input, exposed_entities
-        )
+        if self.should_run_in_background(arguments):
+            # create a delayed function and execute in background
+            function_executor = get_function_executor("composite")
+            self.entry.async_create_task(
+                self.hass,
+                function_executor.execute(
+                    self.hass,
+                    self.get_delayed_function(function, arguments),
+                    arguments,
+                    user_input,
+                    exposed_entities,
+                ),
+            )
+            result = "Scheduled"
+        else:
+            result = await function_executor.execute(
+                self.hass, function, arguments, user_input, exposed_entities
+            )
 
         messages.append(
             {
@@ -502,19 +518,53 @@ class ExtendedOpenAIAgentEntity(
         user_input: conversation.ConversationInput,
         tool,
         exposed_entities,
-        function,
-    ) -> OpenAIQueryResponse:
-        function_executor = get_function_executor(function["function"]["type"])
+        functionSpec,
+    ) -> Any:
+        function = functionSpec["function"]
+        function_executor = get_function_executor(function["type"])
 
         try:
             arguments = json.loads(tool.function.arguments)
         except json.decoder.JSONDecodeError as err:
             raise ParseArgumentsFailed(tool.function.arguments) from err
 
-        result = await function_executor.execute(
-            self.hass, function["function"], arguments, user_input, exposed_entities
-        )
+        if self.should_run_in_background(arguments):
+            # create a delayed function and execute in background
+            function_executor = get_function_executor("composite")
+            self.entry.async_create_task(
+                self.hass,
+                function_executor.execute(
+                    self.hass,
+                    self.get_delayed_function(function, arguments),
+                    arguments,
+                    user_input,
+                    exposed_entities,
+                ),
+            )
+            result = "Scheduled"
+        else:
+            result = await function_executor.execute(
+                self.hass, function, arguments, user_input, exposed_entities
+            )
         return result
+
+    def should_run_in_background(self, arguments) -> bool:
+        """Check if function needs delay."""
+        return isinstance(arguments, dict) and arguments.get("delay") is not None
+
+    def get_delayed_function(self, function, arguments) -> dict:
+        """Execute function with delay."""
+        # create a composite function with delay in script function
+        return {
+            "type": "composite",
+            "sequence": [
+                {
+                    "type": "script",
+                    "sequence": [{"delay": arguments["delay"]}],
+                },
+                function,
+            ],
+        }
 
 
 class OpenAIQueryResponse:
