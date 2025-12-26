@@ -264,37 +264,27 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         return {
             vol.Optional(
                 CONF_PROMPT,
-                description={
-                    "suggested_value": options.get(CONF_PROMPT, DEFAULT_PROMPT)
-                },
+                description={"suggested_value": options.get(CONF_PROMPT)},
                 default=DEFAULT_PROMPT,
             ): TemplateSelector(),
             vol.Optional(
                 CONF_CHAT_MODEL,
-                description={
-                    "suggested_value": options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
-                },
+                description={"suggested_value": options.get(CONF_CHAT_MODEL)},
                 default=DEFAULT_CHAT_MODEL,
             ): str,
             vol.Optional(
                 CONF_MAX_TOKENS,
-                description={
-                    "suggested_value": options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
-                },
+                description={"suggested_value": options.get(CONF_MAX_TOKENS)},
                 default=DEFAULT_MAX_TOKENS,
             ): int,
             vol.Optional(
                 CONF_TOP_P,
-                description={"suggested_value": options.get(CONF_TOP_P, DEFAULT_TOP_P)},
+                description={"suggested_value": options.get(CONF_TOP_P)},
                 default=DEFAULT_TOP_P,
             ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
             vol.Optional(
                 CONF_TEMPERATURE,
-                description={
-                    "suggested_value": options.get(
-                        CONF_TEMPERATURE, DEFAULT_TEMPERATURE
-                    )
-                },
+                description={"suggested_value": options.get(CONF_TEMPERATURE)},
                 default=DEFAULT_TEMPERATURE,
             ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
             vol.Optional(
@@ -302,43 +292,28 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 description={
                     "suggested_value": options.get(
                         CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                        DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
                     )
                 },
                 default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             ): int,
             vol.Optional(
                 CONF_FUNCTIONS,
-                description={
-                    "suggested_value": options.get(
-                        CONF_FUNCTIONS, DEFAULT_CONF_FUNCTIONS_STR
-                    )
-                },
+                description={"suggested_value": options.get(CONF_FUNCTIONS)},
                 default=DEFAULT_CONF_FUNCTIONS_STR,
             ): TemplateSelector(),
             vol.Optional(
                 CONF_ATTACH_USERNAME,
-                description={
-                    "suggested_value": options.get(
-                        CONF_ATTACH_USERNAME, DEFAULT_ATTACH_USERNAME
-                    )
-                },
+                description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
                 default=DEFAULT_ATTACH_USERNAME,
             ): BooleanSelector(),
             vol.Optional(
                 CONF_USE_TOOLS,
-                description={
-                    "suggested_value": options.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)
-                },
+                description={"suggested_value": options.get(CONF_USE_TOOLS)},
                 default=DEFAULT_USE_TOOLS,
             ): BooleanSelector(),
             vol.Optional(
                 CONF_CONTEXT_THRESHOLD,
-                description={
-                    "suggested_value": options.get(
-                        CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
-                    )
-                },
+                description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
                 default=DEFAULT_CONTEXT_THRESHOLD,
             ): int,
             vol.Optional(
@@ -346,7 +321,6 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 description={
                     "suggested_value": options.get(
                         CONF_CONTEXT_TRUNCATE_STRATEGY,
-                        DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
                     )
                 },
                 default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
