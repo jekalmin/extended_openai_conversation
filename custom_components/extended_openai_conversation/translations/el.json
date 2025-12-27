@@ -13,26 +13,37 @@
                     "base_url": "Βασική Διεύθυνση",
                     "api_version": "Έκδοση API",
                     "organization": "Οργανισμός",
-                    "skip_authentication": "Παράλειψη Ελέγχου Ταυτότητας"
+                    "skip_authentication": "Παράλειψη Ελέγχου Ταυτότητας",
+                    "api_provider": "Api Provider"
                 }
             }
         }
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "max_tokens": "Μέγιστα tokens προς επιστροφή στην απάντηση",
-                    "model": "Μοντέλο Ολοκλήρωσης",
-                    "prompt": "Πρότυπο Προτροπής",
-                    "temperature": "Θερμοκρασία",
-                    "top_p": "Top P",
-                    "max_function_calls_per_conversation": "Μέγιστες κλήσεις συναρτήσεων ανά συνομιλία",
-                    "functions": "Συναρτήσεις",
-                    "attach_username": "Επισύναψη Ονόματος Χρήστη στο Μήνυμα",
-                    "use_tools": "Χρήση Εργαλείων",
-                    "context_threshold": "Όριο Περιεχομένου",
-                    "context_truncate_strategy": "Στρατηγική περικοπής περιεχομένου όταν ξεπεραστεί το όριο"
+    "config_subentries": {
+        "conversation": {
+            "entry_type": "Conversation agent",
+            "initiate_flow": {
+                "reconfigure": "Reconfigure conversation agent",
+                "user": "Add conversation agent"
+            },
+            "step": {
+                "init": {
+                    "data": {
+                        "max_tokens": "Μέγιστα tokens προς επιστροφή στην απάντηση",
+                        "model": "Μοντέλο Ολοκλήρωσης",
+                        "prompt": "Πρότυπο Προτροπής",
+                        "temperature": "Θερμοκρασία",
+                        "top_p": "Top P",
+                        "max_function_calls_per_conversation": "Μέγιστες κλήσεις συναρτήσεων ανά συνομιλία",
+                        "functions": "Συναρτήσεις",
+                        "attach_username": "Επισύναψη Ονόματος Χρήστη στο Μήνυμα",
+                        "use_tools": "Χρήση Εργαλείων",
+                        "context_threshold": "Όριο Περιεχομένου",
+                        "context_truncate_strategy": "Στρατηγική περικοπής περιεχομένου όταν ξεπεραστεί το όριο"
+                    },
+                    "data_description": {
+                        "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
+                    }
                 }
             }
         }
@@ -49,7 +60,7 @@
                 "model": {
                     "name": "Μοντέλο",
                     "description": "Το μοντέλο",
-                    "example": "gpt-4-vision-preview"
+                    "example": "gpt-4.1-mini"
                 },
                 "prompt": {
                     "name": "Προτροπή",
@@ -66,6 +77,40 @@
                     "example": "300"
                 }
             }
+        },
+        "change_config": {
+            "name": "Change configuration",
+            "description": "Changes the configuration of the integration.",
+            "fields": {
+                "config_entry": {
+                    "name": "Config Entry",
+                    "description": "The config entry to update."
+                },
+                "api_key": {
+                    "name": "Κλειδί API",
+                    "description": "The API key."
+                },
+                "base_url": {
+                    "name": "Βασική Διεύθυνση",
+                    "description": "The base URL."
+                },
+                "api_version": {
+                    "name": "Έκδοση API",
+                    "description": "The API version."
+                },
+                "organization": {
+                    "name": "Οργανισμός",
+                    "description": "The organization."
+                },
+                "skip_authentication": {
+                    "name": "Παράλειψη Ελέγχου Ταυτότητας",
+                    "description": "Skip authentication."
+                },
+                "api_provider": {
+                    "name": "Api Provider",
+                    "description": "The API provider. (OpenAI or Azure)"
+                }
+            }
         }
     }
-} 
+}

@@ -136,6 +136,27 @@ Below is a default configuration of functions.
     name: execute_service
 ```
 
+#### Specification (Spec)
+Specification is a [function schema](https://platform.openai.com/docs/guides/function-calling#defining-functions) defined by openai which will be passed to LLM as a tool.
+
+Reserved Parameters:
+- `delay`: If specified, function will be executed in background after a delay. See [example](https://github.com/jekalmin/extended_openai_conversation/tree/main/examples/function/timer).
+  - ```yaml
+    delay:
+      type: object
+      description: Time to wait before execution
+      properties:
+        hours:
+          type: integer
+          minimum: 0
+        minutes:
+          type: integer
+          minimum: 0
+        seconds:
+          type: integer
+          minimum: 0
+    ```
+
 ## Function Usage
 This is an example of configuration of functions.
 

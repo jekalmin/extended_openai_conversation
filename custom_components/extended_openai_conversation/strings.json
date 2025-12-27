@@ -8,7 +8,8 @@
           "base_url": "[%key:common::config_flow::data::base_url%]",
           "api_version": "[%key:common::config_flow::data::api_version%]",
           "organization": "[%key:common::config_flow::data::organization%]",
-          "skip_authentication": "[%key:common::config_flow::data::skip_authentication%]"
+          "skip_authentication": "[%key:common::config_flow::data::skip_authentication%]",
+          "api_provider": "[%key:common::config_flow::data::api_provider%]"
         }
       }
     },
@@ -33,6 +34,9 @@
           "use_tools": "Use Tools",
           "context_threshold": "Context Threshold",
           "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+        },
+        "data_description": {
+          "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
         }
       }
     }
@@ -49,7 +53,7 @@
         "model": {
           "name": "Model",
           "description": "The model",
-          "example": "gpt-4-vision-preview"
+          "example": "gpt-4.1-mini"
         },
         "prompt": {
           "name": "Prompt",
@@ -64,6 +68,40 @@
           "name": "Max Tokens",
           "description": "The maximum tokens",
           "example": "300"
+        }
+      }
+    },
+    "change_config": {
+      "name": "Change configuration",
+      "description": "Changes the configuration of the integration.",
+      "fields": {
+        "config_entry": {
+          "name": "Config Entry",
+          "description": "The config entry to update."
+        },
+        "api_key": {
+          "name": "API Key",
+          "description": "The API key."
+        },
+        "base_url": {
+          "name": "Base URL",
+          "description": "The base URL."
+        },
+        "api_version": {
+          "name": "API Version",
+          "description": "The API version."
+        },
+        "organization": {
+          "name": "Organization",
+          "description": "The organization."
+        },
+        "skip_authentication": {
+          "name": "Skip Authentication",
+          "description": "Skip authentication."
+        },
+        "api_provider": {
+          "name": "API Provider",
+          "description": "The API provider. (OpenAI or Azure)"
         }
       }
     }

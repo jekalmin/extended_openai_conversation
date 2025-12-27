@@ -13,26 +13,37 @@
                     "base_url": "Base Url",
                     "api_version": "Versão da API",
                     "organization": "Organização",
-                    "skip_authentication": "Pular autenticação"
+                    "skip_authentication": "Pular autenticação",
+                    "api_provider": "Api Provider"
                 }
             }
         }
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "max_tokens": "Número máximo de tokens da resposta",
-                    "model": "Modelo da Conclusão",
-                    "prompt": "Template do Prompt",
-                    "temperature": "Temperatura",
-                    "top_p": "Top P",
-                    "max_function_calls_per_conversation": "Quantidade máxima de chamadas por conversação",
-                    "functions": "Funções",
-                    "attach_username": "Anexar nome do usuário na mensagem",
-                    "use_tools": "Use ferramentas",
-                    "context_threshold": "Limite do contexto",
-                    "context_truncate_strategy": "Estratégia de truncamento de contexto quando o limite é excedido"
+    "config_subentries": {
+        "conversation": {
+            "entry_type": "Conversation agent",
+            "initiate_flow": {
+                "reconfigure": "Reconfigure conversation agent",
+                "user": "Add conversation agent"
+            },
+            "step": {
+                "init": {
+                    "data": {
+                        "max_tokens": "Número máximo de tokens da resposta",
+                        "model": "Modelo da Conclusão",
+                        "prompt": "Template do Prompt",
+                        "temperature": "Temperatura",
+                        "top_p": "Top P",
+                        "max_function_calls_per_conversation": "Quantidade máxima de chamadas por conversação",
+                        "functions": "Funções",
+                        "attach_username": "Anexar nome do usuário na mensagem",
+                        "use_tools": "Use ferramentas",
+                        "context_threshold": "Limite do contexto",
+                        "context_truncate_strategy": "Estratégia de truncamento de contexto quando o limite é excedido"
+                    },
+                    "data_description": {
+                        "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
+                    }
                 }
             }
         }
@@ -49,7 +60,7 @@
                 "model": {
                     "name": "Modelo",
                     "description": "Especificar modelo",
-                    "example": "gpt-4-vision-preview"
+                    "example": "gpt-4.1-mini"
                 },
                 "prompt": {
                     "name": "Prompt",
@@ -64,6 +75,40 @@
                     "name": "Max Tokens",
                     "description": "Quantidade máxima de tokens",
                     "example": "300"
+                }
+            }
+        },
+        "change_config": {
+            "name": "Change configuration",
+            "description": "Changes the configuration of the integration.",
+            "fields": {
+                "config_entry": {
+                    "name": "Config Entry",
+                    "description": "The config entry to update."
+                },
+                "api_key": {
+                    "name": "Chave API",
+                    "description": "The API key."
+                },
+                "base_url": {
+                    "name": "Base Url",
+                    "description": "The base URL."
+                },
+                "api_version": {
+                    "name": "Versão da API",
+                    "description": "The API version."
+                },
+                "organization": {
+                    "name": "Organização",
+                    "description": "The organization."
+                },
+                "skip_authentication": {
+                    "name": "Pular autenticação",
+                    "description": "Skip authentication."
+                },
+                "api_provider": {
+                    "name": "Api Provider",
+                    "description": "The API provider. (OpenAI or Azure)"
                 }
             }
         }
