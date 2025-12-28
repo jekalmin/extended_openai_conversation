@@ -48,7 +48,13 @@ from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
-from .const import CONF_PAYLOAD_TEMPLATE, DOMAIN, EVENT_AUTOMATION_REGISTERED
+from .const import (
+    CONF_PAYLOAD_TEMPLATE,
+    DEFAULT_TOKEN_PARAM,
+    DOMAIN,
+    EVENT_AUTOMATION_REGISTERED,
+    MODEL_TOKEN_PARAMETER_SUPPORT,
+)
 from .exceptions import (
     CallServiceError,
     EntityNotExposed,
@@ -104,6 +110,15 @@ def is_azure_url(base_url: str | None) -> bool:
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
         return True
     return False
+
+
+def get_token_param_for_model(model: str) -> str:
+    """Return the token parameter name for a model."""
+    model_lower = model.lower()
+    for entry in MODEL_TOKEN_PARAMETER_SUPPORT:
+        if re.search(entry["pattern"], model_lower):
+            return entry["token_param"]
+    return DEFAULT_TOKEN_PARAM
 
 
 def convert_to_template(

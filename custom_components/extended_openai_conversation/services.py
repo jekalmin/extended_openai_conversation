@@ -33,7 +33,7 @@ from .const import (
     DOMAIN,
     SERVICE_QUERY_IMAGE,
 )
-from .helpers import get_authenticated_client
+from .helpers import get_authenticated_client, get_token_param_for_model
 
 QUERY_IMAGE_SCHEMA = vol.Schema(
     {
@@ -94,18 +94,8 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
             client = entry.runtime_data
 
-            # Determine which token parameter to use based on model
-            # Newer models (gpt-4o, gpt-5, o1, o3, etc.) require max_completion_tokens
-            model_lower = model.lower()
-            use_new_token_param = any(
-                model_lower.startswith(prefix) or f"-{prefix}" in model_lower
-                for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
-            )
-            token_kwargs = (
-                {"max_completion_tokens": call.data["max_tokens"]}
-                if use_new_token_param
-                else {"max_tokens": call.data["max_tokens"]}
-            )
+            token_param = get_token_param_for_model(model)
+            token_kwargs = {token_param: call.data["max_tokens"]}
 
             response = await client.chat.completions.create(
                 model=model,

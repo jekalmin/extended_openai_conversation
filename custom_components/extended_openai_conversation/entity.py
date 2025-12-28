@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from openai import AsyncClient, AsyncStream
@@ -37,9 +38,12 @@ from .const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
+    DEFAULT_TOKEN_PARAM,
     DEFAULT_TOP_P,
     DEFAULT_USE_TOOLS,
     DOMAIN,
+    MODEL_PARAMETER_SUPPORT,
+    MODEL_TOKEN_PARAMETER_SUPPORT,
 )
 from .exceptions import FunctionNotFound, ParseArgumentsFailed, TokenLengthExceededError
 from .helpers import get_function_executor
@@ -154,15 +158,13 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
         # Determine token parameter based on model
         model_lower = model.lower()
-        use_new_token_param = any(
-            model_lower.startswith(prefix) or f"-{prefix}" in model_lower
-            for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
-        )
-        token_kwargs = (
-            {"max_completion_tokens": max_tokens}
-            if use_new_token_param
-            else {"max_tokens": max_tokens}
-        )
+        token_kwargs = {self.get_token_param_for_model(model): max_tokens}
+        supports_top_p = True
+        for entry in MODEL_PARAMETER_SUPPORT:
+            if re.search(entry["pattern"], model_lower):
+                supports_top_p = "top_p" not in entry["unsupported_params"]
+                break
+        top_p_kwargs = {"top_p": top_p} if supports_top_p else {}
 
         tool_kwargs: dict[str, Any] = {}
         if tools:
@@ -187,6 +189,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                     stream=True,
                     stream_options={"include_usage": True},
                     **token_kwargs,
+                    **top_p_kwargs,
                     **tool_kwargs,
                 )
             except OpenAIError as err:
@@ -402,3 +405,11 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             if last_user_message_index is not None:
                 del messages[1:last_user_message_index]
+
+    def get_token_param_for_model(self, model: str) -> str:
+        """Return the token parameter name for a model."""
+        model_lower = model.lower()
+        for entry in MODEL_TOKEN_PARAMETER_SUPPORT:
+            if re.search(entry["pattern"], model_lower):
+                return entry["token_param"]
+        return DEFAULT_TOKEN_PARAM

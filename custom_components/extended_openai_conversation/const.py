@@ -43,6 +43,18 @@ Do not restate or appreciate what user says, rather make a quick inquiry.
 """
 CONF_CHAT_MODEL = "chat_model"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
+
+MODEL_PARAMETER_SUPPORT = (
+    {"pattern": r"^gpt-5-(mini|nano)", "unsupported_params": {"top_p"}},
+)
+
+MODEL_TOKEN_PARAMETER_SUPPORT = (
+    {
+        "pattern": r"(^|-)gpt-4o|(^|-)gpt-5|(^|-)o1|(^|-)o3|(^|-)o4",
+        "token_param": "max_completion_tokens",
+    },
+)
+DEFAULT_TOKEN_PARAM = "max_tokens"
 CONF_MAX_TOKENS = "max_tokens"
 DEFAULT_MAX_TOKENS = 150
 CONF_TOP_P = "top_p"
