@@ -50,7 +50,7 @@ MODEL_PARAMETER_SUPPORT = (
 
 MODEL_TOKEN_PARAMETER_SUPPORT = (
     {
-        "pattern": r"(^|-)gpt-4o|(^|-)gpt-5|(^|-)o1|(^|-)o3|(^|-)o4",
+        "pattern": r"(^|-)(gpt-4o|gpt-5|o1|o3|o4)",
         "token_param": "max_completion_tokens",
     },
 )

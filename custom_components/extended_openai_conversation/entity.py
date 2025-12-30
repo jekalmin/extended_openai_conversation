@@ -183,7 +183,6 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                 stream = await self._client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    top_p=top_p,
                     temperature=temperature,
                     user=chat_log.conversation_id,
                     stream=True,
