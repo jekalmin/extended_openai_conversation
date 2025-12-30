@@ -26,6 +26,7 @@ from .const import (
 )
 from .helpers import get_authenticated_client
 from .services import async_setup_services
+from .template import async_setup_templates, async_unload_templates
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,11 +70,14 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(update_listener))
+
+    await async_setup_templates(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload OpenAI."""
+    await async_unload_templates(hass)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

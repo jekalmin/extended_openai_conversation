@@ -35,7 +35,7 @@ from .const import (
 )
 from .entity import ExtendedOpenAIBaseLLMEntity
 from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
-from .helpers import get_function_executor
+from .helpers import get_exposed_entities, get_function_executor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -169,32 +169,8 @@ class ExtendedOpenAIAgentEntity(
             parse_result=False,
         )
 
-    def _get_exposed_entities(self) -> list[dict]:
-        """Get exposed entities."""
-        states = [
-            state
-            for state in self.hass.states.async_all()
-            if async_should_expose(self.hass, conversation.DOMAIN, state.entity_id)
-        ]
-        entity_registry = er.async_get(self.hass)
-        exposed_entities = []
-        for state in states:
-            entity_id = state.entity_id
-            entity = entity_registry.async_get(entity_id)
-
-            aliases = []
-            if entity and entity.aliases:
-                aliases = entity.aliases
-
-            exposed_entities.append(
-                {
-                    "entity_id": entity_id,
-                    "name": state.name,
-                    "state": self.hass.states.get(entity_id).state,
-                    "aliases": aliases,
-                }
-            )
-        return exposed_entities
+    def _get_exposed_entities(self):
+        return get_exposed_entities(self.hass)
 
     def _get_functions(self) -> list[dict]:
         """Get custom functions configuration."""

@@ -16,8 +16,16 @@ from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
 import voluptuous as vol
 import yaml
 
-from homeassistant.components import automation, energy, recorder, rest, scrape
+from homeassistant.components import (
+    automation,
+    conversation,
+    energy,
+    recorder,
+    rest,
+    scrape,
+)
 from homeassistant.components.automation.config import _async_validate_config_item
+from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.const import (
@@ -34,7 +42,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
-from homeassistant.helpers import config_validation as cv, llm
+from homeassistant.helpers import config_validation as cv, entity_registry as er, llm
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
@@ -54,6 +62,34 @@ _LOGGER = logging.getLogger(__name__)
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
+
+
+def get_exposed_entities(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Get exposed entities."""
+    states = [
+        state
+        for state in hass.states.async_all()
+        if async_should_expose(hass, conversation.DOMAIN, state.entity_id)
+    ]
+    entity_registry = er.async_get(hass)
+    exposed_entities = []
+    for state in states:
+        entity_id = state.entity_id
+        entity = entity_registry.async_get(entity_id)
+
+        aliases = []
+        if entity and entity.aliases:
+            aliases = entity.aliases
+
+        exposed_entities.append(
+            {
+                "entity_id": entity_id,
+                "name": state.name,
+                "state": state.state,
+                "aliases": aliases,
+            }
+        )
+    return exposed_entities
 
 
 def get_function_executor(value: str):
