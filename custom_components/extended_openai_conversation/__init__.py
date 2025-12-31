@@ -11,21 +11,17 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import (
-    config_validation as cv,
-    device_registry as dr,
-    entity_registry as er,
-)
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_BASE_URL,
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
-    DEFAULT_SKIP_AUTHENTICATION,
-    CONF_API_PROVIDER,
     DEFAULT_API_PROVIDER,
+    DEFAULT_SKIP_AUTHENTICATION,
     DOMAIN,
 )
 from .helpers import get_authenticated_client

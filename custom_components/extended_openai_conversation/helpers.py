@@ -16,14 +16,7 @@ from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
 import voluptuous as vol
 import yaml
 
-from homeassistant.components import (
-    automation,
-    conversation,
-    energy,
-    recorder,
-    rest,
-    scrape,
-)
+from homeassistant.components import automation, energy, recorder, rest, scrape
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.config import AUTOMATION_CONFIG_PATH
@@ -41,7 +34,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, llm
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
@@ -197,7 +190,7 @@ class FunctionExecutor(ABC):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         """execute function"""
@@ -213,37 +206,37 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         name = function["name"]
         if name == "execute_service":
             return await self.execute_service(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "execute_service_single":
             return await self.execute_service_single(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "add_automation":
             return await self.add_automation(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "get_history":
             return await self.get_history(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "get_energy":
             return await self.get_energy(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "get_statistics":
             return await self.get_statistics(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
         if name == "get_user_from_user_id":
             return await self.get_user_from_user_id(
-                hass, function, arguments, user_input, exposed_entities
+                hass, function, arguments, llm_context, exposed_entities
             )
 
         raise NativeNotFound(name)
@@ -253,7 +246,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         service_argument,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         domain = service_argument["domain"]
@@ -291,14 +284,14 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         result = []
         for service_argument in arguments.get("list", []):
             result.append(
                 await self.execute_service_single(
-                    hass, function, service_argument, user_input, exposed_entities
+                    hass, function, service_argument, llm_context, exposed_entities
                 )
             )
         return result
@@ -308,7 +301,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         automation_config = yaml.safe_load(arguments["automation_config"])
@@ -348,7 +341,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         start_time = arguments.get("start_time")
@@ -388,7 +381,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         energy_manager: energy.data.EnergyManager = await energy.async_get_manager(hass)
@@ -399,10 +392,10 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
-        user = await hass.auth.async_get_user(user_input.context.user_id)
+        user = await hass.auth.async_get_user(llm_context.context.user_id)
         return {"name": user.name if user and hasattr(user, "name") else "Unknown"}
 
     async def get_statistics(
@@ -410,7 +403,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         statistic_ids = arguments.get("statistic_ids", [])
@@ -454,7 +447,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         script = Script(
@@ -466,9 +459,8 @@ class ScriptFunctionExecutor(FunctionExecutor):
             logger=_LOGGER,
         )
 
-        result = await script.async_run(
-            run_variables=arguments, context=user_input.context
-        )
+        context = llm_context.context if llm_context else None
+        result = await script.async_run(run_variables=arguments, context=context)
         return result.variables.get("_function_result", "Success")
 
 
@@ -489,7 +481,7 @@ class TemplateFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         return function["value_template"].async_render(
@@ -515,7 +507,7 @@ class RestFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         config = function
@@ -550,7 +542,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         config = function
@@ -653,7 +645,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         config = function
@@ -662,7 +654,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
         for executor_config in sequence:
             function_executor = get_function_executor(executor_config["type"])
             result = await function_executor.execute(
-                hass, executor_config, arguments, user_input, exposed_entities
+                hass, executor_config, arguments, llm_context, exposed_entities
             )
 
             response_variable = executor_config.get("response_variable")
@@ -720,7 +712,7 @@ class SqliteFunctionExecutor(FunctionExecutor):
         hass: HomeAssistant,
         function,
         arguments,
-        user_input: conversation.ConversationInput,
+        llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
         db_url = self.set_url_read_only(

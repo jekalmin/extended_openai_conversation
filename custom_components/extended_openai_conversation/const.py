@@ -92,8 +92,6 @@ DEFAULT_CONF_FUNCTIONS = [
         "function": {"type": "native", "name": "execute_service"},
     }
 ]
-CONF_ATTACH_USERNAME = "attach_username"
-DEFAULT_ATTACH_USERNAME = False
 CONF_USE_TOOLS = "use_tools"
 DEFAULT_USE_TOOLS = True
 CONF_CONTEXT_THRESHOLD = "context_threshold"
