@@ -113,7 +113,9 @@ class ExtendedOpenAIAgentEntity(
         custom_functions = self._get_functions()
 
         # Build custom prompt with exposed entities
-        system_prompt = self._build_system_prompt(exposed_entities, llm_context)
+        system_prompt = self._build_system_prompt(
+            exposed_entities, llm_context, user_input
+        )
 
         # Set system prompt in chat log
         chat_log.content[0] = conversation.SystemContent(content=system_prompt)
@@ -156,6 +158,7 @@ class ExtendedOpenAIAgentEntity(
         self,
         exposed_entities: list[dict],
         llm_context: llm.LLMContext,
+        user_input: ConversationInput,
     ) -> str:
         """Build system prompt with exposed entities."""
         raw_prompt = self.subentry.data.get(CONF_PROMPT, DEFAULT_PROMPT)
@@ -165,6 +168,8 @@ class ExtendedOpenAIAgentEntity(
                 "ha_name": self.hass.config.location_name,
                 "exposed_entities": exposed_entities,
                 "current_device_id": llm_context.device_id,
+                "llm_context": llm_context,
+                "user_input": user_input,
             },
             parse_result=False,
         )
