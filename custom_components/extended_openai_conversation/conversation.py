@@ -168,7 +168,6 @@ class ExtendedOpenAIAgentEntity(
                 "ha_name": self.hass.config.location_name,
                 "exposed_entities": exposed_entities,
                 "current_device_id": llm_context.device_id,
-                "llm_context": llm_context,
                 "user_input": user_input,
             },
             parse_result=False,
