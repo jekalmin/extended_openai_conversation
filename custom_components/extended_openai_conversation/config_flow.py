@@ -48,6 +48,7 @@ from .const import (
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
     CONF_SERVICE_TIER,
+    CONF_SKILLS,
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
@@ -76,6 +77,7 @@ from .const import (
     SERVICE_TIER_OPTIONS,
 )
 from .helpers import get_authenticated_client, get_model_config
+from .skills import SkillManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -218,6 +220,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
 
     options: dict[str, Any]
     _temp_data: dict[str, Any] | None = None
+    _available_skills: list[dict[str, Any]] | None = None
 
     @property
     def _is_new(self) -> bool:
@@ -246,6 +249,10 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         if self._get_entry().state != ConfigEntryState.LOADED:
             return self.async_abort(reason="entry_not_loaded")
 
+        # Load available skills
+        if self._available_skills is None:
+            self._available_skills = await self._async_get_skills()
+
         if user_input is not None:
             # Check if advanced options is enabled
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
@@ -268,7 +275,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 data=user_input,
             )
 
-        schema = self.openai_config_option_schema(self.options)
+        schema = self.openai_config_option_schema(self.options, self._available_skills)
 
         if self._is_new:
             schema = {
@@ -370,10 +377,23 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             ),
         )
 
-    def openai_config_option_schema(self, options: dict[str, Any]) -> dict:
+    async def _async_get_skills(self) -> list[dict[str, Any]]:
+        """Load available skills using SkillManager."""
+        skill_manager = await SkillManager.async_get_instance(self.hass)
+        return [
+            {"name": skill.name, "description": skill.description}
+            for skill in skill_manager.get_all_skills()
+        ]
+
+    def openai_config_option_schema(
+        self, options: dict[str, Any], skills: list[dict[str, Any]] | None = None
+    ) -> dict:
         """Return a schema for OpenAI completion options."""
-        # Basic schema - shown on initial form
-        schema = {
+        # Default: all skills enabled if not configured yet
+        all_skill_names = [skill["name"] for skill in skills] if skills else []
+        current_skills = options.get(CONF_SKILLS, all_skill_names)
+
+        schema: dict = {
             vol.Optional(
                 CONF_PROMPT,
                 default=DEFAULT_PROMPT,
@@ -390,6 +410,19 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
                 default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             ): int,
+            vol.Optional(CONF_SKILLS, default=current_skills): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=skill["name"],
+                            label=skill["name"],
+                        )
+                        for skill in (skills or [])
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    multiple=True,
+                )
+            ),
             vol.Optional(
                 CONF_FUNCTIONS,
                 default=DEFAULT_CONF_FUNCTIONS_STR,
@@ -404,7 +437,9 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
+                        SelectOptionDict(
+                            value=strategy["key"], label=strategy["label"]
+                        )
                         for strategy in CONTEXT_TRUNCATE_STRATEGIES
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
@@ -415,6 +450,14 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 default=DEFAULT_ADVANCED_OPTIONS,
             ): BooleanSelector(),
         }
+
+        # Remove skills field if no skills available
+        if not skills:
+            schema = {
+                key: value
+                for key, value in schema.items()
+                if not (isinstance(key, vol.Optional) and key.schema == CONF_SKILLS)
+            }
 
         return schema
 

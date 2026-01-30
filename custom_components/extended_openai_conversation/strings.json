@@ -33,6 +33,7 @@
             "model": "Completion Model",
             "prompt": "Prompt Template",
             "max_function_calls_per_conversation": "Maximum function calls per conversation",
+            "skills": "Skills",
             "functions": "Functions",
             "attach_username": "Attach Username to Message",
             "context_threshold": "Context Threshold",
@@ -142,6 +143,10 @@
           "description": "The API provider. (OpenAI or Azure)"
         }
       }
+    },
+    "reload_skills": {
+      "name": "Reload skills",
+      "description": "Reload skills from the skills directory."
     }
   }
 }

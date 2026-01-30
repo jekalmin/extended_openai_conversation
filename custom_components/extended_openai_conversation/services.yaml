@@ -60,3 +60,4 @@ change_config:
             - openai
             - azure
           mode: dropdown
+reload_skills:

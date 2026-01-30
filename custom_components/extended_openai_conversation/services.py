@@ -32,6 +32,7 @@ from .const import (
     DEFAULT_CONF_BASE_URL,
     DOMAIN,
     SERVICE_QUERY_IMAGE,
+    SERVICE_RELOAD_SKILLS,
 )
 from .helpers import get_authenticated_client, get_token_param_for_model
 
@@ -64,6 +65,8 @@ CHANGE_CONFIG_SCHEMA = vol.Schema(
         vol.Optional(CONF_API_PROVIDER): cv.string,
     }
 )
+
+RELOAD_SKILLS_SCHEMA = vol.Schema({})
 
 _LOGGER = logging.getLogger(__package__)
 
@@ -157,6 +160,15 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
         hass.config_entries.async_update_entry(entry, data=new_data)
 
+    async def reload_skills(call: ServiceCall) -> ServiceResponse:
+        """Reload skills from the skills directory."""
+        from .skills import SkillManager
+
+        skill_manager = await SkillManager.async_get_instance(hass)
+        await skill_manager.async_load_skills()
+
+        return {"loaded_skills": len(skill_manager.get_all_skills())}
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_QUERY_IMAGE,
@@ -170,6 +182,14 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         "change_config",
         change_config,
         schema=CHANGE_CONFIG_SCHEMA,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RELOAD_SKILLS,
+        reload_skills,
+        schema=RELOAD_SKILLS_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
 
 

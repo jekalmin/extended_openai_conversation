@@ -1,10 +1,12 @@
 """Helper functions for Extended OpenAI Conversation component."""
 
 from abc import ABC, abstractmethod
+import asyncio
 from datetime import timedelta
 from functools import partial
 import logging
 import os
+from pathlib import Path
 import re
 import sqlite3
 import time
@@ -813,6 +815,172 @@ class SqliteFunctionExecutor(FunctionExecutor):
             return result
 
 
+class SkillReadFunctionExecutor(FunctionExecutor):
+    """Read skill files (SKILL.md body or other files)."""
+
+    def __init__(self) -> None:
+        """Initialize skill reader function."""
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("skills_dir"): str,
+                }
+            )
+        )
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        llm_context: llm.LLMContext | None,
+        exposed_entities,
+    ):
+        """Execute skill reader function.
+
+        Args:
+            hass: Home Assistant instance
+            function: Function configuration containing skills_dir
+            arguments: Arguments containing skill_name and optional file_path
+            llm_context: LLM context (unused)
+            exposed_entities: Exposed entities (unused)
+
+        Returns:
+            File content or error message
+        """
+        from .skills import SkillMdParser
+        from .const import SKILL_FILE_NAME
+
+        skill_name = arguments.get("skill_name")
+        file_path = arguments.get("file_path")
+        skills_dir = Path(function.get("skills_dir"))
+
+        if not skill_name:
+            return {"error": "skill_name is required"}
+
+        skill_dir = skills_dir / skill_name
+
+        if not skill_dir.exists() or not skill_dir.is_dir():
+            return {"error": f"Skill '{skill_name}' not found"}
+
+        if file_path:
+            # Level 3: Read specific file (reference.md, etc.)
+            # Security: Validate path is within skill directory
+            target_path = (skill_dir / file_path).resolve()
+            if not str(target_path).startswith(str(skill_dir.resolve())):
+                return {"error": "Path traversal not allowed"}
+
+            if not target_path.exists():
+                return {
+                    "error": f"File '{file_path}' not found in skill '{skill_name}'"
+                }
+
+            try:
+                content = await hass.async_add_executor_job(
+                    target_path.read_text, "utf-8"
+                )
+                return content
+            except OSError as e:
+                return {"error": f"Failed to read file: {e}"}
+        else:
+            # Level 2: Read SKILL.md body (after frontmatter)
+            skill_file = skill_dir / SKILL_FILE_NAME
+            if not skill_file.exists():
+                return {"error": f"SKILL.md not found for skill '{skill_name}'"}
+
+            try:
+                content = await hass.async_add_executor_job(
+                    skill_file.read_text, "utf-8"
+                )
+                return SkillMdParser.extract_body(content)
+            except OSError as e:
+                return {"error": f"Failed to read SKILL.md: {e}"}
+
+
+class SkillExecFunctionExecutor(FunctionExecutor):
+    """Execute shell commands in skill directories."""
+
+    # Maximum execution time for shell commands (seconds)
+    SHELL_TIMEOUT = 30
+
+    def __init__(self) -> None:
+        """Initialize shell function."""
+        super().__init__(
+            vol.Schema(
+                {
+                    vol.Required("skills_dir"): str,
+                }
+            )
+        )
+
+    async def execute(
+        self,
+        hass: HomeAssistant,
+        function,
+        arguments,
+        llm_context: llm.LLMContext | None,
+        exposed_entities,
+    ):
+        """Execute shell command in skill directory.
+
+        Args:
+            hass: Home Assistant instance
+            function: Function configuration containing skills_dir
+            arguments: Arguments containing skill_name and command
+            llm_context: LLM context (unused)
+            exposed_entities: Exposed entities (unused)
+
+        Returns:
+            Command output or error message
+        """
+        skill_name = arguments.get("skill_name")
+        command = arguments.get("command")
+        skills_dir = Path(function.get("skills_dir"))
+
+        if not skill_name:
+            return {"error": "skill_name is required"}
+        if not command:
+            return {"error": "command is required"}
+
+        skill_dir = skills_dir / skill_name
+
+        if not skill_dir.exists() or not skill_dir.is_dir():
+            return {"error": f"Skill '{skill_name}' not found"}
+
+        try:
+            # Execute command in skill directory
+            process = await asyncio.create_subprocess_shell(
+                command,
+                cwd=str(skill_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=self.SHELL_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                return {
+                    "error": f"Command timed out after {self.SHELL_TIMEOUT} seconds"
+                }
+
+            result = {
+                "exit_code": process.returncode,
+                "stdout": stdout.decode("utf-8", errors="replace"),
+            }
+
+            if stderr:
+                result["stderr"] = stderr.decode("utf-8", errors="replace")
+
+            return result
+
+        except Exception as e:
+            _LOGGER.exception("Shell execution error: %s", e)
+            return {"error": f"Command execution failed: {e}"}
+
+
 FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "native": NativeFunctionExecutor(),
     "script": ScriptFunctionExecutor(),
@@ -821,4 +989,6 @@ FUNCTION_EXECUTORS: dict[str, FunctionExecutor] = {
     "scrape": ScrapeFunctionExecutor(),
     "composite": CompositeFunctionExecutor(),
     "sqlite": SqliteFunctionExecutor(),
+    "skill_read": SkillReadFunctionExecutor(),
+    "skill_exec": SkillExecFunctionExecutor(),
 }
