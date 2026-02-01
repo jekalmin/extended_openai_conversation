@@ -58,6 +58,7 @@ from .const import (
     EVENT_AUTOMATION_REGISTERED,
     MODEL_CONFIG_PATTERNS,
     MODEL_TOKEN_PARAMETER_SUPPORT,
+    SKILL_FILE_NAME,
 )
 from .exceptions import (
     CallServiceError,
@@ -67,6 +68,7 @@ from .exceptions import (
     InvalidFunction,
     NativeNotFound,
 )
+from .skills import SkillManager, SkillMdParser
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -848,20 +850,24 @@ class SkillReadFunctionExecutor(FunctionExecutor):
         Returns:
             File content or error message
         """
-        from .skills import SkillMdParser
-        from .const import SKILL_FILE_NAME
 
         skill_name = arguments.get("skill_name")
         file_path = arguments.get("file_path")
-        skills_dir = Path(function.get("skills_dir"))
 
         if not skill_name:
             return {"error": "skill_name is required"}
 
-        skill_dir = skills_dir / skill_name
+        # Look up skill by name to get the actual directory location
+        skill_manager = await SkillManager.async_get_instance(hass)
+        skill = skill_manager.get_skill(skill_name)
 
-        if not skill_dir.exists() or not skill_dir.is_dir():
+        if not skill:
             return {"error": f"Skill '{skill_name}' not found"}
+
+        if not skill.directory or not skill.directory.exists():
+            return {"error": f"Skill directory for '{skill_name}' not found"}
+
+        skill_dir = skill.directory
 
         if file_path:
             # Level 3: Read specific file (reference.md, etc.)
@@ -935,17 +941,23 @@ class SkillExecFunctionExecutor(FunctionExecutor):
         """
         skill_name = arguments.get("skill_name")
         command = arguments.get("command")
-        skills_dir = Path(function.get("skills_dir"))
 
         if not skill_name:
             return {"error": "skill_name is required"}
         if not command:
             return {"error": "command is required"}
 
-        skill_dir = skills_dir / skill_name
+        # Look up skill by name to get the actual directory location
+        skill_manager = await SkillManager.async_get_instance(hass)
+        skill = skill_manager.get_skill(skill_name)
 
-        if not skill_dir.exists() or not skill_dir.is_dir():
+        if not skill:
             return {"error": f"Skill '{skill_name}' not found"}
+
+        if not skill.directory or not skill.directory.exists():
+            return {"error": f"Skill directory for '{skill_name}' not found"}
+
+        skill_dir = skill.directory
 
         try:
             # Execute command in skill directory

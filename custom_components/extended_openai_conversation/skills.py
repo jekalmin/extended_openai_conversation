@@ -183,7 +183,12 @@ class SkillManager:
                     "Unexpected error loading skill from %s: %s", skill_dir, e
                 )
 
-        _LOGGER.info("Loaded %d skills from %s", len(self._skills), self.skills_dir)
+        _LOGGER.info(
+            "Loaded %d skills (%s) from %s",
+            len(self._skills),
+            list(self._skills),
+            self.skills_dir,
+        )
 
     def _load_skills_sync(self) -> list[tuple[Path, str]]:
         """Load skill files synchronously (run in executor).
@@ -236,54 +241,6 @@ class SkillManager:
             List of all skills
         """
         return list(self._skills.values())
-
-    def build_skills_prompt_section(
-        self, enabled_skill_names: list[str] | None = None
-    ) -> str:
-        """Build the skills section for the system prompt in XML format.
-
-        Only includes skill metadata (name, description) for enabled skills.
-        This is Level 1 of progressive disclosure.
-
-        Args:
-            enabled_skill_names: List of enabled skill names.
-                                If None or empty, all skills are enabled.
-
-        Returns:
-            Skills section to append to system prompt in XML format
-        """
-        if enabled_skill_names is None:
-            enabled_skill_names = []
-
-        # If no skills specified, enable all; otherwise filter by list
-        if enabled_skill_names:
-            enabled_skills = [
-                skill
-                for skill in self._skills.values()
-                if skill.name in enabled_skill_names
-            ]
-        else:
-            enabled_skills = list(self._skills.values())
-
-        if not enabled_skills:
-            return ""
-
-        lines = [
-            "",
-            "# Available Skills",
-            "",
-            "Use the read_skill function to get detailed instructions when needed:",
-            "",
-        ]
-        lines.append("<skills>")
-        for skill in enabled_skills:
-            lines.append(f'  <skill name="{skill.name}">')
-            lines.append(f"    <description>{skill.description}</description>")
-            lines.append("  </skill>")
-        lines.append("</skills>")
-        lines.append("</available_skills>")
-
-        return "\n".join(lines)
 
     def get_skill_functions(
         self, enabled_skill_names: list[str] | None = None
