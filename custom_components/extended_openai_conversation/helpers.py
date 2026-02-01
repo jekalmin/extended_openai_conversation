@@ -6,7 +6,6 @@ from datetime import timedelta
 from functools import partial
 import logging
 import os
-from pathlib import Path
 import re
 import sqlite3
 import time
@@ -14,10 +13,6 @@ from typing import Any
 from urllib import parse
 
 from bs4 import BeautifulSoup
-from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
-import voluptuous as vol
-import yaml
-
 from homeassistant.components import (
     automation,
     conversation,
@@ -28,6 +23,7 @@ from homeassistant.components import (
 )
 from homeassistant.components.automation.config import _async_validate_config_item
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+from homeassistant.components.recorder import history
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.config import AUTOMATION_CONFIG_PATH
 from homeassistant.const import (
@@ -49,6 +45,9 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
+from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
+import voluptuous as vol
+import yaml
 
 from .const import (
     CONF_PAYLOAD_TEMPLATE,
@@ -80,8 +79,10 @@ def get_model_config(model: str) -> dict[str, bool]:
     """Get model-specific parameter configuration."""
     # Check patterns in order; first match wins
     for entry in MODEL_CONFIG_PATTERNS:
-        if re.match(entry["pattern"], model, re.IGNORECASE):
-            return entry["config"]
+        pattern = entry["pattern"]
+        config = entry["config"]
+        if re.match(pattern, model, re.IGNORECASE):
+            return config
 
     # Default configuration for standard models (gpt-4, gpt-4o, etc.)
     return DEFAULT_MODEL_CONFIG
@@ -100,9 +101,9 @@ def get_exposed_entities(hass: HomeAssistant) -> list[dict[str, Any]]:
         entity_id = state.entity_id
         entity = entity_registry.async_get(entity_id)
 
-        aliases = []
+        aliases: list[str] = []
         if entity and entity.aliases:
-            aliases = entity.aliases
+            aliases = list(entity.aliases)
 
         exposed_entities.append(
             {
@@ -124,9 +125,7 @@ def get_function_executor(value: str):
 
 def is_azure_url(base_url: str | None) -> bool:
     """Check if the base URL is an Azure OpenAI URL."""
-    if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
-        return True
-    return False
+    return bool(base_url and re.search(AZURE_DOMAIN_PATTERN, base_url))
 
 
 def get_token_param_for_model(model: str) -> str:
@@ -140,9 +139,11 @@ def get_token_param_for_model(model: str) -> str:
 
 def convert_to_template(
     settings,
-    template_keys=["data", "event_data", "target", "service"],
+    template_keys=None,
     hass: HomeAssistant | None = None,
 ):
+    if template_keys is None:
+        template_keys = ["data", "event_data", "target", "service"]
     _convert_to_template(settings, template_keys, hass, [])
 
 
@@ -201,6 +202,7 @@ async def get_authenticated_client(
 ) -> AsyncClient:
     """Validate OpenAI authentication."""
 
+    client: AsyncClient
     if base_url and (is_azure_url(base_url) or api_provider == "azure"):
         client = AsyncAzureOpenAI(
             api_key=api_key,
@@ -384,7 +386,6 @@ class NativeFunctionExecutor(FunctionExecutor):
         automations = [config]
         with open(
             os.path.join(hass.config.config_dir, AUTOMATION_CONFIG_PATH),
-            "r",
             encoding="utf-8",
         ) as f:
             current_automations = yaml.safe_load(f.read())
@@ -429,7 +430,7 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         with recorder.util.session_scope(hass=hass, read_only=True) as session:
             result = await recorder.get_instance(hass).async_add_executor_job(
-                recorder.history.get_significant_states_with_session,
+                history.get_significant_states_with_session,
                 hass,
                 session,
                 start_time,
@@ -463,6 +464,12 @@ class NativeFunctionExecutor(FunctionExecutor):
         llm_context: llm.LLMContext | None,
         exposed_entities,
     ):
+        if (
+            llm_context is None
+            or llm_context.context is None
+            or llm_context.context.user_id is None
+        ):
+            return {"name": "Unknown"}
         user = await hass.auth.async_get_user(llm_context.context.user_id)
         return {"name": user.name if user and hasattr(user, "name") else "Unknown"}
 
@@ -475,8 +482,12 @@ class NativeFunctionExecutor(FunctionExecutor):
         exposed_entities,
     ):
         statistic_ids = arguments.get("statistic_ids", [])
-        start_time = dt_util.as_utc(dt_util.parse_datetime(arguments["start_time"]))
-        end_time = dt_util.as_utc(dt_util.parse_datetime(arguments["end_time"]))
+        start_time = self.as_utc(
+            arguments["start_time"], dt_util.utcnow(), "start_time not valid"
+        )
+        end_time = self.as_utc(
+            arguments["end_time"], dt_util.utcnow(), "end_time not valid"
+        )
 
         return await recorder.get_instance(hass).async_add_executor_job(
             recorder.statistics.statistics_during_period,
@@ -529,6 +540,8 @@ class ScriptFunctionExecutor(FunctionExecutor):
 
         context = llm_context.context if llm_context else None
         result = await script.async_run(run_variables=arguments, context=context)
+        if result is None:
+            return "Success"
         return result.variables.get("_function_result", "Success")
 
 
@@ -648,7 +661,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         data: BeautifulSoup,
         sensor_config: dict[str, Any],
         arguments: dict[str, Any],
-    ) -> None:
+    ) -> Any:
         """Update state from the rest data."""
         value = self._extract_value(data, sensor_config)
         value_template = sensor_config.get(CONF_VALUE_TEMPLATE)
@@ -698,7 +711,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
             )
         )
 
-    def function_schema(self, value: Any) -> dict:
+    def function_schema(self, value: Any) -> dict[Any, Any]:
         """Validate a composite function schema."""
         if not isinstance(value, dict):
             raise vol.Invalid("expected dictionary")
@@ -706,7 +719,10 @@ class CompositeFunctionExecutor(FunctionExecutor):
         composite_schema = {vol.Optional("response_variable"): str}
         function_executor = get_function_executor(value["type"])
 
-        return function_executor.data_schema.extend(composite_schema)(value)
+        validated: dict[Any, Any] = function_executor.data_schema.extend(
+            composite_schema
+        )(value)
+        return validated
 
     async def execute(
         self,
@@ -808,12 +824,14 @@ class SqliteFunctionExecutor(FunctionExecutor):
 
             if function.get("single") is True:
                 row = cursor.fetchone()
-                return {name: val for name, val in zip(names, row)}
+                return {name: val for name, val in zip(names, row, strict=False)}
 
             rows = cursor.fetchall()
             result = []
             for row in rows:
-                result.append({name: val for name, val in zip(names, row)})
+                result.append(
+                    {name: val for name, val in zip(names, row, strict=False)}
+                )
             return result
 
 
@@ -870,7 +888,7 @@ class SkillReadFunctionExecutor(FunctionExecutor):
         skill_dir = skill.directory
 
         if file_path:
-            # Level 3: Read specific file (reference.md, etc.)
+            # Level 3: Read specific file (references/reference.md, etc.)
             # Security: Validate path is within skill directory
             target_path = (skill_dir / file_path).resolve()
             if not str(target_path).startswith(str(skill_dir.resolve())):
@@ -972,7 +990,7 @@ class SkillExecFunctionExecutor(FunctionExecutor):
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(), timeout=self.SHELL_TIMEOUT
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 return {
                     "error": f"Command timed out after {self.SHELL_TIMEOUT} seconds"

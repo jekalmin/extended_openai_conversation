@@ -1,0 +1,186 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+  schedule:
+    - cron: "0 0 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HA_CORE_REPO: "home-assistant/core"
+  HA_CORE_BRANCH: "dev"
+
+jobs:
+  prepare:
+    name: Prepare versions from HA core
+    runs-on: ubuntu-latest
+    outputs:
+      python-version: ${{ steps.get-versions.outputs.python-version }}
+      openai-version: ${{ steps.get-versions.outputs.openai-version }}
+      hassil-version: ${{ steps.get-versions.outputs.hassil-version }}
+      home-assistant-intents-version: ${{ steps.get-versions.outputs.home-assistant-intents-version }}
+      xmltodict-version: ${{ steps.get-versions.outputs.xmltodict-version }}
+      beautifulsoup4-version: ${{ steps.get-versions.outputs.beautifulsoup4-version }}
+      lxml-version: ${{ steps.get-versions.outputs.lxml-version }}
+    steps:
+      - name: Get versions from Home Assistant core
+        id: get-versions
+        run: |
+          # Function to extract package version from manifest
+          get_package_version() {
+            local manifest="$1"
+            local package="$2"
+            echo "$manifest" | grep -o "\"$package==[^\"]*\"" | sed "s/\"$package==//;s/\"//"
+          }
+
+          # Get Python version from HA core
+          PYTHON_VERSION=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/.python-version | tr -d '\n')
+          echo "python-version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
+          echo "Python version from HA core: $PYTHON_VERSION"
+
+          # Get openai_conversation dependencies
+          OPENAI_MANIFEST=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/homeassistant/components/openai_conversation/manifest.json)
+          OPENAI_VERSION=$(get_package_version "$OPENAI_MANIFEST" "openai")
+          echo "openai-version=$OPENAI_VERSION" >> $GITHUB_OUTPUT
+          echo "openai version from HA core: $OPENAI_VERSION"
+
+          # Get conversation dependencies
+          CONVERSATION_MANIFEST=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/homeassistant/components/conversation/manifest.json)
+          HASSIL_VERSION=$(get_package_version "$CONVERSATION_MANIFEST" "hassil")
+          echo "hassil-version=$HASSIL_VERSION" >> $GITHUB_OUTPUT
+          echo "hassil version from HA core: $HASSIL_VERSION"
+
+          HA_INTENTS_VERSION=$(get_package_version "$CONVERSATION_MANIFEST" "home-assistant-intents")
+          echo "home-assistant-intents-version=$HA_INTENTS_VERSION" >> $GITHUB_OUTPUT
+          echo "home-assistant-intents version from HA core: $HA_INTENTS_VERSION"
+
+          # Get rest dependencies
+          REST_MANIFEST=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/homeassistant/components/rest/manifest.json)
+          XMLTODICT_VERSION=$(get_package_version "$REST_MANIFEST" "xmltodict")
+          echo "xmltodict-version=$XMLTODICT_VERSION" >> $GITHUB_OUTPUT
+          echo "xmltodict version from HA core: $XMLTODICT_VERSION"
+
+          # Get scrape dependencies
+          SCRAPE_MANIFEST=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/homeassistant/components/scrape/manifest.json)
+          BS4_VERSION=$(get_package_version "$SCRAPE_MANIFEST" "beautifulsoup4")
+          echo "beautifulsoup4-version=$BS4_VERSION" >> $GITHUB_OUTPUT
+          echo "beautifulsoup4 version from HA core: $BS4_VERSION"
+
+          LXML_VERSION=$(get_package_version "$SCRAPE_MANIFEST" "lxml")
+          echo "lxml-version=$LXML_VERSION" >> $GITHUB_OUTPUT
+          echo "lxml version from HA core: $LXML_VERSION"
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ needs.prepare.outputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.prepare.outputs.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run Ruff linter
+        run: ruff check custom_components/
+
+      - name: Run Ruff formatter check
+        run: ruff format --check custom_components/
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ needs.prepare.outputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.prepare.outputs.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install dependencies with versions from HA core
+          pip install \
+            "openai==${{ needs.prepare.outputs.openai-version }}" \
+            "hassil==${{ needs.prepare.outputs.hassil-version }}" \
+            "home-assistant-intents==${{ needs.prepare.outputs.home-assistant-intents-version }}" \
+            "xmltodict==${{ needs.prepare.outputs.xmltodict-version }}" \
+            "beautifulsoup4==${{ needs.prepare.outputs.beautifulsoup4-version }}" \
+            "lxml==${{ needs.prepare.outputs.lxml-version }}"
+          pip install -r requirements_test.txt
+          pip install mypy
+
+      - name: Run MyPy
+        run: mypy custom_components/extended_openai_conversation
+
+  test:
+    name: Test (HA ${{ matrix.home-assistant }})
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        home-assistant:
+          - "stable"
+          - "dev"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ needs.prepare.outputs.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.prepare.outputs.python-version }}
+          allow-prereleases: true
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install dependencies with versions from HA core
+          pip install \
+            "openai==${{ needs.prepare.outputs.openai-version }}" \
+            "hassil==${{ needs.prepare.outputs.hassil-version }}" \
+            "home-assistant-intents==${{ needs.prepare.outputs.home-assistant-intents-version }}" \
+            "xmltodict==${{ needs.prepare.outputs.xmltodict-version }}" \
+            "beautifulsoup4==${{ needs.prepare.outputs.beautifulsoup4-version }}" \
+            "lxml==${{ needs.prepare.outputs.lxml-version }}"
+          pip install -r requirements_test.txt
+
+      - name: Install Home Assistant stable
+        if: matrix.home-assistant == 'stable'
+        run: |
+          pip install homeassistant
+
+      - name: Install Home Assistant dev
+        if: matrix.home-assistant == 'dev'
+        run: |
+          pip install --upgrade git+https://github.com/home-assistant/core.git@dev
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest tests/ \
+            -v \
+            --asyncio-mode=auto \
+            --timeout=30 \
+            --cov=custom_components/extended_openai_conversation \
+            --cov-report=xml \
+            --cov-report=term-missing

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from openai import AsyncClient
-from openai._exceptions import AuthenticationError, OpenAIError
-
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from openai import AsyncClient
+from openai._exceptions import AuthenticationError, OpenAIError
 
 from .const import (
     CONF_API_PROVIDER,

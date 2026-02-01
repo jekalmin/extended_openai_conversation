@@ -6,10 +6,6 @@ import logging
 import types
 from typing import Any
 
-from openai._exceptions import APIConnectionError, AuthenticationError
-import voluptuous as vol
-import yaml
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigEntryState,
@@ -31,6 +27,9 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
     TemplateSelector,
 )
+from openai._exceptions import APIConnectionError, AuthenticationError
+import voluptuous as vol
+import yaml
 
 from .const import (
     API_PROVIDERS,
@@ -296,12 +295,11 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         """Handle advanced options step."""
         if user_input is not None:
             # Merge advanced options with temp data
-            final_data = {**self._temp_data, **user_input}
+            final_data = {**(self._temp_data or {}), **user_input}
 
             if self._is_new:
                 title = final_data.get(CONF_NAME, DEFAULT_NAME)
-                if CONF_NAME in final_data:
-                    del final_data[CONF_NAME]
+                final_data.pop(CONF_NAME, None)
                 return self.async_create_entry(
                     title=title,
                     data=final_data,
@@ -313,10 +311,10 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             )
 
         # Build schema for advanced options based on selected model
-        chat_model = self._temp_data.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
 
-        schema = {}
+        schema: dict[Any, Any] = {}
 
         # Add top_p if supported
         if model_config["supports_top_p"]:
@@ -437,9 +435,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        SelectOptionDict(
-                            value=strategy["key"], label=strategy["label"]
-                        )
+                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
                         for strategy in CONTEXT_TRUNCATE_STRATEGIES
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
@@ -552,12 +548,11 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         """Handle advanced options step."""
         if user_input is not None:
             # Merge advanced options with temp data
-            final_data = {**self._temp_data, **user_input}
+            final_data = {**(self._temp_data or {}), **user_input}
 
             if self._is_new:
                 title = final_data.get(CONF_NAME, DEFAULT_AI_TASK_NAME)
-                if CONF_NAME in final_data:
-                    del final_data[CONF_NAME]
+                final_data.pop(CONF_NAME, None)
                 return self.async_create_entry(
                     title=title,
                     data=final_data,
@@ -569,10 +564,10 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
             )
 
         # Build schema for advanced options based on selected model
-        chat_model = self._temp_data.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+        chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
 
-        schema = {}
+        schema: dict[Any, Any] = {}
 
         # Add top_p if supported
         if model_config["supports_top_p"]:

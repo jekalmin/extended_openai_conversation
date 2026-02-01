@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.template import TemplateEnvironment
 
 from .const import DOMAIN
@@ -68,7 +67,7 @@ class ExtendedOpenAITemplateManager:
             )
 
         # Patch TemplateEnvironment
-        self._original_init = TemplateEnvironment.__init__
+        self._original_init = TemplateEnvironment.__init__  # type: ignore[assignment]
 
         def template_environment_init(
             template_env_self: TemplateEnvironment,
@@ -84,7 +83,7 @@ class ExtendedOpenAITemplateManager:
                     self._extended_openai
                 )
 
-        TemplateEnvironment.__init__ = template_environment_init
+        TemplateEnvironment.__init__ = template_environment_init  # type: ignore[method-assign,assignment]
 
     async def async_on_unload(self) -> None:
         """Tear down the template functions."""

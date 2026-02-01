@@ -8,9 +8,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-import yaml
-
 from homeassistant.core import HomeAssistant
+import yaml
 
 from .const import DEFAULT_SKILLS_DIRECTORY, SKILL_FILE_NAME
 
@@ -287,7 +286,7 @@ class SkillManager:
                             "file_path": {
                                 "type": "string",
                                 "description": (
-                                    "Optional. Relative path to file (e.g., reference.md). "
+                                    "Optional. Relative path to file (e.g., references/reference.md). "
                                     "If omitted, reads SKILL.md body."
                                 ),
                             },

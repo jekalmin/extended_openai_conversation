@@ -5,9 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from openai import OpenAIError
-import yaml
-
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
     ChatLog,
@@ -21,9 +18,11 @@ from homeassistant.config_entries import ConfigSubentry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er, intent, llm, template
+from homeassistant.helpers import intent, llm, template
 from homeassistant.helpers.chat_session import async_get_chat_session
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from openai import OpenAIError
+import yaml
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
@@ -38,7 +37,7 @@ from .const import (
 from .entity import ExtendedOpenAIBaseLLMEntity
 from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
 from .helpers import get_exposed_entities, get_function_executor
-from .skills import SkillManager
+from .skills import Skill, SkillManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,7 +84,8 @@ class ExtendedOpenAIAgentEntity(
     @property
     def skills(self) -> list[str]:
         """Get the enabled skills list for this entity."""
-        return self.subentry.data.get(CONF_SKILLS, [])
+        skills: list[str] = self.subentry.data.get(CONF_SKILLS, [])
+        return skills
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
@@ -194,7 +194,7 @@ class ExtendedOpenAIAgentEntity(
         """Build system prompt with exposed entities and skills."""
         raw_prompt = self.subentry.data.get(CONF_PROMPT, DEFAULT_PROMPT)
 
-        rendered_prompt = template.Template(raw_prompt, self.hass).async_render(
+        rendered_prompt: str = template.Template(raw_prompt, self.hass).async_render(
             {
                 "ha_name": self.hass.config.location_name,
                 "exposed_entities": exposed_entities,
@@ -207,7 +207,7 @@ class ExtendedOpenAIAgentEntity(
 
         return rendered_prompt
 
-    def _get_enabled_skills(self) -> list[dict]:
+    def _get_enabled_skills(self) -> list[Skill]:
         """Get enabled skills as list of dicts for template rendering."""
         enabled_skill_names = self.skills
         all_skills = self.skill_manager.get_all_skills()
@@ -223,6 +223,7 @@ class ExtendedOpenAIAgentEntity(
             function = self.subentry.data.get(CONF_FUNCTIONS)
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
             if result:
+                setting: dict
                 for setting in result:
                     function_executor = get_function_executor(
                         setting["function"]["type"]

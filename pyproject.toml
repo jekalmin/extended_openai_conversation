@@ -1,0 +1,61 @@
+[project]
+name = "extended_openai_conversation"
+description = "Extended OpenAI Conversation custom component for Home Assistant"
+readme = "README.md"
+requires-python = ">=3.14"
+license = {text = "MIT"}
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "types-PyYAML",
+    "pytest",
+    "pytest-asyncio>=0.23.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-homeassistant-custom-component>=0.13.0",
+]
+
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "RUF",    # Ruff-specific rules
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+]
+
+ignore = [
+    "E501",  # line too long
+    "B008",  # function call in argument default (voluptuous pattern)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.extended_openai_conversation"]
+force-sort-within-sections = true
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-import-conventions.extend-aliases]
+voluptuous = "vol"
+"homeassistant.helpers.config_validation" = "cv"
+"homeassistant.helpers.device_registry" = "dr"
+"homeassistant.helpers.entity_registry" = "er"
+"homeassistant.util.dt" = "dt_util"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.14"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+exclude = ["tests/"]
