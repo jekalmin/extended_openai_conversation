@@ -199,16 +199,19 @@ class ExtendedOpenAIAgentEntity(
                 "exposed_entities": exposed_entities,
                 "current_device_id": llm_context.device_id,
                 "user_input": user_input,
+                "skills": self._get_enabled_skills(),
             },
             parse_result=False,
         )
 
-        # Add skills section
-        skills_section = self.skill_manager.build_skills_prompt_section(self.skills)
-        if skills_section:
-            rendered_prompt += skills_section
+        return rendered_prompt
 
-        return str(rendered_prompt)
+    def _get_enabled_skills(self) -> list[dict]:
+        """Get enabled skills as list of dicts for template rendering."""
+        enabled_skill_names = self.skills
+        all_skills = self.skill_manager.get_all_skills()
+
+        return [s for s in all_skills if s.name in enabled_skill_names]
 
     def _get_exposed_entities(self) -> list[dict[str, Any]]:
         return get_exposed_entities(self.hass)
@@ -234,9 +237,7 @@ class ExtendedOpenAIAgentEntity(
             # Add skill functions
             skill_functions = self.skill_manager.get_skill_functions(self.skills)
             for setting in skill_functions:
-                function_executor = get_function_executor(
-                    setting["function"]["type"]
-                )
+                function_executor = get_function_executor(setting["function"]["type"])
                 setting["function"] = function_executor.to_arguments(
                     setting["function"]
                 )

@@ -116,7 +116,21 @@ An overview of the areas and the available devices:
     {%- endfor %}
 ```
 {%- endfor %}
+{% if skills %}
 
+# Available Skills
+
+Use the read_skill function to get detailed instructions when needed:
+
+<skills>
+{%- for skill in skills %}
+  <skill>
+    <name>{{ skill.name }}</name>
+    <description>{{ skill.description }}</description>
+  </skill>
+{%- endfor %}
+</skills>
+{% endif %}
 {{user_input.extra_system_prompt | default('', true)}}
 """
 CONF_CHAT_MODEL = "chat_model"
