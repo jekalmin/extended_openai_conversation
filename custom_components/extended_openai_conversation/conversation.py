@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Literal
+from pathlib import Path
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -31,6 +32,7 @@ from .const import (
     CONF_SKILLS,
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_PROMPT,
+    DEFAULT_WORKING_DIRECTORY,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
 )
@@ -90,7 +92,17 @@ class ExtendedOpenAIAgentEntity(
         """When entity is added to Home Assistant."""
         await super().async_added_to_hass()
         conversation.async_set_agent(self.hass, self.entry, self)
-        self.skill_manager = await SkillManager.async_get_instance(self.hass)
+
+        # Calculate skills directory based on working directory
+        working_dir = DEFAULT_WORKING_DIRECTORY
+        if Path(working_dir).is_absolute():
+            skills_dir = Path(working_dir) / "skills"
+        else:
+            skills_dir = Path(self.hass.config.config_dir) / working_dir / "skills"
+
+        self.skill_manager = await SkillManager.async_get_instance(
+            self.hass, str(skills_dir)
+        )
 
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from Home Assistant."""
@@ -235,7 +247,10 @@ class ExtendedOpenAIAgentEntity(
             result = result or []
 
             # Add skill functions
-            skill_functions = self.skill_manager.get_skill_functions(self.skills)
+            skill_functions = self.skill_manager.get_skill_functions(
+                self.skills,
+                working_directory=DEFAULT_WORKING_DIRECTORY,
+            )
             for setting in skill_functions:
                 function_executor = get_function_executor(setting["function"]["type"])
                 setting["function"] = function_executor.to_arguments(

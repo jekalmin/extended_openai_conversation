@@ -12,7 +12,7 @@ import yaml
 
 from homeassistant.core import HomeAssistant
 
-from .const import DEFAULT_SKILLS_DIRECTORY, SKILL_FILE_NAME
+from .const import DEFAULT_SKILLS_DIRECTORY, DEFAULT_WORKING_DIRECTORY, SKILL_FILE_NAME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,17 +136,22 @@ class SkillManager:
         self._skills_dir: Path | None = None
 
     @classmethod
-    async def async_get_instance(cls, hass: HomeAssistant) -> SkillManager:
+    async def async_get_instance(
+        cls, hass: HomeAssistant, skills_dir: str | None = None
+    ) -> SkillManager:
         """Get or create the singleton instance and load skills.
 
         Args:
             hass: Home Assistant instance
+            skills_dir: Optional custom skills directory path
 
         Returns:
             The singleton SkillManager instance with skills loaded
         """
         if cls._instance is None:
             cls._instance = cls(hass)
+            if skills_dir:
+                cls._instance._skills_dir = Path(skills_dir)
             await cls._instance.async_load_skills()
         return cls._instance
 
@@ -243,7 +248,9 @@ class SkillManager:
         return list(self._skills.values())
 
     def get_skill_functions(
-        self, enabled_skill_names: list[str] | None = None
+        self,
+        enabled_skill_names: list[str] | None = None,
+        working_directory: str | None = None,
     ) -> list[dict[str, Any]]:
         """Get the skill-related function definitions.
 
@@ -252,7 +259,7 @@ class SkillManager:
                                 If None or empty, all skills are enabled.
 
         Returns:
-            List of function specs for read_skill and execute_skill_script
+            List of function specs for skill and bash
         """
         if enabled_skill_names is None:
             enabled_skill_names = []
@@ -266,8 +273,12 @@ class SkillManager:
             ]
         else:
             enabled_skills = list(self._skills.values())
+
         if not enabled_skills:
             return []
+
+        # Build skill names for description
+        skill_names = ", ".join(f"'{s.name}'" for s in enabled_skills)
 
         return [
             {
@@ -282,14 +293,11 @@ class SkillManager:
                         "properties": {
                             "skill_name": {
                                 "type": "string",
-                                "description": "Name of the skill",
+                                "description": "The skill name (e.g., 'commit', 'review-pr', 'pdf')",
                             },
-                            "file_path": {
+                            "args": {
                                 "type": "string",
-                                "description": (
-                                    "Optional. Relative path to file (e.g., reference.md). "
-                                    "If omitted, reads SKILL.md body."
-                                ),
+                                "description": "Optional arguments for the skill",
                             },
                         },
                         "required": ["skill_name"],
@@ -302,29 +310,37 @@ class SkillManager:
             },
             {
                 "spec": {
-                    "name": "execute_skill_script",
+                    "name": "bash",
                     "description": (
-                        "Execute a shell command or script provided by a skill. "
-                        "Commands run in the skill's directory context."
+                        "Execute a shell command. "
+                        "Use for terminal operations like git, npm, docker, etc."
                     ),
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "skill_name": {
-                                "type": "string",
-                                "description": "Name of the skill",
-                            },
                             "command": {
                                 "type": "string",
-                                "description": "Shell command to execute (relative to skill directory)",
+                                "description": "Shell command to execute",
+                            },
+                            "workdir": {
+                                "type": "string",
+                                "description": "Working directory (defaults to cwd)",
+                            },
+                            "background": {
+                                "type": "boolean",
+                                "description": "Run in background immediately",
+                            },
+                            "timeout": {
+                                "type": "number",
+                                "description": "Timeout in seconds (optional, kills process on expiry)",
                             },
                         },
-                        "required": ["skill_name", "command"],
+                        "required": ["command"],
                     },
                 },
                 "function": {
-                    "type": "skill_exec",
-                    "skills_dir": str(self.skills_dir),
+                    "type": "bash",
+                    "working_directory": working_directory or DEFAULT_WORKING_DIRECTORY,
                 },
             },
         ]

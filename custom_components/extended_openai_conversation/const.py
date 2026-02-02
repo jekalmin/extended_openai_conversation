@@ -313,3 +313,6 @@ SKILL_FILE_NAME = "SKILL.md"
 
 # Skill Services
 SERVICE_RELOAD_SKILLS = "reload_skills"
+
+# Working Directory
+DEFAULT_WORKING_DIRECTORY = "extended_openai_conversation/"
