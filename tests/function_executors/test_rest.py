@@ -37,7 +37,7 @@ class TestRestFunctionExecutorYaml:
             mock_rest_data = AsyncMock()
             mock_rest_data.async_update = AsyncMock()
             # Mock weather API response
-            weather_response = '''{
+            weather_response = """{
                 "name": "Seoul",
                 "weather": [{"description": "clear sky"}],
                 "main": {
@@ -46,7 +46,7 @@ class TestRestFunctionExecutorYaml:
                     "humidity": 65
                 },
                 "wind": {"speed": 3.5}
-            }'''
+            }"""
             mock_rest_data.data_without_xml = MagicMock(return_value=weather_response)
             mock_create_rest.return_value = mock_rest_data
 

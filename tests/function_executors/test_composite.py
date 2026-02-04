@@ -33,8 +33,12 @@ class TestCompositeFunctionExecutorYaml:
         # Mock sensor states for the living_room
         def mock_states_get(entity_id):
             states_map = {
-                "sensor.living_room_temperature": State("sensor.living_room_temperature", "22.5"),
-                "sensor.living_room_humidity": State("sensor.living_room_humidity", "45"),
+                "sensor.living_room_temperature": State(
+                    "sensor.living_room_temperature", "22.5"
+                ),
+                "sensor.living_room_humidity": State(
+                    "sensor.living_room_humidity", "45"
+                ),
                 "light.living_room": State("light.living_room", "on"),
             }
             return states_map.get(entity_id)
@@ -65,7 +69,9 @@ class TestCompositeFunctionExecutorYaml:
         # Mock sensor states for bedroom
         def mock_states_get(entity_id):
             states_map = {
-                "sensor.bedroom_temperature": State("sensor.bedroom_temperature", "20.0"),
+                "sensor.bedroom_temperature": State(
+                    "sensor.bedroom_temperature", "20.0"
+                ),
                 "sensor.bedroom_humidity": State("sensor.bedroom_humidity", "50"),
                 "light.bedroom": State("light.bedroom", "off"),
             }

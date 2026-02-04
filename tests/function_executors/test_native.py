@@ -231,11 +231,14 @@ class TestNativeGetHistory:
 
         executor = CompositeFunctionExecutor()
 
-        with patch(
-            "custom_components.extended_openai_conversation.helpers.recorder.get_instance",
-            return_value=mock_recorder_instance,
-        ), patch(
-            "custom_components.extended_openai_conversation.helpers.recorder.util.session_scope"
+        with (
+            patch(
+                "custom_components.extended_openai_conversation.helpers.recorder.get_instance",
+                return_value=mock_recorder_instance,
+            ),
+            patch(
+                "custom_components.extended_openai_conversation.helpers.recorder.util.session_scope"
+            ),
         ):
             result = await executor.execute(
                 hass, processed_function, arguments, llm_context, exposed_entities

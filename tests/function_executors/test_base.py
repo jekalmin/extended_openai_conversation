@@ -85,5 +85,3 @@ class TestFunctionExecutorBase:
 
         with pytest.raises(EntityNotExposed):
             executor.validate_entity_ids(hass, ["light.not_exposed"], exposed_entities)
-
-

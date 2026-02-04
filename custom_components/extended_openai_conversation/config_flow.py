@@ -435,9 +435,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        SelectOptionDict(
-                            value=strategy["key"], label=strategy["label"]
-                        )
+                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
                         for strategy in CONTEXT_TRUNCATE_STRATEGIES
                     ],
                     mode=SelectSelectorMode.DROPDOWN,

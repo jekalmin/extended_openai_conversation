@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -39,7 +39,7 @@ from .const import (
 from .entity import ExtendedOpenAIBaseLLMEntity
 from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
 from .helpers import get_exposed_entities, get_function_executor
-from .skills import SkillManager
+from .skills import Skill, SkillManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class ExtendedOpenAIAgentEntity(
     @property
     def skills(self) -> list[str]:
         """Get the enabled skills list for this entity."""
-        return self.subentry.data.get(CONF_SKILLS, [])
+        return cast(list[str], self.subentry.data.get(CONF_SKILLS, []))
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
@@ -216,9 +216,9 @@ class ExtendedOpenAIAgentEntity(
             parse_result=False,
         )
 
-        return rendered_prompt
+        return cast(str, rendered_prompt)
 
-    def _get_enabled_skills(self) -> list[dict]:
+    def _get_enabled_skills(self) -> list[Skill]:
         """Get enabled skills as list of dicts for template rendering."""
         enabled_skill_names = self.skills
         all_skills = self.skill_manager.get_all_skills()
@@ -228,12 +228,14 @@ class ExtendedOpenAIAgentEntity(
     def _get_exposed_entities(self) -> list[dict[str, Any]]:
         return get_exposed_entities(self.hass)
 
-    def _get_functions(self) -> list[dict]:
+    def _get_functions(self) -> list[dict[str, Any]]:
         """Get custom functions configuration including skill functions."""
         try:
             function = self.subentry.data.get(CONF_FUNCTIONS)
             result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
+            # Ensure result is a list of dicts
             if result:
+                result = cast(list[dict[str, Any]], result)
                 for setting in result:
                     if isinstance(setting, dict) and "function" in setting:
                         function_data = setting["function"]
@@ -244,7 +246,7 @@ class ExtendedOpenAIAgentEntity(
                             setting["function"] = function_executor.to_arguments(
                                 function_data
                             )
-            result = result or []
+            result = cast(list[dict[str, Any]], result or [])
 
             # Add skill functions
             skill_functions = self.skill_manager.get_skill_functions(

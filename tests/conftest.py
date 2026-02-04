@@ -1,4 +1,5 @@
 """Fixtures for extended_openai_conversation tests."""
+
 from pathlib import Path
 import sys
 from unittest.mock import AsyncMock, MagicMock

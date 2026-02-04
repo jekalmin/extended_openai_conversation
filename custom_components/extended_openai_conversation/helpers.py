@@ -981,7 +981,9 @@ class BashFunctionExecutor(FunctionExecutor):
         command = arguments.get("command")
 
         # Get configured working directory from function config
-        configured_workdir = function.get("working_directory", DEFAULT_WORKING_DIRECTORY)
+        configured_workdir = function.get(
+            "working_directory", DEFAULT_WORKING_DIRECTORY
+        )
 
         # Resolve relative paths against config directory
         if Path(configured_workdir).is_absolute():
@@ -1018,9 +1020,7 @@ class BashFunctionExecutor(FunctionExecutor):
                 )
             except TimeoutError:
                 process.kill()
-                return {
-                    "error": f"Command timed out after {timeout} seconds"
-                }
+                return {"error": f"Command timed out after {timeout} seconds"}
 
             result = {
                 "exit_code": process.returncode,

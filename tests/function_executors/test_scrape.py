@@ -46,7 +46,7 @@ class TestScrapeFunctionExecutorYaml:
 
             mock_coordinator = AsyncMock()
             # Mock Hacker News HTML structure
-            html = '''
+            html = """
             <html>
                 <tr class="athing">
                     <td class="title">
@@ -61,7 +61,7 @@ class TestScrapeFunctionExecutorYaml:
                     </td>
                 </tr>
             </html>
-            '''
+            """
             mock_coordinator.data = BeautifulSoup(html, "html.parser")
             mock_coordinator.async_config_entry_first_refresh = AsyncMock()
             mock_coordinator_class.return_value = mock_coordinator

@@ -51,6 +51,7 @@ class TestSqliteFunctionExecutorYaml:
 
         # Insert test data with timestamps
         import time
+
         current_time = int(time.time())
         cursor.executemany(
             "INSERT INTO states VALUES (?, ?, ?)",
