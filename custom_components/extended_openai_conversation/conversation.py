@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -86,7 +86,7 @@ class ExtendedOpenAIAgentEntity(
     @property
     def skills(self) -> list[str]:
         """Get the enabled skills list for this entity."""
-        return cast(list[str], self.subentry.data.get(CONF_SKILLS, []))
+        return self.subentry.data.get(CONF_SKILLS, []) or []
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
@@ -216,7 +216,10 @@ class ExtendedOpenAIAgentEntity(
             parse_result=False,
         )
 
-        return cast(str, rendered_prompt)
+        if not isinstance(rendered_prompt, str):
+            raise TypeError("System prompt template did not render to a string")
+
+        return rendered_prompt
 
     def _get_enabled_skills(self) -> list[Skill]:
         """Get enabled skills as list of dicts for template rendering."""
@@ -232,39 +235,35 @@ class ExtendedOpenAIAgentEntity(
         """Get custom functions configuration including skill functions."""
         try:
             function = self.subentry.data.get(CONF_FUNCTIONS)
-            result = yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
-            # Ensure result is a list of dicts
+            result: list[dict[str, Any]] | None = (
+                yaml.safe_load(function) if function else DEFAULT_CONF_FUNCTIONS
+            )
             if result:
-                result = cast(list[dict[str, Any]], result)
                 for setting in result:
                     if isinstance(setting, dict) and "function" in setting:
                         function_data = setting["function"]
                         if isinstance(function_data, dict) and "type" in function_data:
                             function_executor = get_function_executor(
-                                function_data["type"]
+                                str(function_data["type"])
                             )
                             setting["function"] = function_executor.to_arguments(
                                 function_data
                             )
-            result = cast(list[dict[str, Any]], result or [])
+
+            final_result: list[dict[str, Any]] = result or []
 
             # Add skill functions
-            skill_functions = cast(
-                list[dict[str, Any]],
-                self.skill_manager.get_skill_functions(
-                    self.skills,
-                    working_directory=DEFAULT_WORKING_DIRECTORY,
-                ),
+            skill_functions = self.skill_manager.get_skill_functions(
+                self.skills,
+                working_directory=DEFAULT_WORKING_DIRECTORY,
             )
             for setting in skill_functions:
-                function_data = cast(dict[str, Any], setting["function"])
-                function_executor = get_function_executor(
-                    cast(str, function_data["type"])
-                )
+                function_data = setting["function"]
+                function_executor = get_function_executor(str(function_data["type"]))
                 setting["function"] = function_executor.to_arguments(function_data)
-            result.extend(skill_functions)
+            final_result.extend(skill_functions)
 
-            return result
+            return final_result
         except (InvalidFunction, FunctionNotFound) as e:
             raise e
         except Exception as e:
