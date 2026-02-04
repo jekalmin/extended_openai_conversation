@@ -1,13 +1,5 @@
 """Tests for ScriptFunctionExecutor using yaml definitions."""
 
-import sys
-from pathlib import Path
-
-# Add config directory to path for custom_components imports
-config_dir = Path(__file__).parent.parent.parent.parent.parent
-if str(config_dir) not in sys.path:
-    sys.path.insert(0, str(config_dir))
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -8,9 +8,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-import yaml
-
 from homeassistant.core import HomeAssistant
+import yaml
 
 from .const import DEFAULT_SKILLS_DIRECTORY, DEFAULT_WORKING_DIRECTORY, SKILL_FILE_NAME
 
@@ -276,9 +275,6 @@ class SkillManager:
 
         if not enabled_skills:
             return []
-
-        # Build skill names for description
-        skill_names = ", ".join(f"'{s.name}'" for s in enabled_skills)
 
         return [
             {

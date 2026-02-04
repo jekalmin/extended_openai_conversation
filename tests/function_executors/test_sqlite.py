@@ -1,13 +1,5 @@
 """Tests for SqliteFunctionExecutor using yaml definitions."""
 
-import sys
-from pathlib import Path
-
-# Add config directory to path for custom_components imports
-config_dir = Path(__file__).parent.parent.parent.parent.parent
-if str(config_dir) not in sys.path:
-    sys.path.insert(0, str(config_dir))
-
 import pytest
 
 # Import FunctionExecutors and test helpers
@@ -33,13 +25,14 @@ class TestSqliteFunctionExecutorYaml:
         import sqlite3
 
         # Add sensor.living_room_temperature to exposed entities for this test
-        exposed_entities = exposed_entities + [
+        exposed_entities = [
+            *exposed_entities,
             {
                 "entity_id": "sensor.living_room_temperature",
                 "name": "Living Room Temperature",
                 "state": "23.5",
                 "aliases": [],
-            }
+            },
         ]
 
         # Update the database schema to match the new query

@@ -908,7 +908,6 @@ class SkillReadFunctionExecutor(FunctionExecutor):
             Skill instructions or error message
         """
         skill_name = arguments.get("skill_name")
-        skill_args = arguments.get("args")
 
         if not skill_name:
             return {"error": "skill_name is required"}

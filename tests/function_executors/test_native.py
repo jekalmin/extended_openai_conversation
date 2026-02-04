@@ -1,13 +1,6 @@
 """Tests for NativeFunctionExecutor using yaml definitions."""
 
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
-
-# Add config directory to path for custom_components imports
-config_dir = Path(__file__).parent.parent.parent.parent.parent
-if str(config_dir) not in sys.path:
-    sys.path.insert(0, str(config_dir))
 
 import pytest
 
@@ -215,6 +208,7 @@ class TestNativeGetHistory:
     async def test_get_history(self, hass, exposed_entities, llm_context):
         """Test getting entity history with composite function."""
         from unittest.mock import MagicMock, patch
+
         from custom_components.extended_openai_conversation.helpers import (
             CompositeFunctionExecutor,
         )

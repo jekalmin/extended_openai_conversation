@@ -1,17 +1,7 @@
 """Tests for FunctionExecutor base class and helper function."""
 
-import sys
-from pathlib import Path
-
-# Add config directory to path for custom_components imports
-config_dir = Path(__file__).parent.parent.parent.parent.parent
-if str(config_dir) not in sys.path:
-    sys.path.insert(0, str(config_dir))
-
 from unittest.mock import MagicMock
 
-from homeassistant.exceptions import ServiceNotFound
-from homeassistant.helpers.template import Template
 import pytest
 import voluptuous as vol
 
@@ -28,7 +18,6 @@ from custom_components.extended_openai_conversation.helpers import (
     TemplateFunctionExecutor,
     get_function_executor,
 )
-
 
 
 class TestGetFunctionExecutor:
@@ -63,7 +52,6 @@ class TestFunctionExecutorBase:
         executor = TemplateFunctionExecutor()
         # For testing, pass an already-built Template to bypass cv.template validation
         # This tests the schema structure, not the cv.template behavior
-        template = Template("{{ test }}", hass)
         # The executor's schema uses cv.template which validates strings
         # For unit testing, we verify the schema accepts the required keys
         assert (
