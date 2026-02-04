@@ -249,15 +249,19 @@ class ExtendedOpenAIAgentEntity(
             result = cast(list[dict[str, Any]], result or [])
 
             # Add skill functions
-            skill_functions = self.skill_manager.get_skill_functions(
-                self.skills,
-                working_directory=DEFAULT_WORKING_DIRECTORY,
+            skill_functions = cast(
+                list[dict[str, Any]],
+                self.skill_manager.get_skill_functions(
+                    self.skills,
+                    working_directory=DEFAULT_WORKING_DIRECTORY,
+                ),
             )
             for setting in skill_functions:
-                function_executor = get_function_executor(setting["function"]["type"])
-                setting["function"] = function_executor.to_arguments(
-                    setting["function"]
+                function_data = cast(dict[str, Any], setting["function"])
+                function_executor = get_function_executor(
+                    cast(str, function_data["type"])
                 )
+                setting["function"] = function_executor.to_arguments(function_data)
             result.extend(skill_functions)
 
             return result
