@@ -216,10 +216,7 @@ class ExtendedOpenAIAgentEntity(
             parse_result=False,
         )
 
-        if not isinstance(rendered_prompt, str):
-            raise TypeError("System prompt template did not render to a string")
-
-        return rendered_prompt
+        return str(rendered_prompt)
 
     def _get_enabled_skills(self) -> list[Skill]:
         """Get enabled skills as list of dicts for template rendering."""
