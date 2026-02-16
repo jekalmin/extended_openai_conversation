@@ -30,6 +30,7 @@ from .const import (
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
+    CONF_MEMORY_ENABLED,
     CONF_REASONING_EFFORT,
     CONF_SERVICE_TIER,
     CONF_SHORTEN_TOOL_CALL_ID,
@@ -40,6 +41,7 @@ from .const import (
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MEMORY_ENABLED,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_SERVICE_TIER,
     DEFAULT_SHORTEN_TOOL_CALL_ID,
@@ -278,7 +280,9 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if tools and 0 <= max_function_calls <= n_requests:
                 tool_kwargs["tool_choice"] = "none"
 
-            _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+            _LOGGER.info(
+                "Prompt for %s: %s", model, json.dumps(messages, ensure_ascii=False)
+            )
 
             stream = await self._client.chat.completions.create(
                 messages=messages,
@@ -494,21 +498,24 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
     async def _truncate_message_history(self, chat_log: conversation.ChatLog) -> None:
         """Truncate message history based on strategy."""
+        from .truncate_strategy import (
+            ClearMessageTruncateStrategy,
+            CompactMessageTruncateStrategy,
+            MessageTruncateStrategy,
+        )
+
         options = self.subentry.data
-        strategy = options.get(
+        strategy_key = options.get(
             CONF_CONTEXT_TRUNCATE_STRATEGY, DEFAULT_CONTEXT_TRUNCATE_STRATEGY
         )
 
-        if strategy == "clear":
-            # Keep only system prompt and last user message
-            # This is handled by refreshing the LLM data
-            _LOGGER.info("Context threshold exceeded, conversation history cleared")
-            last_user_message_index = None
-            messages = chat_log.content
-            for i in reversed(range(len(messages))):
-                if isinstance(messages[i], conversation.UserContent):
-                    last_user_message_index = i
-                    break
+        strategy: MessageTruncateStrategy
+        if strategy_key == "compact":
+            memory_enabled = options.get(CONF_MEMORY_ENABLED, DEFAULT_MEMORY_ENABLED)
+            manager = getattr(self, "_memory_manager", None) if memory_enabled else None
+            model = options.get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
+            strategy = CompactMessageTruncateStrategy(self._client, model, manager)
+        else:
+            strategy = ClearMessageTruncateStrategy()
 
-            if last_user_message_index is not None:
-                del messages[1:last_user_message_index]
+        await strategy.truncate(chat_log)

@@ -73,3 +73,73 @@ download_skill:
 reload_skills:
   name: Reload skills
   description: Reload all skills from the user skills directory to pick up changes or newly added skills
+memory_store:
+  name: Memory Store
+  description: Store content in long-term memory for a conversation entity
+  fields:
+    entity_id:
+      required: true
+      description: Entity ID of the conversation agent (e.g. conversation.my_assistant)
+      example: conversation.my_assistant
+      selector:
+        entity:
+          domain: conversation
+          integration: extended_openai_conversation
+    content:
+      required: true
+      description: Content to store in memory
+      selector:
+        text:
+          multiline: true
+memory_search:
+  name: Memory Search
+  description: Search long-term memory for a conversation entity
+  fields:
+    entity_id:
+      required: true
+      description: Entity ID of the conversation agent
+      example: conversation.my_assistant
+      selector:
+        entity:
+          domain: conversation
+          integration: extended_openai_conversation
+    query:
+      required: true
+      description: Search query
+      selector:
+        text:
+    max_results:
+      default: 6
+      description: Maximum number of results to return
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
+    min_score:
+      default: 0.35
+      description: Minimum relevance score (0-1)
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+memory_delete:
+  name: Memory Delete
+  description: Delete a memory entry for a conversation entity
+  fields:
+    entity_id:
+      required: true
+      description: Entity ID of the conversation agent
+      example: conversation.my_assistant
+      selector:
+        entity:
+          domain: conversation
+          integration: extended_openai_conversation
+    id:
+      required: true
+      description: Memory ID to delete (from search results)
+      selector:
+        number:
+          min: 1
+          mode: box

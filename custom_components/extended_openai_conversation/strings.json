@@ -38,6 +38,7 @@
             "attach_username": "Attach Username to Message",
             "context_threshold": "Context Threshold",
             "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+            "memory_enabled": "Enable Long-term Memory",
             "advanced_options": "Advanced Options"
           },
           "data_description": {}
@@ -49,10 +50,16 @@
             "top_p": "Top P",
             "reasoning_effort": "Reasoning effort",
             "service_tier": "Service tier",
-            "shorten_tool_call_id": "Shorten tool call IDs"
+            "shorten_tool_call_id": "Shorten tool call IDs",
+            "memory_embedding_model": "Memory Embedding Model",
+            "memory_max_results": "Memory Search Max Results",
+            "memory_min_score": "Memory Search Minimum Score"
           },
           "data_description": {
-            "shorten_tool_call_id": "Required for Mistral AI cloud API compatibility. Enable only if your provider requires short (9-character) tool call IDs. Keep disabled for OpenAI and most other providers."
+            "shorten_tool_call_id": "Required for Mistral AI cloud API compatibility. Enable only if your provider requires short (9-character) tool call IDs. Keep disabled for OpenAI and most other providers.",
+            "memory_embedding_model": "The embedding model to use for memory indexing and search. Default: text-embedding-3-small",
+            "memory_max_results": "Maximum number of memory search results to return",
+            "memory_min_score": "Minimum similarity score for memory search results (0-1)"
           }
         }
       }

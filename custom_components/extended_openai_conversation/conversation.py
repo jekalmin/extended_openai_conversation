@@ -28,9 +28,15 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import ExtendedOpenAIConfigEntry
 from .const import (
     CONF_FUNCTION_TOOLS,
+    CONF_MEMORY_DB_PATH,
+    CONF_MEMORY_EMBEDDING_MODEL,
+    CONF_MEMORY_ENABLED,
     CONF_PROMPT,
     CONF_SKILLS,
     DEFAULT_CONF_FUNCTION_TOOLS,
+    DEFAULT_MEMORY_DB_PATH,
+    DEFAULT_MEMORY_EMBEDDING_MODEL,
+    DEFAULT_MEMORY_ENABLED,
     DEFAULT_PROMPT,
     DEFAULT_WORKING_DIRECTORY,
     DOMAIN,
@@ -40,6 +46,7 @@ from .entity import ExtendedOpenAIBaseLLMEntity
 from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
 from .functions import get_function
 from .helpers import get_exposed_entities
+from .memory.manager import MemoryManager
 from .skills import Skill, SkillManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +78,7 @@ class ExtendedOpenAIAgentEntity(
     _attr_supports_streaming = True
     _attr_supported_features = ConversationEntityFeature.CONTROL
     skill_manager: SkillManager
+    _memory_manager: MemoryManager | None
 
     @property
     def supported_languages(self) -> list[str] | Literal["*"]:
@@ -82,25 +90,61 @@ class ExtendedOpenAIAgentEntity(
         """Get the enabled skills list for this entity."""
         return self.subentry.data.get(CONF_SKILLS, []) or []
 
+    @property
+    def memory_enabled(self) -> bool:
+        """Check if memory is enabled for this entity."""
+        return self.subentry.data.get(CONF_MEMORY_ENABLED, DEFAULT_MEMORY_ENABLED)
+
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
         await super().async_added_to_hass()
         conversation.async_set_agent(self.hass, self.entry, self)
 
-        # Calculate skills directory based on working directory
+        # Calculate working directory
         working_dir = DEFAULT_WORKING_DIRECTORY
         if Path(working_dir).is_absolute():
+            abs_working_dir = str(Path(working_dir))
             skills_dir = Path(working_dir) / "skills"
         else:
+            abs_working_dir = str(Path(self.hass.config.config_dir) / working_dir)
             skills_dir = Path(self.hass.config.config_dir) / working_dir / "skills"
 
         self.skill_manager = await SkillManager.async_get_instance(
             self.hass, user_skills_dir=str(skills_dir)
         )
 
+        # Initialize memory manager if enabled
+        self._memory_manager = None
+        if self.memory_enabled:
+            embedding_model = self.subentry.data.get(
+                CONF_MEMORY_EMBEDDING_MODEL, DEFAULT_MEMORY_EMBEDDING_MODEL
+            )
+            # Calculate db_path: support {subentry_id} and {entity_id} templates
+            raw_db_path = self.subentry.data.get(
+                CONF_MEMORY_DB_PATH, DEFAULT_MEMORY_DB_PATH
+            )
+            safe_entity = self.entity_id.replace(".", "_").replace("/", "_")
+            db_rel = raw_db_path.format(
+                subentry_id=self.subentry.subentry_id,
+                entity_id=safe_entity,
+            )
+            db_path = (
+                db_rel
+                if Path(db_rel).is_absolute()
+                else str(Path(abs_working_dir) / db_rel)
+            )
+            self._memory_manager = MemoryManager(
+                db_path=db_path,
+                client=self._client,
+                embedding_model=embedding_model,
+            )
+
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from Home Assistant."""
         conversation.async_unset_agent(self.hass, self.entry)
+        if self._memory_manager is not None:
+            await self._memory_manager.async_close()
+            self._memory_manager = None
         await super().async_will_remove_from_hass()
 
     async def async_process(self, user_input: ConversationInput) -> ConversationResult:
@@ -206,6 +250,7 @@ class ExtendedOpenAIAgentEntity(
                 "current_device_id": llm_context.device_id,
                 "user_input": user_input,
                 "skills": self._get_enabled_skills(),
+                "memory_enabled": self.memory_enabled,
             },
             parse_result=False,
         )
@@ -249,3 +294,4 @@ class ExtendedOpenAIAgentEntity(
             raise e
         except Exception as e:
             raise FunctionLoadFailed() from e
+

@@ -75,6 +75,14 @@ When a skill file references a relative path, resolve it against the skill's loc
 </available_skills>
 {% endif %}
 
+{%- if memory_enabled %}
+## Memory
+Use memory actions to recall and store information:
+- Call memory_search to find relevant past conversations and user preferences
+- Call memory_store to save important information for future reference
+- Call memory_delete to remove outdated memories (id from search results)
+{%- endif %}
+
 {{user_input.extra_system_prompt | default('', true)}}
 """
 CONF_CHAT_MODEL = "chat_model"
@@ -231,7 +239,10 @@ DEFAULT_CONF_FUNCTION_TOOLS = [
 ]
 CONF_CONTEXT_THRESHOLD = "context_threshold"
 DEFAULT_CONTEXT_THRESHOLD = 40000
-CONTEXT_TRUNCATE_STRATEGIES = [{"key": "clear", "label": "Clear All Messages"}]
+CONTEXT_TRUNCATE_STRATEGIES = [
+    {"key": "compact", "label": "Compact Message History"},
+    {"key": "clear", "label": "Clear All Messages"},
+]
 CONF_CONTEXT_TRUNCATE_STRATEGY = "context_truncate_strategy"
 DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 
@@ -334,3 +345,18 @@ FILE_READ_SIZE_LIMIT = 1024 * 1024  # 1 MB
 DEFAULT_ALLOWED_DIRS = [
     DEFAULT_WORKING_DIRECTORY,  # /config/extended_openai_conversation/
 ]
+
+# Memory system constants
+CONF_MEMORY_ENABLED = "memory_enabled"
+DEFAULT_MEMORY_ENABLED = False
+
+CONF_MEMORY_EMBEDDING_MODEL = "memory_embedding_model"
+DEFAULT_MEMORY_EMBEDDING_MODEL = "text-embedding-3-small"
+
+CONF_MEMORY_DB_PATH = "memory_db_path"
+DEFAULT_MEMORY_DB_PATH = "memory/conversation.sqlite"
+
+# Memory services
+SERVICE_MEMORY_STORE = "memory_store"
+SERVICE_MEMORY_SEARCH = "memory_search"
+SERVICE_MEMORY_DELETE = "memory_delete"

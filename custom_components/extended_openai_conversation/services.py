@@ -17,7 +17,8 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers import config_validation as cv, entity_registry as er, selector
+from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -25,15 +26,20 @@ from .const import (
     CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_BASE_URL,
+    CONF_MEMORY_ENABLED,
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
     DEFAULT_CONF_BASE_URL,
+    DEFAULT_MEMORY_ENABLED,
     DOMAIN,
     GITHUB_REPO_NAME,
     GITHUB_REPO_OWNER,
     GITHUB_SKILLS_BRANCH,
     GITHUB_SKILLS_PATH,
     SERVICE_DOWNLOAD_SKILL,
+    SERVICE_MEMORY_DELETE,
+    SERVICE_MEMORY_SEARCH,
+    SERVICE_MEMORY_STORE,
     SERVICE_QUERY_IMAGE,
     SERVICE_RELOAD_SKILLS,
 )
@@ -77,7 +83,52 @@ DOWNLOAD_SKILL_SCHEMA = vol.Schema(
     }
 )
 
+MEMORY_STORE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.string,
+        vol.Required("content"): cv.string,
+    }
+)
+
+MEMORY_SEARCH_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.string,
+        vol.Required("query"): cv.string,
+        vol.Optional("max_results", default=5): vol.Coerce(int),
+        vol.Optional("min_score", default=0.35): vol.Coerce(float),
+    }
+)
+
+MEMORY_DELETE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.string,
+        vol.Required("id"): vol.Coerce(int),
+    }
+)
+
 _LOGGER = logging.getLogger(__package__)
+
+
+def _is_memory_enabled(hass: HomeAssistant, entity_id: str) -> bool:
+    """Check if memory is enabled for the given conversation entity."""
+    ent_reg = er.async_get(hass)
+    entity_entry = ent_reg.async_get(entity_id)
+    if entity_entry is None or entity_entry.config_entry_id is None:
+        return False
+
+    config_entry = hass.config_entries.async_get_entry(entity_entry.config_entry_id)
+    if config_entry is None:
+        return False
+
+    subentry_id = entity_entry.config_subentry_id
+    if subentry_id is None:
+        return False
+
+    subentry = config_entry.subentries.get(subentry_id)
+    if subentry is None:
+        return False
+
+    return subentry.data.get(CONF_MEMORY_ENABLED, DEFAULT_MEMORY_ENABLED)
 
 
 async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
@@ -179,6 +230,77 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         return {
             "loaded_skills": len(skill_manager.get_all_skills()),
         }
+
+    def _get_memory_manager(entity_id: str):
+        """Look up MemoryManager by finding the entity on the conversation platform."""
+        for platform in async_get_platforms(hass, DOMAIN):
+            entity = platform.entities.get(entity_id)
+            if entity is not None:
+                return getattr(entity, "_memory_manager", None)
+        return None
+
+    async def memory_store(call: ServiceCall) -> ServiceResponse:
+        """Store content in long-term memory for a conversation entity."""
+        entity_id = call.data["entity_id"]
+        if not _is_memory_enabled(hass, entity_id):
+            raise HomeAssistantError(
+                f"Memory is not enabled for entity '{entity_id}'. "
+                "Enable memory in the conversation agent settings."
+            )
+        manager = _get_memory_manager(entity_id)
+        if manager is None:
+            raise HomeAssistantError(
+                f"Memory not initialized for entity '{entity_id}'. "
+                "Ensure memory is enabled for this conversation agent."
+            )
+        return await manager.async_store(call.data["content"])
+
+    async def memory_search(call: ServiceCall) -> ServiceResponse:
+        """Search long-term memory for a conversation entity."""
+        entity_id = call.data["entity_id"]
+        if not _is_memory_enabled(hass, entity_id):
+            raise HomeAssistantError(
+                f"Memory is not enabled for entity '{entity_id}'. "
+                "Enable memory in the conversation agent settings."
+            )
+        manager = _get_memory_manager(entity_id)
+        if manager is None:
+            raise HomeAssistantError(
+                f"Memory not initialized for entity '{entity_id}'. "
+                "Ensure memory is enabled for this conversation agent."
+            )
+        results = await manager.async_search(
+            query=call.data["query"],
+            max_results=call.data["max_results"],
+            min_score=call.data["min_score"],
+        )
+        return {
+            "results": [
+                {
+                    "id": r.id,
+                    "snippet": r.text,
+                    "score": round(r.score, 3),
+                    "created_at": r.created_at,
+                }
+                for r in results
+            ]
+        }
+
+    async def memory_delete(call: ServiceCall) -> ServiceResponse:
+        """Delete a memory entry for a conversation entity."""
+        entity_id = call.data["entity_id"]
+        if not _is_memory_enabled(hass, entity_id):
+            raise HomeAssistantError(
+                f"Memory is not enabled for entity '{entity_id}'. "
+                "Enable memory in the conversation agent settings."
+            )
+        manager = _get_memory_manager(entity_id)
+        if manager is None:
+            raise HomeAssistantError(
+                f"Memory not initialized for entity '{entity_id}'. "
+                "Ensure memory is enabled for this conversation agent."
+            )
+        return await manager.async_delete(call.data["id"])
 
     async def download_skill(call: ServiceCall) -> ServiceResponse:
         """Download a skill from the GitHub repository."""
@@ -296,6 +418,30 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         SERVICE_DOWNLOAD_SKILL,
         download_skill,
         schema=DOWNLOAD_SKILL_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MEMORY_STORE,
+        memory_store,
+        schema=MEMORY_STORE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MEMORY_SEARCH,
+        memory_search,
+        schema=MEMORY_SEARCH_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MEMORY_DELETE,
+        memory_delete,
+        schema=MEMORY_DELETE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
 

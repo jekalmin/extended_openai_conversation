@@ -44,6 +44,9 @@ from .const import (
     CONF_FUNCTION_TOOLS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
+    CONF_MEMORY_DB_PATH,
+    CONF_MEMORY_EMBEDDING_MODEL,
+    CONF_MEMORY_ENABLED,
     CONF_ORGANIZATION,
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
@@ -66,6 +69,9 @@ from .const import (
     DEFAULT_CONVERSATION_NAME,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MEMORY_DB_PATH,
+    DEFAULT_MEMORY_EMBEDDING_MODEL,
+    DEFAULT_MEMORY_ENABLED,
     DEFAULT_NAME,
     DEFAULT_PROMPT,
     DEFAULT_REASONING_EFFORT,
@@ -382,6 +388,24 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             )
         ] = BooleanSelector()
 
+        # Add memory settings if memory is enabled
+        memory_enabled = (self._temp_data or {}).get(
+            CONF_MEMORY_ENABLED, DEFAULT_MEMORY_ENABLED
+        )
+        if memory_enabled:
+            schema[
+                vol.Optional(
+                    CONF_MEMORY_EMBEDDING_MODEL,
+                    default=DEFAULT_MEMORY_EMBEDDING_MODEL,
+                )
+            ] = str
+            schema[
+                vol.Optional(
+                    CONF_MEMORY_DB_PATH,
+                    default=DEFAULT_MEMORY_DB_PATH,
+                )
+            ] = str
+
         return self.async_show_form(
             step_id="advanced",
             data_schema=self.add_suggested_values_to_schema(
@@ -461,6 +485,10 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional(
+                CONF_MEMORY_ENABLED,
+                default=DEFAULT_MEMORY_ENABLED,
+            ): BooleanSelector(),
             vol.Optional(
                 CONF_ADVANCED_OPTIONS,
                 default=DEFAULT_ADVANCED_OPTIONS,

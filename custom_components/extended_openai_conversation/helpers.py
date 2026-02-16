@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 import logging
 import re
@@ -27,6 +28,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
+
+
+@dataclass
+class ConversationSummary:
+    """Result of conversation summarization."""
+
+    summary: str
+    key_facts: list[str]
 
 
 def get_model_config(model: str) -> dict[str, bool]:
