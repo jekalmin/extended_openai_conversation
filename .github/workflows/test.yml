@@ -1,0 +1,48 @@
+name: Auto-Fix CI Failures
+
+on:
+  workflow_run:
+    workflows: ["CI"]  # Replace with your CI workflow name
+    types: [completed]
+
+jobs:
+  fix-failure:
+    # Only run when CI fails
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Download workflow logs
+        uses: actions/github-script@v7
+        id: get-logs
+        with:
+          script: |
+            const logs = await github.rest.actions.downloadWorkflowRunLogs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id
+            });
+            // Note: This returns a redirect URL to download logs
+            return logs.url;
+
+      - name: Invoke Jules to fix failure
+        uses: google-labs-code/jules-action@v1.0.0
+        with:
+          prompt: |
+            The CI workflow "${{ github.event.workflow_run.name }}" has failed.
+
+            **Failed Run:** ${{ github.event.workflow_run.html_url }}
+            **Branch:** ${{ github.event.workflow_run.head_branch }}
+            **Commit:** ${{ github.event.workflow_run.head_sha }}
+
+            Please:
+            1. Analyze the failure from the workflow run
+            2. Identify the root cause
+            3. Implement a fix
+            4. Ensure the fix passes CI
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ github.event.workflow_run.head_branch }}
+          include_last_commit: true
