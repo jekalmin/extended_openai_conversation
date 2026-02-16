@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from json import JSONDecodeError
 import logging
-from typing import TYPE_CHECKING
 
 from homeassistant.components import ai_task, conversation
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util.json import json_loads
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.util.json import json_loads
 
+from typing import TYPE_CHECKING
 from .entity import ExtendedOpenAIBaseLLMEntity
 
 if TYPE_CHECKING:
