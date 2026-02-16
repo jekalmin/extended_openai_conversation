@@ -370,7 +370,11 @@ class ExtendedOpenAIAgentEntity(
             model_lower.startswith(prefix) or f"-{prefix}" in model_lower
             for prefix in ("gpt-4o", "gpt-5", "o1", "o3", "o4")
         )
-        token_kwargs = {"max_completion_tokens": max_tokens} if use_new_token_param else {"max_tokens": max_tokens}
+        token_kwargs = (
+            {"max_completion_tokens": max_tokens}
+            if use_new_token_param
+            else {"max_tokens": max_tokens}
+        )
 
         response = await self.client.chat.completions.create(
             model=model,
