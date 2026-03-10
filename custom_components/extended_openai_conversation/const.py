@@ -280,6 +280,18 @@ MODEL_CONFIG_PATTERNS = [
             "supports_service_tier": True,
         },
     },
+    # Anthropic models
+    {
+        "pattern": r"^anthropic",
+        "config": {
+            "supports_top_p": False,
+            "supports_temperature": True,
+            "supports_max_tokens": True,
+            "supports_max_completion_tokens": False,
+            "supports_reasoning_effort": False,
+            "supports_service_tier": False,
+        },
+    },
 ]
 
 # AI Task default options (simpler than conversation - no prompt, just model/token settings)
