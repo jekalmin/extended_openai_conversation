@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from functools import partial
 import logging
 import os
 import time
@@ -276,9 +277,11 @@ class NativeFunction(Function):
         )
 
         metadata = await instance.async_add_executor_job(
-            recorder.statistics.get_metadata,
-            hass,
-            statistic_ids,
+            partial(
+                recorder.statistics.get_metadata,
+                hass,
+                statistic_ids=set(statistic_ids),
+            )
         )
 
         # Inject unit_of_measurement into each entry so the LLM knows the
