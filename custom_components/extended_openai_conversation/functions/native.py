@@ -262,7 +262,9 @@ class NativeFunction(Function):
         start_time = dt_util.as_utc(start_time_parsed)
         end_time = dt_util.as_utc(end_time_parsed)
 
-        return await recorder.get_instance(hass).async_add_executor_job(
+        instance = recorder.get_instance(hass)
+
+        statistics = await instance.async_add_executor_job(
             recorder.statistics.statistics_during_period,
             hass,
             start_time,
@@ -272,6 +274,23 @@ class NativeFunction(Function):
             arguments.get("units"),
             arguments.get("types", {"change"}),
         )
+
+        metadata = await instance.async_add_executor_job(
+            recorder.statistics.get_metadata,
+            hass,
+            statistic_ids,
+        )
+
+        # Inject unit_of_measurement into each entry so the LLM knows the
+        # actual unit (Wh, kWh, etc.) instead of assuming kWh by default.
+        for statistic_id, entries in statistics.items():
+            unit = None
+            if statistic_id in metadata:
+                unit = metadata[statistic_id][1].unit_of_measurement
+            for entry in entries:
+                entry["unit_of_measurement"] = unit
+
+        return statistics
 
     def as_utc(
         self, value: str | None, default_value: Any, parse_error_message: str

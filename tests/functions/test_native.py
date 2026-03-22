@@ -271,9 +271,15 @@ class TestNativeGetStatistics:
             "period": "day",
         }
 
+        mock_metadata = MagicMock()
+        mock_metadata.unit_of_measurement = "°C"
+
         mock_recorder_instance = MagicMock()
         mock_recorder_instance.async_add_executor_job = AsyncMock(
-            return_value={"sensor.temperature": []}
+            side_effect=[
+                {"sensor.temperature": [{"start": "2024-01-01", "change": 5.0}]},
+                {"sensor.temperature": (None, mock_metadata)},
+            ]
         )
 
         with patch(
@@ -285,6 +291,7 @@ class TestNativeGetStatistics:
             )
 
         assert isinstance(result, dict)
+        assert result["sensor.temperature"][0]["unit_of_measurement"] == "°C"
 
     async def test_get_statistics_with_options(
         self, hass, function, exposed_entities, llm_context
@@ -307,7 +314,10 @@ class TestNativeGetStatistics:
 
         mock_recorder_instance = MagicMock()
         mock_recorder_instance.async_add_executor_job = AsyncMock(
-            return_value={"sensor.temperature": [], "sensor.humidity": []}
+            side_effect=[
+                {"sensor.temperature": [], "sensor.humidity": []},
+                {},
+            ]
         )
 
         with patch(
@@ -319,6 +329,89 @@ class TestNativeGetStatistics:
             )
 
         assert isinstance(result, dict)
+
+    async def test_get_statistics_unit_of_measurement_injected(
+        self, hass, function, exposed_entities, llm_context
+    ):
+        """Test that unit_of_measurement from metadata is injected into each entry."""
+        from unittest.mock import MagicMock, patch
+
+        function_tool = prepare_function_tool_from_yaml(
+            "native_get_statistics_example.yaml", index=1
+        )
+        function_config = function_tool["function"]
+        function = get_function(function_config["type"])
+
+        arguments = {
+            "statistic_ids": ["sensor.energy_meter"],
+            "start_time": "2024-01-01T00:00:00Z",
+            "end_time": "2024-01-02T00:00:00Z",
+            "period": "day",
+        }
+
+        mock_metadata = MagicMock()
+        mock_metadata.unit_of_measurement = "Wh"
+
+        mock_recorder_instance = MagicMock()
+        mock_recorder_instance.async_add_executor_job = AsyncMock(
+            side_effect=[
+                {
+                    "sensor.energy_meter": [
+                        {"start": "2024-01-01", "change": 1500.0},
+                        {"start": "2024-01-02", "change": 2000.0},
+                    ]
+                },
+                {"sensor.energy_meter": (None, mock_metadata)},
+            ]
+        )
+
+        with patch(
+            "custom_components.extended_openai_conversation.functions.native.recorder.get_instance",
+            return_value=mock_recorder_instance,
+        ):
+            result = await function.execute(
+                hass, function_config, arguments, llm_context, exposed_entities
+            )
+
+        entries = result["sensor.energy_meter"]
+        assert all(entry["unit_of_measurement"] == "Wh" for entry in entries)
+
+    async def test_get_statistics_missing_metadata(
+        self, hass, function, exposed_entities, llm_context
+    ):
+        """Test that unit_of_measurement is None when metadata is unavailable."""
+        from unittest.mock import MagicMock, patch
+
+        function_tool = prepare_function_tool_from_yaml(
+            "native_get_statistics_example.yaml", index=1
+        )
+        function_config = function_tool["function"]
+        function = get_function(function_config["type"])
+
+        arguments = {
+            "statistic_ids": ["sensor.unknown"],
+            "start_time": "2024-01-01T00:00:00Z",
+            "end_time": "2024-01-02T00:00:00Z",
+            "period": "day",
+        }
+
+        mock_recorder_instance = MagicMock()
+        mock_recorder_instance.async_add_executor_job = AsyncMock(
+            side_effect=[
+                {"sensor.unknown": [{"start": "2024-01-01", "change": 42.0}]},
+                {},  # no metadata for this id
+            ]
+        )
+
+        with patch(
+            "custom_components.extended_openai_conversation.functions.native.recorder.get_instance",
+            return_value=mock_recorder_instance,
+        ):
+            result = await function.execute(
+                hass, function_config, arguments, llm_context, exposed_entities
+            )
+
+        assert result["sensor.unknown"][0]["unit_of_measurement"] is None
 
     async def test_get_statistics_invalid_datetime(
         self, hass, function, exposed_entities, llm_context
