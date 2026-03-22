@@ -271,14 +271,11 @@ class TestNativeGetStatistics:
             "period": "day",
         }
 
-        mock_metadata = MagicMock()
-        mock_metadata.unit_of_measurement = "°C"
-
         mock_recorder_instance = MagicMock()
         mock_recorder_instance.async_add_executor_job = AsyncMock(
             side_effect=[
                 {"sensor.temperature": [{"start": "2024-01-01", "change": 5.0}]},
-                {"sensor.temperature": (None, mock_metadata)},
+                {"sensor.temperature": (1, {"unit_of_measurement": "°C"})},
             ]
         )
 
@@ -349,9 +346,6 @@ class TestNativeGetStatistics:
             "period": "day",
         }
 
-        mock_metadata = MagicMock()
-        mock_metadata.unit_of_measurement = "Wh"
-
         mock_recorder_instance = MagicMock()
         mock_recorder_instance.async_add_executor_job = AsyncMock(
             side_effect=[
@@ -361,7 +355,7 @@ class TestNativeGetStatistics:
                         {"start": "2024-01-02", "change": 2000.0},
                     ]
                 },
-                {"sensor.energy_meter": (None, mock_metadata)},
+                {"sensor.energy_meter": (1, {"unit_of_measurement": "Wh"})},
             ]
         )
 
