@@ -286,14 +286,16 @@ class NativeFunction(Function):
 
         # Inject unit_of_measurement into each entry so the LLM knows the
         # actual unit (Wh, kWh, etc.) instead of assuming kWh by default.
+        result: dict[str, Any] = {}
         for statistic_id, entries in statistics.items():
-            unit = None
+            unit: str | None = None
             if statistic_id in metadata:
-                unit = metadata[statistic_id][1].unit_of_measurement
-            for entry in entries:
-                entry["unit_of_measurement"] = unit
+                unit = metadata[statistic_id][1]["unit_of_measurement"]
+            result[statistic_id] = [
+                {**entry, "unit_of_measurement": unit} for entry in entries
+            ]
 
-        return statistics
+        return result
 
     def as_utc(
         self, value: str | None, default_value: Any, parse_error_message: str
