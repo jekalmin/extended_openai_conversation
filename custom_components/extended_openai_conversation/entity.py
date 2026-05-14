@@ -20,7 +20,8 @@ from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.helpers import device_registry as dr, llm
+from homeassistant.exceptions import TemplateError
+from homeassistant.helpers import device_registry as dr, llm, template
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
@@ -28,6 +29,7 @@ from .const import (
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_EXTRA_BODY,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_REASONING_EFFORT,
@@ -38,6 +40,7 @@ from .const import (
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_EXTRA_BODY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_REASONING_EFFORT,
@@ -253,6 +256,23 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             api_kwargs["service_tier"] = options.get(
                 CONF_SERVICE_TIER, DEFAULT_SERVICE_TIER
             )
+
+        # Add extra_body if configured — passthrough for OpenAI-compatible
+        # backends that accept extra request-body fields (ollama, llama.cpp,
+        # vLLM, LM Studio, etc.). E.g. {"chat_template_kwargs":
+        # {"enable_thinking": false}} to disable Qwen3 reasoning, or
+        # {"cache_prompt": true} for llama.cpp prompt caching. Value is a
+        # Jinja-templatable JSON string; empty string disables.
+        extra_body_raw = options.get(CONF_EXTRA_BODY, DEFAULT_EXTRA_BODY) or ""
+        if extra_body_raw.strip():
+            try:
+                rendered = template.Template(extra_body_raw, self.hass).async_render(
+                    parse_result=False
+                )
+                if rendered.strip():
+                    api_kwargs["extra_body"] = json.loads(rendered)
+            except (TemplateError, json.JSONDecodeError) as err:
+                _LOGGER.warning("Invalid extra_body for %s, ignoring: %s", model, err)
 
         # Add structured output format if provided
         if structure is not None:
