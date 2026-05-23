@@ -289,6 +289,10 @@ DEFAULT_AI_TASK_OPTIONS = {
     CONF_ADVANCED_OPTIONS: DEFAULT_ADVANCED_OPTIONS,
 }
 
+# LLM API Integration
+CONF_LLM_HASS_API = "llm_hass_api"
+DEFAULT_LLM_HASS_API: list[str] = []
+
 # Skill System Constants
 CONF_SKILLS = "skills"
 DEFAULT_SKILLS_DIRECTORY = "skills"

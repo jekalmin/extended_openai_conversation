@@ -21,6 +21,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_API_KEY, CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import llm
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -42,6 +43,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_FUNCTION_TOOLS,
+    CONF_LLM_HASS_API,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
@@ -64,6 +66,7 @@ from .const import (
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_CONVERSATION_NAME,
+    DEFAULT_LLM_HASS_API,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
@@ -124,6 +127,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
         CONF_SHORTEN_TOOL_CALL_ID: DEFAULT_SHORTEN_TOOL_CALL_ID,
         CONF_ADVANCED_OPTIONS: DEFAULT_ADVANCED_OPTIONS,
+        CONF_LLM_HASS_API: DEFAULT_LLM_HASS_API,
     }
 )
 
@@ -226,6 +230,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
     options: dict[str, Any]
     _temp_data: dict[str, Any] | None = None
     _available_skills: list[dict[str, Any]] | None = None
+    _available_apis: list[dict[str, Any]] | None = None
 
     @property
     def _is_new(self) -> bool:
@@ -258,6 +263,10 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         if self._available_skills is None:
             self._available_skills = await self._async_get_skills()
 
+        # Load available LLM APIs
+        if self._available_apis is None:
+            self._available_apis = self._async_get_apis()
+
         if user_input is not None:
             # Check if advanced options is enabled
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
@@ -280,7 +289,9 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 data=user_input,
             )
 
-        schema = self.openai_config_option_schema(self.options, self._available_skills)
+        schema = self.openai_config_option_schema(
+            self.options, self._available_skills, self._available_apis
+        )
 
         if self._is_new:
             schema = {
@@ -400,8 +411,21 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
             for skill in skill_manager.get_all_skills()
         ]
 
+    def _async_get_apis(self) -> list[dict[str, Any]]:
+        """Load available LLM APIs."""
+        return [
+            {
+                "id": api.id,
+                "name": api.name,
+            }
+            for api in llm.async_get_apis(self.hass)
+        ]
+
     def openai_config_option_schema(
-        self, options: dict[str, Any], skills: list[dict[str, Any]] | None = None
+        self,
+        options: dict[str, Any],
+        skills: list[dict[str, Any]] | None = None,
+        apis: list[dict[str, Any]] | None = None,
     ) -> dict:
         """Return a schema for OpenAI completion options."""
         # If creating a new subentry and no skills in options, default to all loaded skills
@@ -442,6 +466,22 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 )
             ),
             vol.Optional(
+                CONF_LLM_HASS_API,
+                default=options.get(CONF_LLM_HASS_API, DEFAULT_LLM_HASS_API),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=api["id"],
+                            label=api["name"],
+                        )
+                        for api in (apis or [])
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                    multiple=True,
+                )
+            ),
+            vol.Optional(
                 CONF_FUNCTION_TOOLS,
                 default=DEFAULT_CONF_FUNCTION_TOOLS_STR,
             ): TemplateSelector(),
@@ -468,11 +508,18 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         }
 
         # Remove skills field if no skills available
+        fields_to_remove: set[str] = set()
         if not skills:
+            fields_to_remove.add(CONF_SKILLS)
+        if not apis:
+            fields_to_remove.add(CONF_LLM_HASS_API)
+        if fields_to_remove:
             schema = {
                 key: value
                 for key, value in schema.items()
-                if not (isinstance(key, vol.Optional) and key.schema == CONF_SKILLS)
+                if not (
+                    isinstance(key, vol.Optional) and key.schema in fields_to_remove
+                )
             }
 
         return schema

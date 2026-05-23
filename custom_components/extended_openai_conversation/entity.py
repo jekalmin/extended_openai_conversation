@@ -20,7 +20,7 @@ from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.helpers import device_registry as dr, llm
+from homeassistant.helpers import device_registry as dr, intent, llm
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
@@ -69,7 +69,9 @@ def _shorten_tool_call_id(tool_call_id: str) -> str:
 
 def _adjust_schema(schema: dict[str, Any]) -> None:
     """Adjust the schema to be compatible with OpenAI API."""
-    if schema["type"] == "object":
+    schema_type = schema.get("type")
+
+    if schema_type == "object":
         schema.setdefault("strict", True)
         schema.setdefault("additionalProperties", False)
         if "properties" not in schema:
@@ -82,10 +84,12 @@ def _adjust_schema(schema: dict[str, Any]) -> None:
         for prop, prop_info in schema["properties"].items():
             _adjust_schema(prop_info)
             if prop not in schema["required"]:
-                prop_info["type"] = [prop_info["type"], "null"]
+                prop_info.setdefault("type", "string")
+                if not isinstance(prop_info["type"], list):
+                    prop_info["type"] = [prop_info["type"], "null"]
                 schema["required"].append(prop)
 
-    elif schema["type"] == "array":
+    elif schema_type == "array":
         if "items" not in schema:
             return
 
@@ -316,6 +320,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                     raise FunctionNotFound(tool_input.tool_name)
 
                 tool_result_content = await self._execute_function_tool(
+                    chat_log,
                     function_tool,
                     tool_input,
                     llm_context,
@@ -431,16 +436,78 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if choice.finish_reason == "stop":
                 break
 
+    def _format_match_failed_error(
+        self, err: intent.MatchFailedError
+    ) -> dict[str, Any]:
+        """Format a MatchFailedError into a concise, LLM-readable message."""
+        constraints = getattr(err, "constraints", None)
+        result = getattr(err, "result", None)
+
+        parts = []
+
+        # Extract the reason (e.g., DEVICE_CLASS, NAME)
+        if result is not None:
+            reason = getattr(result, "no_match_reason", None)
+            if reason is not None:
+                parts.append(f"Match failed: {reason.name}")
+
+        # Extract what was being matched
+        if constraints is not None:
+            name = getattr(constraints, "name", None)
+            if name:
+                parts.append(f"target: {name}")
+            domain = getattr(constraints, "domains", None)
+            if domain:
+                parts.append(f"domain: {domain}")
+            device_classes = getattr(constraints, "device_classes", None)
+            if device_classes:
+                parts.append(f"device_class: {device_classes}")
+            area_name = getattr(constraints, "area_name", None)
+            if area_name:
+                parts.append(f"area: {area_name}")
+
+        return {"error": "; ".join(parts) if parts else str(err)}
+
     async def _execute_function_tool(
         self,
+        chat_log: conversation.ChatLog,
         function_tool: dict[str, Any],
         tool_input: llm.ToolInput,
         llm_context: llm.LLMContext | None,
         exposed_entities: list[dict[str, Any]],
     ) -> conversation.ToolResultContent:
-        """Execute a custom function."""
+        """Execute a custom function or HA LLM API tool."""
         arguments: dict[str, Any] = tool_input.tool_args
         function_config = function_tool["function"]
+
+        if function_config["type"] == "llm_api":
+            # Execute via HA LLM API
+            llm_api = chat_log.llm_api
+            if llm_api is None:
+                raise FunctionNotFound(tool_input.tool_name)
+            try:
+                result = await llm_api.async_call_tool(tool_input)
+            except intent.MatchFailedError as err:
+                _LOGGER.warning(
+                    "LLM API tool '%s' failed: %s", tool_input.tool_name, err
+                )
+                result = self._format_match_failed_error(err)
+            except Exception as err:
+                _LOGGER.warning(
+                    "LLM API tool '%s' failed: %s", tool_input.tool_name, err
+                )
+                result = {"error": str(err)}
+            return conversation.ToolResultContent(
+                agent_id=self.entity_id,
+                tool_call_id=tool_input.id,
+                tool_name=tool_input.tool_name,
+                tool_result={
+                    "result": json.dumps(result)
+                    if isinstance(result, dict)
+                    else str(result)
+                },
+            )
+
         function = get_function(function_config["type"])
 
         if self.should_run_in_background(arguments):
