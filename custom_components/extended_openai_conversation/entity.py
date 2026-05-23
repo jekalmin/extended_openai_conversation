@@ -486,25 +486,25 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if llm_api is None:
                 raise FunctionNotFound(tool_input.tool_name)
             try:
-                result = await llm_api.async_call_tool(tool_input)
+                tool_result = await llm_api.async_call_tool(tool_input)
             except intent.MatchFailedError as err:
                 _LOGGER.warning(
                     "LLM API tool '%s' failed: %s", tool_input.tool_name, err
                 )
-                result = self._format_match_failed_error(err)
+                tool_result = self._format_match_failed_error(err)
             except Exception as err:
                 _LOGGER.warning(
                     "LLM API tool '%s' failed: %s", tool_input.tool_name, err
                 )
-                result = {"error": str(err)}
+                tool_result = {"error": str(err)}
             return conversation.ToolResultContent(
                 agent_id=self.entity_id,
                 tool_call_id=tool_input.id,
                 tool_name=tool_input.tool_name,
                 tool_result={
-                    "result": json.dumps(result)
-                    if isinstance(result, dict)
-                    else str(result)
+                    "result": json.dumps(tool_result)
+                    if isinstance(tool_result, dict)
+                    else str(tool_result)
                 },
             )
 
