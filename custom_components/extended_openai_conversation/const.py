@@ -242,7 +242,9 @@ SERVICE_TIER_OPTIONS = ["auto", "default", "flex", "priority"]
 
 # Reasoning Effort options (for o1, o3, o4, gpt-5 models)
 CONF_REASONING_EFFORT = "reasoning_effort"
+CONF_EXTRA_BODY = "extra_body"
 DEFAULT_REASONING_EFFORT = "low"
+DEFAULT_EXTRA_BODY = ""
 REASONING_EFFORT_OPTIONS = ["low", "medium", "high"]
 
 SERVICE_QUERY_IMAGE = "query_image"

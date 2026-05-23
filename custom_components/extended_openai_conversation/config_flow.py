@@ -42,6 +42,7 @@ from .const import (
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_EXTRA_BODY,
     CONF_FUNCTION_TOOLS,
     CONF_LLM_HASS_API,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
@@ -67,6 +68,7 @@ from .const import (
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_CONVERSATION_NAME,
     DEFAULT_LLM_HASS_API,
+    DEFAULT_EXTRA_BODY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
@@ -385,6 +387,16 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 )
             )
 
+        # Add extra_body — passthrough for OpenAI-compatible backends
+        # (ollama, llama.cpp, vLLM, LM Studio). Accepts a Jinja-templatable
+        # JSON string; empty disables.
+        schema[
+            vol.Optional(
+                CONF_EXTRA_BODY,
+                default=DEFAULT_EXTRA_BODY,
+            )
+        ] = TemplateSelector()
+
         # Add shorten_tool_call_id option (for Mistral AI compatibility)
         schema[
             vol.Optional(
@@ -687,6 +699,16 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             )
+
+        # Add extra_body — passthrough for OpenAI-compatible backends
+        # (ollama, llama.cpp, vLLM, LM Studio). Accepts a Jinja-templatable
+        # JSON string; empty disables.
+        schema[
+            vol.Optional(
+                CONF_EXTRA_BODY,
+                default=DEFAULT_EXTRA_BODY,
+            )
+        ] = TemplateSelector()
 
         # Add shorten_tool_call_id option (for Mistral AI compatibility)
         schema[

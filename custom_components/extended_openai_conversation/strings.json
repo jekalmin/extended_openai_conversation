@@ -48,6 +48,7 @@
             "temperature": "Temperature",
             "top_p": "Top P",
             "reasoning_effort": "Reasoning effort",
+            "extra_body": "Extra body (JSON for OpenAI-compatible backends)",
             "service_tier": "Service tier",
             "shorten_tool_call_id": "Shorten tool call IDs"
           },
@@ -78,6 +79,7 @@
             "temperature": "Temperature",
             "top_p": "Top P",
             "reasoning_effort": "Reasoning effort",
+            "extra_body": "Extra body (JSON for OpenAI-compatible backends)",
             "service_tier": "Service tier",
             "shorten_tool_call_id": "Shorten tool call IDs"
           },
