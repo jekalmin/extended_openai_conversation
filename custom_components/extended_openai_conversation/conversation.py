@@ -280,7 +280,12 @@ class ExtendedOpenAIAgentEntity(
         return get_exposed_entities(self.hass)
 
     def _get_function_tools(self) -> list[dict[str, Any]]:
-        """Get custom functions configuration."""
+        """Get custom functions configuration.
+
+        This overrides the base class method to import DEFAULT_CONF_FUNCTION_TOOLS
+        locally to avoid circular imports.
+        """
+
         try:
             function_tools_config = self.subentry.data.get(CONF_FUNCTION_TOOLS)
             function_tools: list[dict[str, Any]] | None = (
@@ -308,7 +313,13 @@ class ExtendedOpenAIAgentEntity(
             raise FunctionLoadFailed() from e
 
     def _convert_llm_api_tools(self, llm_api: llm.APIInstance) -> list[dict[str, Any]]:
-        """Convert HA LLM API tools to function_tools format."""
+        """Convert HA LLM API tools to function_tools format.
+
+        This overrides the base class method to import _make_nullable_optional
+        locally to avoid circular imports.
+        """
+        from .entity import _make_nullable_optional
+
         result: list[dict[str, Any]] = []
         for tool in llm_api.tools:
             schema = convert(

@@ -10,9 +10,11 @@ from homeassistant.components import ai_task, conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import llm
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.json import json_loads
 
+from .const import CONF_LLM_HASS_API, DEFAULT_LLM_HASS_API
 from .entity import ExtendedOpenAIBaseLLMEntity
 
 if TYPE_CHECKING:
@@ -61,16 +63,64 @@ class ExtendedOpenAITaskEntity(
         chat_log: conversation.ChatLog,
     ) -> ai_task.GenDataTaskResult:
         """Handle a generate data task."""
-        # Call _async_handle_chat_log with empty custom_functions and exposed_entities
-        # AI Task operates without functions
+        # Determine which LLM API to use: caller's takes precedence, fallback to subentry config
+        llm_api: llm.APIInstance | None = None
+        llm_context = llm.LLMContext(
+            platform=self.platform.domain,
+            context=None,
+            language=None,
+            assistant=None,
+            device_id=None,
+        )
+        if task.llm_api:
+            # Caller provided llm_api class — fetch by class ID
+            llm_api = await llm.async_get_api(
+                self.hass, task.llm_api.id, llm_context=llm_context
+            )
+        else:
+            # Fallback to subentry config
+            llm_api_ids = self.subentry.data.get(
+                CONF_LLM_HASS_API, DEFAULT_LLM_HASS_API
+            )
+            if llm_api_ids:
+                try:
+                    llm_api = await llm.async_get_api(
+                        self.hass, llm_api_ids, llm_context=llm_context
+                    )
+                except HomeAssistantError as err:
+                    _LOGGER.error("Error getting LLM API: %s", err)
+
+        # Set on chat_log for downstream tool execution
+        chat_log.llm_api = llm_api
+
+        # Build function tools (custom + HA LLM API tools)
+        function_tools = self._get_function_tools()
+        if llm_api:
+            function_tools.extend(self._convert_llm_api_tools(llm_api))
+
+        # Call shared handler with tools
         await self._async_handle_chat_log(
             chat_log,
-            function_tools=[],
+            function_tools=function_tools,
             exposed_entities=[],
             llm_context=None,
             structure_name=task.name,
             structure=task.structure,
         )
+
+        # If loop was exhausted without a final assistant response, force one
+        if not isinstance(chat_log.content[-1], conversation.AssistantContent):
+            _LOGGER.warning(
+                "Tool loop exhausted without final response, forcing completion"
+            )
+            await self._async_handle_chat_log(
+                chat_log,
+                function_tools=[],
+                exposed_entities=[],
+                llm_context=None,
+                structure_name=task.name,
+                structure=task.structure,
+            )
 
         # Extract response
         if not isinstance(chat_log.content[-1], conversation.AssistantContent):

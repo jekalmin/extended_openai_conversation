@@ -17,11 +17,12 @@ from openai.types.chat import (
 import orjson
 import voluptuous as vol
 from voluptuous_openapi import convert
+import yaml
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.helpers import device_registry as dr, intent, llm, template
 from homeassistant.exceptions import TemplateError
+from homeassistant.helpers import device_registry as dr, intent, llm, template
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
@@ -30,6 +31,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_EXTRA_BODY,
+    CONF_FUNCTION_TOOLS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_REASONING_EFFORT,
@@ -38,6 +40,7 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_CHAT_MODEL,
+    DEFAULT_CONF_FUNCTION_TOOLS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_EXTRA_BODY,
@@ -68,6 +71,34 @@ def _shorten_tool_call_id(tool_call_id: str) -> str:
     import hashlib
 
     return hashlib.sha256(tool_call_id.encode()).hexdigest()[:9]
+
+
+def _is_nullable(prop_schema: dict[str, Any]) -> bool:
+    """Check if a property schema accepts null."""
+    prop_type = prop_schema.get("type")
+    if isinstance(prop_type, list):
+        return "null" in prop_type
+    return prop_type == "null"
+
+
+def _make_nullable_optional(schema: dict[str, Any]) -> None:
+    """Remove nullable properties from required list so LLM treats them as optional.
+
+    Keeps 'name' required since it's semantically required by HA's Assist API
+    even though it's typed as nullable.
+    """
+    if schema.get("type") != "object" or "properties" not in schema:
+        return
+    required = schema.get("required", [])
+    nullable = {
+        name
+        for name, prop in schema["properties"].items()
+        if _is_nullable(prop) and name != "name"
+    }
+    if nullable:
+        schema["required"] = [r for r in required if r not in nullable]
+    for prop in schema["properties"].values():
+        _make_nullable_optional(prop)
 
 
 def _adjust_schema(schema: dict[str, Any]) -> None:
@@ -599,3 +630,63 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             if last_user_message_index is not None:
                 del messages[1:last_user_message_index]
+
+    def _get_function_tools(self) -> list[dict[str, Any]]:
+        """Get custom functions configuration from subentry data."""
+        try:
+            from .exceptions import (
+                FunctionLoadFailed,
+                FunctionNotFound,
+                InvalidFunction,
+            )
+
+            function_tools_config = self.subentry.data.get(CONF_FUNCTION_TOOLS)
+            function_tools: list[dict[str, Any]] | None = (
+                yaml.safe_load(function_tools_config)
+                if function_tools_config
+                else DEFAULT_CONF_FUNCTION_TOOLS
+            )
+            if function_tools:
+                for function_tool in function_tools:
+                    if isinstance(function_tool, dict) and "function" in function_tool:
+                        function_config = function_tool["function"]
+                        if (
+                            isinstance(function_config, dict)
+                            and "type" in function_config
+                        ):
+                            function = get_function(function_config["type"])
+                            function_tool["function"] = function.validate_schema(
+                                function_config
+                            )
+
+            return function_tools or []
+        except (InvalidFunction, FunctionNotFound) as e:
+            raise e
+        except Exception as e:
+            raise FunctionLoadFailed() from e
+
+    def _convert_llm_api_tools(self, llm_api: llm.APIInstance) -> list[dict[str, Any]]:
+        """Convert HA LLM API tools to function_tools format."""
+        result: list[dict[str, Any]] = []
+        for tool in llm_api.tools:
+            schema = convert(
+                tool.parameters,
+                custom_serializer=llm_api.custom_serializer or llm.selector_serializer,
+            )
+            _adjust_schema(schema)
+            # Make nullable params optional for the LLM
+            _make_nullable_optional(schema)
+            result.append(
+                {
+                    "spec": {
+                        "name": tool.name,
+                        "description": tool.description or "",
+                        "parameters": schema,
+                    },
+                    "function": {
+                        "type": "llm_api",
+                        "tool_name": tool.name,
+                    },
+                }
+            )
+        return result

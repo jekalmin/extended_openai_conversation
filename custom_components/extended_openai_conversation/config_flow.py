@@ -67,8 +67,8 @@ from .const import (
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_CONVERSATION_NAME,
-    DEFAULT_LLM_HASS_API,
     DEFAULT_EXTRA_BODY,
+    DEFAULT_LLM_HASS_API,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
@@ -542,6 +542,7 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
 
     options: dict[str, Any]
     _temp_data: dict[str, Any] | None = None
+    _available_apis: list[dict[str, Any]] | None = None
 
     @property
     def _is_new(self) -> bool:
@@ -569,6 +570,10 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         # Abort if entry is not loaded
         if self._get_entry().state != ConfigEntryState.LOADED:
             return self.async_abort(reason="entry_not_loaded")
+
+        # Load available LLM APIs
+        if self._available_apis is None:
+            self._available_apis = self._async_get_apis()
 
         if user_input is not None:
             # Check if advanced options is enabled
@@ -608,11 +613,48 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                     default=DEFAULT_MAX_TOKENS,
                 ): int,
                 vol.Optional(
+                    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                    default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                ): int,
+                vol.Optional(
+                    CONF_LLM_HASS_API,
+                    default=self.options.get(CONF_LLM_HASS_API, DEFAULT_LLM_HASS_API),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(
+                                value=api["id"],
+                                label=api["name"],
+                            )
+                            for api in (self._available_apis or [])
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        multiple=True,
+                    )
+                ),
+                vol.Optional(
+                    CONF_FUNCTION_TOOLS,
+                    default=DEFAULT_CONF_FUNCTION_TOOLS_STR,
+                ): TemplateSelector(),
+                vol.Optional(
                     CONF_ADVANCED_OPTIONS,
                     default=DEFAULT_ADVANCED_OPTIONS,
                 ): BooleanSelector(),
             }
         )
+
+        # Remove LLM API field if no APIs available
+        fields_to_remove: set[str] = set()
+        if not self._available_apis:
+            fields_to_remove.add(CONF_LLM_HASS_API)
+        if fields_to_remove:
+            schema = {
+                key: value
+                for key, value in schema.items()
+                if not (
+                    isinstance(key, vol.Optional) and key.schema in fields_to_remove
+                )
+            }
 
         return self.async_show_form(
             step_id="init",
@@ -620,6 +662,16 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                 vol.Schema(schema), self.options
             ),
         )
+
+    def _async_get_apis(self) -> list[dict[str, Any]]:
+        """Load available LLM APIs."""
+        return [
+            {
+                "id": api.id,
+                "name": api.name,
+            }
+            for api in llm.async_get_apis(self.hass)
+        ]
 
     async def async_step_advanced(
         self, user_input: dict[str, Any] | None = None
