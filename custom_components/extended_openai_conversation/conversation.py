@@ -272,4 +272,3 @@ class ExtendedOpenAIAgentEntity(
 
     def _get_exposed_entities(self) -> list[dict[str, Any]]:
         return get_exposed_entities(self.hass)
-
