@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from openai import OpenAIError
-from voluptuous_openapi import convert
-import yaml
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -28,20 +26,16 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
-    CONF_FUNCTION_TOOLS,
     CONF_LLM_HASS_API,
     CONF_PROMPT,
     CONF_SKILLS,
-    DEFAULT_CONF_FUNCTION_TOOLS,
     DEFAULT_LLM_HASS_API,
     DEFAULT_PROMPT,
     DEFAULT_WORKING_DIRECTORY,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
 )
-from .entity import ExtendedOpenAIBaseLLMEntity, _adjust_schema
-from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
-from .functions import get_function
+from .entity import ExtendedOpenAIBaseLLMEntity
 from .helpers import get_exposed_entities
 from .skills import Skill, SkillManager
 

@@ -289,12 +289,15 @@ CONF_LLM_HASS_API = "llm_hass_api"
 DEFAULT_LLM_HASS_API: list[str] = []
 
 # AI Task default options
+# Note: CONF_FUNCTION_TOOLS is intentionally omitted here because its default
+# is a YAML string (DEFAULT_CONF_FUNCTION_TOOLS_STR), which is defined in
+# config_flow.py. Including it here would require a circular import or storing
+# a Python list where a string is expected, breaking the TemplateSelector field.
 DEFAULT_AI_TASK_OPTIONS = {
     CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
     CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_LLM_HASS_API: DEFAULT_LLM_HASS_API,
-    CONF_FUNCTION_TOOLS: DEFAULT_CONF_FUNCTION_TOOLS,
     CONF_ADVANCED_OPTIONS: DEFAULT_ADVANCED_OPTIONS,
 }
 
