@@ -23,6 +23,30 @@ Configure Extended OpenAI Conversation through the Options menu in your Voice As
   <img width="400" alt="Edit Assist" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/bb394cd4-5790-4ac9-9311-dbcab0fcca56" />
 </Frame>
 
+## Connection settings
+
+Connection settings (API key, base URL, and similar) live on the main integration entry, not the per-assistant Options menu. To change them, go to **Settings** > **Devices & Services**, open **Extended OpenAI Conversation**, and click **Configure**.
+
+<AccordionGroup>
+  <Accordion title="Follow redirects">
+    **Type**: Boolean
+
+    **Default**: `false`
+
+    Follow HTTP `3xx` redirects when calling the base URL.
+
+    Enable this when your OpenAI-compatible host (for example a reverse proxy, gateway, or SSO front-end) returns a redirect before reaching the API. When disabled, the integration surfaces the redirect response as an error such as:
+
+    ```
+    Sorry, I had a problem talking to OpenAI: <html><body>You are being redirected.</body></html>
+    ```
+
+    <Note>
+    Home Assistant's shared HTTP client does not follow redirects by default, while the OpenAI SDK's default client does. Enable this option to follow redirects for your custom host.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
 ## Configuration Options
 
 ### Options

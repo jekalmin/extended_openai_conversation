@@ -42,6 +42,7 @@ from .const import (
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_EXTRA_BODY,
+    CONF_FOLLOW_REDIRECTS,
     CONF_FUNCTION_TOOLS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     DEFAULT_CONVERSATION_NAME,
     DEFAULT_EXTRA_BODY,
+    DEFAULT_FOLLOW_REDIRECTS,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
@@ -95,6 +97,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
         ): bool,
+        vol.Optional(CONF_FOLLOW_REDIRECTS, default=DEFAULT_FOLLOW_REDIRECTS): bool,
         vol.Optional(CONF_API_PROVIDER, default=DEFAULT_API_PROVIDER): SelectSelector(
             SelectSelectorConfig(
                 options=[
@@ -140,6 +143,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
     api_version = data.get(CONF_API_VERSION)
     organization = data.get(CONF_ORGANIZATION)
     skip_authentication = data.get(CONF_SKIP_AUTHENTICATION, False)
+    follow_redirects = data.get(CONF_FOLLOW_REDIRECTS, DEFAULT_FOLLOW_REDIRECTS)
     api_provider = data.get(CONF_API_PROVIDER)
 
     if base_url == DEFAULT_CONF_BASE_URL:
@@ -158,6 +162,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
         organization=organization,
         api_provider=api_provider,
         skip_authentication=skip_authentication,
+        follow_redirects=follow_redirects,
     )
 
 
