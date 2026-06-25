@@ -52,6 +52,9 @@ change_config:
     skip_authentication:
       selector:
         boolean:
+    follow_redirects:
+      selector:
+        boolean:
     api_provider:
       example: openai
       selector:

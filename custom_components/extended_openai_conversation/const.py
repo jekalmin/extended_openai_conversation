@@ -11,6 +11,8 @@ DEFAULT_CONF_BASE_URL = "https://api.openai.com/v1"
 CONF_API_VERSION = "api_version"
 CONF_SKIP_AUTHENTICATION = "skip_authentication"
 DEFAULT_SKIP_AUTHENTICATION = False
+CONF_FOLLOW_REDIRECTS = "follow_redirects"
+DEFAULT_FOLLOW_REDIRECTS = False
 CONF_API_PROVIDER = "api_provider"
 API_PROVIDERS = [
     {"key": "openai", "label": "OpenAI"},
