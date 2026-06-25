@@ -14,6 +14,7 @@
                     "api_version": "Api Version",
                     "organization": "Organization",
                     "skip_authentication": "Skip Authentication",
+                    "follow_redirects": "Follow redirects",
                     "api_provider": "Api Provider"
                 }
             }
@@ -145,6 +146,10 @@
                 "skip_authentication": {
                     "name": "Skip Authentication",
                     "description": "Skip authentication."
+                },
+                "follow_redirects": {
+                    "name": "Follow redirects",
+                    "description": "Follow HTTP 3xx redirects when calling the base URL. Enable when your OpenAI-compatible host (e.g. a proxy or gateway) returns a redirect before reaching the API."
                 },
                 "api_provider": {
                     "name": "Api Provider",

@@ -25,9 +25,11 @@ from .const import (
     CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_BASE_URL,
+    CONF_FOLLOW_REDIRECTS,
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
     DEFAULT_CONF_BASE_URL,
+    DEFAULT_FOLLOW_REDIRECTS,
     DOMAIN,
     GITHUB_REPO_NAME,
     GITHUB_REPO_OWNER,
@@ -65,6 +67,7 @@ CHANGE_CONFIG_SCHEMA = vol.Schema(
         vol.Optional(CONF_API_VERSION): cv.string,
         vol.Optional(CONF_ORGANIZATION): cv.string,
         vol.Optional(CONF_SKIP_AUTHENTICATION): cv.boolean,
+        vol.Optional(CONF_FOLLOW_REDIRECTS): cv.boolean,
         vol.Optional(CONF_API_PROVIDER): cv.string,
     }
 )
@@ -135,6 +138,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
             CONF_API_VERSION,
             CONF_ORGANIZATION,
             CONF_SKIP_AUTHENTICATION,
+            CONF_FOLLOW_REDIRECTS,
             CONF_API_PROVIDER,
         ):
             if key in call.data:
@@ -165,6 +169,9 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
             organization=new_data.get(CONF_ORGANIZATION),
             skip_authentication=new_data.get(CONF_SKIP_AUTHENTICATION, False),
             api_provider=new_data.get(CONF_API_PROVIDER),
+            follow_redirects=new_data.get(
+                CONF_FOLLOW_REDIRECTS, DEFAULT_FOLLOW_REDIRECTS
+            ),
         )
 
         hass.config_entries.async_update_entry(entry, data=new_data)

@@ -18,9 +18,11 @@ from .const import (
     CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_BASE_URL,
+    CONF_FOLLOW_REDIRECTS,
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
     DEFAULT_API_PROVIDER,
+    DEFAULT_FOLLOW_REDIRECTS,
     DEFAULT_SKIP_AUTHENTICATION,
     DOMAIN,
 )
@@ -59,6 +61,9 @@ async def async_setup_entry(
                 CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
             ),
             api_provider=entry.data.get(CONF_API_PROVIDER, DEFAULT_API_PROVIDER),
+            follow_redirects=entry.data.get(
+                CONF_FOLLOW_REDIRECTS, DEFAULT_FOLLOW_REDIRECTS
+            ),
         )
     except AuthenticationError as err:
         _LOGGER.error("Invalid API key: %s", err)

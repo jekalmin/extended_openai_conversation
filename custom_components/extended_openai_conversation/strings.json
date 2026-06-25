@@ -9,6 +9,7 @@
           "api_version": "[%key:common::config_flow::data::api_version%]",
           "organization": "[%key:common::config_flow::data::organization%]",
           "skip_authentication": "[%key:common::config_flow::data::skip_authentication%]",
+          "follow_redirects": "Follow redirects",
           "api_provider": "[%key:common::config_flow::data::api_provider%]"
         }
       }
@@ -145,6 +146,10 @@
         "skip_authentication": {
           "name": "Skip Authentication",
           "description": "Skip authentication."
+        },
+        "follow_redirects": {
+          "name": "Follow redirects",
+          "description": "Follow HTTP 3xx redirects when calling the base URL. Enable when your OpenAI-compatible host (e.g. a proxy or gateway) returns a redirect before reaching the API."
         },
         "api_provider": {
           "name": "API Provider",
