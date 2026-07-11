@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import partial
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
 
@@ -110,7 +110,9 @@ def _convert_to_template(
             if isinstance(value, str) and (
                 key in template_keys or set(parents).intersection(template_keys)
             ):
-                settings[key] = Template(value, hass)
+                # convert_to_template is only ever invoked with a real hass;
+                # HA dev tightened Template's hass arg to non-optional.
+                settings[key] = Template(value, cast(HomeAssistant, hass))
             if isinstance(value, dict):
                 parents.append(key)
                 _convert_to_template(value, template_keys, hass, parents)
