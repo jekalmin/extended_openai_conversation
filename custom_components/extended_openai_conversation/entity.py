@@ -14,8 +14,12 @@ from openai import AsyncClient, AsyncStream
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionChunk,
+    ChatCompletionContentPartImageParam,
+    ChatCompletionContentPartParam,
+    ChatCompletionContentPartTextParam,
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
 )
 import orjson
 import voluptuous as vol
@@ -114,19 +118,19 @@ def _format_structured_output(
 
 def encode_attachments(
     chat_content: list[conversation.Content],
-) -> dict[int, list[dict[str, Any]]]:
+) -> dict[int, list[ChatCompletionContentPartImageParam]]:
     """Read and base64-encode attachments. BLOCKING - run in an executor.
 
     Returns a map of {index in chat_content: list of image content parts}.
     """
-    encoded: dict[int, list[dict[str, Any]]] = {}
+    encoded: dict[int, list[ChatCompletionContentPartImageParam]] = {}
 
     for index, content in enumerate(chat_content):
         attachments = getattr(content, "attachments", None)
         if content.role != "user" or not attachments:
             continue
 
-        parts: list[dict[str, Any]] = []
+        parts: list[ChatCompletionContentPartImageParam] = []
         for attachment in attachments:
             file_path = Path(attachment.path)
             if not file_path.exists():
@@ -160,7 +164,8 @@ def encode_attachments(
 def _convert_content_to_param(
     chat_content: list[conversation.Content],
     shorten_tool_call_id: bool = False,
-    attachment_parts: dict[int, list[dict[str, Any]]] | None = None,
+    attachment_parts: dict[int, list[ChatCompletionContentPartImageParam]]
+    | None = None,
 ) -> list[ChatCompletionMessageParam]:
     """Convert chat log content to OpenAI message format."""
     messages: list[ChatCompletionMessageParam] = []
@@ -174,11 +179,19 @@ def _convert_content_to_param(
                 messages.append({"role": "user", "content": content.content})
             else:
                 # Multipart form: text first, then one image_url block per attachment.
-                multipart: list[dict[str, Any]] = []
+                multipart: list[ChatCompletionContentPartParam] = []
                 if content.content:
-                    multipart.append({"type": "text", "text": content.content})
+                    text_part: ChatCompletionContentPartTextParam = {
+                        "type": "text",
+                        "text": content.content,
+                    }
+                    multipart.append(text_part)
                 multipart.extend(parts)
-                messages.append({"role": "user", "content": multipart})
+                user_message: ChatCompletionUserMessageParam = {
+                    "role": "user",
+                    "content": multipart,
+                }
+                messages.append(user_message)
         elif content.role == "assistant":
             msg: ChatCompletionAssistantMessageParam = {"role": "assistant"}
             if content.content:
