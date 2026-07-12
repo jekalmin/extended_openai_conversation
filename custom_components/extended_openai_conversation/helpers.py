@@ -426,6 +426,25 @@ class NativeFunctionExecutor(FunctionExecutor):
             arguments.get("types", {"change"}),
         )
 
+    def _resolve_data_path(self, filename: str) -> str:
+        """Resolve filename to an absolute path confined to DATA_FOLDER.
+
+        os.path.basename() alone lets filename=".." slip through unchanged
+        (no separator to strip), escaping DATA_FOLDER by one directory level.
+        Resolving the real path and checking containment closes that gap.
+        """
+        safe_filename = os.path.basename(filename)
+        full_path = os.path.join(DATA_FOLDER, safe_filename)
+        resolved_path = os.path.realpath(full_path)
+        resolved_data_folder = os.path.realpath(DATA_FOLDER)
+        if resolved_path != resolved_data_folder and not resolved_path.startswith(
+            resolved_data_folder + os.sep
+        ):
+            raise HomeAssistantError(
+                f"Invalid filename '{filename}': resolves outside the data folder"
+            )
+        return resolved_path
+
     async def write_to_file(
         self,
         hass: HomeAssistant,
@@ -453,8 +472,7 @@ class NativeFunctionExecutor(FunctionExecutor):
             
         try:
             os.makedirs(DATA_FOLDER, exist_ok=True)
-            safe_filename = os.path.basename(filename)
-            full_path = os.path.join(DATA_FOLDER, safe_filename)
+            full_path = self._resolve_data_path(filename)
             _LOGGER.info("Writing to file: %s, open_mode: %s, content: %s", full_path, open_mode, content)
             async with aiofiles.open(full_path, open_mode) as f:
                 await f.write(content)
@@ -477,8 +495,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         filename = arguments["filename"]
         try:
             os.makedirs(DATA_FOLDER, exist_ok=True)
-            safe_filename = os.path.basename(filename)
-            full_path = os.path.join(DATA_FOLDER, safe_filename)
+            full_path = self._resolve_data_path(filename)
             _LOGGER.info("Reading from file: %s", full_path)
             async with aiofiles.open(full_path, "r") as f:
                 content = await f.read()
