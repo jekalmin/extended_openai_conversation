@@ -142,6 +142,10 @@ def _convert_content_to_param(
             # Remove tool_calls field if it's an empty array to maintain compatibility
             if msg.get("tool_calls") == []:
                 msg.pop("tool_calls", None)
+            # Some OpenAI-compatible APIs (vLLM, SGLang, etc.) reject assistant
+            # messages missing the "content" key entirely; ensure it's always present
+            if "content" not in msg:
+                msg["content"] = None
             messages.append(msg)
         elif content.role == "tool_result":
             messages.append(
