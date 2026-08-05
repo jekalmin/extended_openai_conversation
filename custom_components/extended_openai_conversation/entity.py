@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import AsyncGenerator
 import json
 import logging
+from mimetypes import guess_file_type
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from openai import AsyncClient, AsyncStream
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionChunk,
+    ChatCompletionContentPartImageParam,
+    ChatCompletionContentPartParam,
+    ChatCompletionContentPartTextParam,
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
+    ChatCompletionUserMessageParam,
 )
 import orjson
 import voluptuous as vol
@@ -20,6 +27,7 @@ from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, llm
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
@@ -108,18 +116,82 @@ def _format_structured_output(
     return result
 
 
+def encode_attachments(
+    chat_content: list[conversation.Content],
+) -> dict[int, list[ChatCompletionContentPartImageParam]]:
+    """Read and base64-encode attachments. BLOCKING - run in an executor.
+
+    Returns a map of {index in chat_content: list of image content parts}.
+    """
+    encoded: dict[int, list[ChatCompletionContentPartImageParam]] = {}
+
+    for index, content in enumerate(chat_content):
+        attachments = getattr(content, "attachments", None)
+        if content.role != "user" or not attachments:
+            continue
+
+        parts: list[ChatCompletionContentPartImageParam] = []
+        for attachment in attachments:
+            file_path = Path(attachment.path)
+            if not file_path.exists():
+                raise HomeAssistantError(
+                    f"Attachment does not exist: {file_path.as_posix()}"
+                )
+
+            mime_type = attachment.mime_type or guess_file_type(file_path)[0]
+            if not mime_type or not mime_type.startswith("image/"):
+                raise HomeAssistantError(
+                    f"Unsupported attachment type {mime_type or 'unknown'} "
+                    f"for {file_path.as_posix()}"
+                )
+            if mime_type == "image/jpg":
+                mime_type = "image/jpeg"
+
+            b64 = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime_type};base64,{b64}"},
+                }
+            )
+
+        if parts:
+            encoded[index] = parts
+
+    return encoded
+
+
 def _convert_content_to_param(
     chat_content: list[conversation.Content],
     shorten_tool_call_id: bool = False,
+    attachment_parts: dict[int, list[ChatCompletionContentPartImageParam]]
+    | None = None,
 ) -> list[ChatCompletionMessageParam]:
     """Convert chat log content to OpenAI message format."""
     messages: list[ChatCompletionMessageParam] = []
+    attachment_parts = attachment_parts or {}
 
-    for content in chat_content:
+    for index, content in enumerate(chat_content):
         if content.role == "system":
             messages.append({"role": "system", "content": content.content})
         elif content.role == "user":
-            messages.append({"role": "user", "content": content.content})
+            if (parts := attachment_parts.get(index)) is None:
+                messages.append({"role": "user", "content": content.content})
+            else:
+                # Multipart form: text first, then one image_url block per attachment.
+                multipart: list[ChatCompletionContentPartParam] = []
+                if content.content:
+                    text_part: ChatCompletionContentPartTextParam = {
+                        "type": "text",
+                        "text": content.content,
+                    }
+                    multipart.append(text_part)
+                multipart.extend(parts)
+                user_message: ChatCompletionUserMessageParam = {
+                    "role": "user",
+                    "content": multipart,
+                }
+                messages.append(user_message)
         elif content.role == "assistant":
             msg: ChatCompletionAssistantMessageParam = {"role": "assistant"}
             if content.content:
@@ -207,7 +279,12 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
         # Get model-specific configuration
         model_config = get_model_config(model)
 
-        messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
+        attachment_parts = await self.hass.async_add_executor_job(
+            encode_attachments, chat_log.content
+        )
+        messages = _convert_content_to_param(
+            chat_log.content, shorten_tool_call_id, attachment_parts
+        )
 
         # Build functions list from custom functions
         tools: list[ChatCompletionToolParam] = [
@@ -325,7 +402,12 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                 chat_log.async_add_assistant_content_without_tools(tool_result_content)
 
             # Update messages for next iteration
-            messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
+            attachment_parts = await self.hass.async_add_executor_job(
+                encode_attachments, chat_log.content
+            )
+            messages = _convert_content_to_param(
+                chat_log.content, shorten_tool_call_id, attachment_parts
+            )
 
             # Check if we need to continue (if there are pending tool results)
             if not chat_log.unresponded_tool_results:
