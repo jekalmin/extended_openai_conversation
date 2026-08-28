@@ -96,13 +96,15 @@ def convert_to_template(
 ) -> None:
     if template_keys is None:
         template_keys = ["data", "event_data", "target", "service"]
+    if hass is None:
+        raise ValueError("hass is required to convert settings to templates") 
     _convert_to_template(settings, template_keys, hass, [])
 
 
 def _convert_to_template(
     settings: Any,
     template_keys: list[str],
-    hass: HomeAssistant,
+    hass: HomeAssistant | None,
     parents: list[str],
 ) -> None:
     if isinstance(settings, dict):
