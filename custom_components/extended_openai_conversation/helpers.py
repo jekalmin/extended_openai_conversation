@@ -102,7 +102,7 @@ def convert_to_template(
 def _convert_to_template(
     settings: Any,
     template_keys: list[str],
-    hass: HomeAssistant | None,
+    hass: HomeAssistant,
     parents: list[str],
 ) -> None:
     if isinstance(settings, dict):
