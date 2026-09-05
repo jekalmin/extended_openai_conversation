@@ -17,6 +17,8 @@ pytest-homeassistant-custom-component>=0.12.0
 
 # Schema validation
 voluptuous>=0.13.0
+# Not provided by HA core since 2026.9 (core switched to probatio.to_openapi)
+voluptuous-openapi>=0.4.1
 
 # YAML parsing
 PyYAML>=6.0
