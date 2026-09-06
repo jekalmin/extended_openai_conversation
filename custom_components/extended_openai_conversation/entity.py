@@ -17,10 +17,12 @@ from openai.types.chat import (
 import orjson
 import voluptuous as vol
 from voluptuous_openapi import convert
+import yaml
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.helpers import device_registry as dr, llm
+from homeassistant.exceptions import TemplateError
+from homeassistant.helpers import device_registry as dr, intent, llm, template
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
@@ -28,6 +30,8 @@ from .const import (
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_EXTRA_BODY,
+    CONF_FUNCTION_TOOLS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_REASONING_EFFORT,
@@ -36,8 +40,10 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DEFAULT_CHAT_MODEL,
+    DEFAULT_CONF_FUNCTION_TOOLS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_EXTRA_BODY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_REASONING_EFFORT,
@@ -67,9 +73,39 @@ def _shorten_tool_call_id(tool_call_id: str) -> str:
     return hashlib.sha256(tool_call_id.encode()).hexdigest()[:9]
 
 
+def _is_nullable(prop_schema: dict[str, Any]) -> bool:
+    """Check if a property schema accepts null."""
+    prop_type = prop_schema.get("type")
+    if isinstance(prop_type, list):
+        return "null" in prop_type
+    return prop_type == "null"
+
+
+def _make_nullable_optional(schema: dict[str, Any]) -> None:
+    """Remove nullable properties from required list so LLM treats them as optional.
+
+    Keeps 'name' required since it's semantically required by HA's Assist API
+    even though it's typed as nullable.
+    """
+    if schema.get("type") != "object" or "properties" not in schema:
+        return
+    required = schema.get("required", [])
+    nullable = {
+        name
+        for name, prop in schema["properties"].items()
+        if _is_nullable(prop) and name != "name"
+    }
+    if nullable:
+        schema["required"] = [r for r in required if r not in nullable]
+    for prop in schema["properties"].values():
+        _make_nullable_optional(prop)
+
+
 def _adjust_schema(schema: dict[str, Any]) -> None:
     """Adjust the schema to be compatible with OpenAI API."""
-    if schema["type"] == "object":
+    schema_type = schema.get("type")
+
+    if schema_type == "object":
         schema.setdefault("strict", True)
         schema.setdefault("additionalProperties", False)
         if "properties" not in schema:
@@ -82,10 +118,12 @@ def _adjust_schema(schema: dict[str, Any]) -> None:
         for prop, prop_info in schema["properties"].items():
             _adjust_schema(prop_info)
             if prop not in schema["required"]:
-                prop_info["type"] = [prop_info["type"], "null"]
+                prop_info.setdefault("type", "string")
+                if not isinstance(prop_info["type"], list):
+                    prop_info["type"] = [prop_info["type"], "null"]
                 schema["required"].append(prop)
 
-    elif schema["type"] == "array":
+    elif schema_type == "array":
         if "items" not in schema:
             return
 
@@ -254,6 +292,23 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                 CONF_SERVICE_TIER, DEFAULT_SERVICE_TIER
             )
 
+        # Add extra_body if configured — passthrough for OpenAI-compatible
+        # backends that accept extra request-body fields (ollama, llama.cpp,
+        # vLLM, LM Studio, etc.). E.g. {"chat_template_kwargs":
+        # {"enable_thinking": false}} to disable Qwen3 reasoning, or
+        # {"cache_prompt": true} for llama.cpp prompt caching. Value is a
+        # Jinja-templatable JSON string; empty string disables.
+        extra_body_raw = options.get(CONF_EXTRA_BODY, DEFAULT_EXTRA_BODY) or ""
+        if extra_body_raw.strip():
+            try:
+                rendered = template.Template(extra_body_raw, self.hass).async_render(
+                    parse_result=False
+                )
+                if rendered.strip():
+                    api_kwargs["extra_body"] = json.loads(rendered)
+            except (TemplateError, json.JSONDecodeError) as err:
+                _LOGGER.warning("Invalid extra_body for %s, ignoring: %s", model, err)
+
         # Add structured output format if provided
         if structure is not None:
             api_kwargs["response_format"] = {
@@ -316,6 +371,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                     raise FunctionNotFound(tool_input.tool_name)
 
                 tool_result_content = await self._execute_function_tool(
+                    chat_log,
                     function_tool,
                     tool_input,
                     llm_context,
@@ -431,16 +487,78 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if choice.finish_reason == "stop":
                 break
 
+    def _format_match_failed_error(
+        self, err: intent.MatchFailedError
+    ) -> dict[str, Any]:
+        """Format a MatchFailedError into a concise, LLM-readable message."""
+        constraints = getattr(err, "constraints", None)
+        result = getattr(err, "result", None)
+
+        parts = []
+
+        # Extract the reason (e.g., DEVICE_CLASS, NAME)
+        if result is not None:
+            reason = getattr(result, "no_match_reason", None)
+            if reason is not None:
+                parts.append(f"Match failed: {reason.name}")
+
+        # Extract what was being matched
+        if constraints is not None:
+            name = getattr(constraints, "name", None)
+            if name:
+                parts.append(f"target: {name}")
+            domain = getattr(constraints, "domains", None)
+            if domain:
+                parts.append(f"domain: {domain}")
+            device_classes = getattr(constraints, "device_classes", None)
+            if device_classes:
+                parts.append(f"device_class: {device_classes}")
+            area_name = getattr(constraints, "area_name", None)
+            if area_name:
+                parts.append(f"area: {area_name}")
+
+        return {"error": "; ".join(parts) if parts else str(err)}
+
     async def _execute_function_tool(
         self,
+        chat_log: conversation.ChatLog,
         function_tool: dict[str, Any],
         tool_input: llm.ToolInput,
         llm_context: llm.LLMContext | None,
         exposed_entities: list[dict[str, Any]],
     ) -> conversation.ToolResultContent:
-        """Execute a custom function."""
+        """Execute a custom function or HA LLM API tool."""
         arguments: dict[str, Any] = tool_input.tool_args
         function_config = function_tool["function"]
+
+        if function_config["type"] == "llm_api":
+            # Execute via HA LLM API
+            llm_api = chat_log.llm_api
+            if llm_api is None:
+                raise FunctionNotFound(tool_input.tool_name)
+            try:
+                tool_result = await llm_api.async_call_tool(tool_input)
+            except intent.MatchFailedError as err:
+                _LOGGER.warning(
+                    "LLM API tool '%s' failed: %s", tool_input.tool_name, err
+                )
+                tool_result = self._format_match_failed_error(err)
+            except Exception as err:
+                _LOGGER.warning(
+                    "LLM API tool '%s' failed: %s", tool_input.tool_name, err
+                )
+                tool_result = {"error": str(err)}
+            return conversation.ToolResultContent(
+                agent_id=self.entity_id,
+                tool_call_id=tool_input.id,
+                tool_name=tool_input.tool_name,
+                tool_result={
+                    "result": json.dumps(tool_result)
+                    if isinstance(tool_result, dict)
+                    else str(tool_result)
+                },
+            )
+
         function = get_function(function_config["type"])
 
         if self.should_run_in_background(arguments):
@@ -512,3 +630,63 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             if last_user_message_index is not None:
                 del messages[1:last_user_message_index]
+
+    def _get_function_tools(self) -> list[dict[str, Any]]:
+        """Get custom functions configuration from subentry data."""
+        try:
+            from .exceptions import (
+                FunctionLoadFailed,
+                FunctionNotFound,
+                InvalidFunction,
+            )
+
+            function_tools_config = self.subentry.data.get(CONF_FUNCTION_TOOLS)
+            function_tools: list[dict[str, Any]] | None = (
+                yaml.safe_load(function_tools_config)
+                if function_tools_config
+                else DEFAULT_CONF_FUNCTION_TOOLS
+            )
+            if function_tools:
+                for function_tool in function_tools:
+                    if isinstance(function_tool, dict) and "function" in function_tool:
+                        function_config = function_tool["function"]
+                        if (
+                            isinstance(function_config, dict)
+                            and "type" in function_config
+                        ):
+                            function = get_function(function_config["type"])
+                            function_tool["function"] = function.validate_schema(
+                                function_config
+                            )
+
+            return function_tools or []
+        except (InvalidFunction, FunctionNotFound) as e:
+            raise e
+        except Exception as e:
+            raise FunctionLoadFailed() from e
+
+    def _convert_llm_api_tools(self, llm_api: llm.APIInstance) -> list[dict[str, Any]]:
+        """Convert HA LLM API tools to function_tools format."""
+        result: list[dict[str, Any]] = []
+        for tool in llm_api.tools:
+            schema = convert(
+                tool.parameters,
+                custom_serializer=llm_api.custom_serializer or llm.selector_serializer,
+            )
+            _adjust_schema(schema)
+            # Make nullable params optional for the LLM
+            _make_nullable_optional(schema)
+            result.append(
+                {
+                    "spec": {
+                        "name": tool.name,
+                        "description": tool.description or "",
+                        "parameters": schema,
+                    },
+                    "function": {
+                        "type": "llm_api",
+                        "tool_name": tool.name,
+                    },
+                }
+            )
+        return result

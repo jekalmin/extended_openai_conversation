@@ -109,8 +109,10 @@ def _convert_to_template(
 ) -> None:
     if isinstance(settings, dict):
         for key, value in settings.items():
-            if isinstance(value, str) and (
-                key in template_keys or set(parents).intersection(template_keys)
+            if (
+                isinstance(value, str)
+                and hass is not None
+                and (key in template_keys or set(parents).intersection(template_keys))
             ):
                 settings[key] = Template(value, hass)
             if isinstance(value, dict):

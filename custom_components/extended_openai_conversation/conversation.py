@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from openai import OpenAIError
-import yaml
 
 from homeassistant.components import conversation
 from homeassistant.components.conversation import (
@@ -27,22 +26,48 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
-    CONF_FUNCTION_TOOLS,
+    CONF_LLM_HASS_API,
     CONF_PROMPT,
     CONF_SKILLS,
-    DEFAULT_CONF_FUNCTION_TOOLS,
+    DEFAULT_LLM_HASS_API,
     DEFAULT_PROMPT,
     DEFAULT_WORKING_DIRECTORY,
     DOMAIN,
     EVENT_CONVERSATION_FINISHED,
 )
 from .entity import ExtendedOpenAIBaseLLMEntity
-from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
-from .functions import get_function
 from .helpers import get_exposed_entities
 from .skills import Skill, SkillManager
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_nullable(prop_schema: dict[str, Any]) -> bool:
+    """Check if a property schema accepts null."""
+    prop_type = prop_schema.get("type")
+    if isinstance(prop_type, list):
+        return "null" in prop_type
+    return prop_type == "null"
+
+
+def _make_nullable_optional(schema: dict[str, Any]) -> None:
+    """Remove nullable properties from required list so LLM treats them as optional.
+
+    Keep 'name' required since it's semantically required by HA's Assist API
+    even though it's typed as nullable.
+    """
+    if schema.get("type") != "object" or "properties" not in schema:
+        return
+    required = schema.get("required", [])
+    nullable = {
+        name
+        for name, prop in schema["properties"].items()
+        if _is_nullable(prop) and name != "name"
+    }
+    if nullable:
+        schema["required"] = [r for r in required if r not in nullable]
+    for prop in schema["properties"].values():
+        _make_nullable_optional(prop)
 
 
 async def async_setup_entry(
@@ -120,11 +145,37 @@ class ExtendedOpenAIAgentEntity(
         # Create LLM context
         llm_context = user_input.as_llm_context(DOMAIN)
 
+        # Fetch LLM API instance if configured
+        llm_api_ids = self.subentry.data.get(CONF_LLM_HASS_API, DEFAULT_LLM_HASS_API)
+        llm_api: llm.APIInstance | None = None
+        if llm_api_ids:
+            try:
+                llm_api = await llm.async_get_api(
+                    self.hass,
+                    llm_api_ids,
+                    llm_context=llm_context,
+                )
+            except HomeAssistantError as err:
+                _LOGGER.error("Error getting LLM API: %s", err)
+                intent_response = intent.IntentResponse(language=user_input.language)
+                intent_response.async_set_error(
+                    intent.IntentResponseErrorCode.UNKNOWN,
+                    f"Error preparing LLM API: {err}",
+                )
+                return ConversationResult(
+                    response=intent_response, conversation_id=user_input.conversation_id
+                )
+
+        # Set LLM API on chat log for tool execution
+        chat_log.llm_api = llm_api
+
         # Get exposed entities for function tools
         exposed_entities = self._get_exposed_entities()
 
-        # Get function tools
+        # Get function tools (custom + HA LLM API tools)
         function_tools = self._get_function_tools()
+        if llm_api:
+            function_tools.extend(self._convert_llm_api_tools(llm_api))
 
         # Build custom prompt with exposed entities
         system_prompt = self._build_system_prompt(
@@ -221,31 +272,3 @@ class ExtendedOpenAIAgentEntity(
 
     def _get_exposed_entities(self) -> list[dict[str, Any]]:
         return get_exposed_entities(self.hass)
-
-    def _get_function_tools(self) -> list[dict[str, Any]]:
-        """Get custom functions configuration."""
-        try:
-            function_tools_config = self.subentry.data.get(CONF_FUNCTION_TOOLS)
-            function_tools: list[dict[str, Any]] | None = (
-                yaml.safe_load(function_tools_config)
-                if function_tools_config
-                else DEFAULT_CONF_FUNCTION_TOOLS
-            )
-            if function_tools:
-                for function_tool in function_tools:
-                    if isinstance(function_tool, dict) and "function" in function_tool:
-                        function_config = function_tool["function"]
-                        if (
-                            isinstance(function_config, dict)
-                            and "type" in function_config
-                        ):
-                            function = get_function(function_config["type"])
-                            function_tool["function"] = function.validate_schema(
-                                function_config
-                            )
-
-            return function_tools or []
-        except (InvalidFunction, FunctionNotFound) as e:
-            raise e
-        except Exception as e:
-            raise FunctionLoadFailed() from e

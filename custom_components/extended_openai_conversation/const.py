@@ -242,7 +242,9 @@ SERVICE_TIER_OPTIONS = ["auto", "default", "flex", "priority"]
 
 # Reasoning Effort options (for o1, o3, o4, gpt-5 models)
 CONF_REASONING_EFFORT = "reasoning_effort"
+CONF_EXTRA_BODY = "extra_body"
 DEFAULT_REASONING_EFFORT = "low"
+DEFAULT_EXTRA_BODY = ""
 REASONING_EFFORT_OPTIONS = ["low", "medium", "high"]
 
 SERVICE_QUERY_IMAGE = "query_image"
@@ -282,10 +284,20 @@ MODEL_CONFIG_PATTERNS = [
     },
 ]
 
-# AI Task default options (simpler than conversation - no prompt, just model/token settings)
+# LLM API Integration
+CONF_LLM_HASS_API = "llm_hass_api"
+DEFAULT_LLM_HASS_API: list[str] = []
+
+# AI Task default options
+# Note: CONF_FUNCTION_TOOLS is intentionally omitted here because its default
+# is a YAML string (DEFAULT_CONF_FUNCTION_TOOLS_STR), which is defined in
+# config_flow.py. Including it here would require a circular import or storing
+# a Python list where a string is expected, breaking the TemplateSelector field.
 DEFAULT_AI_TASK_OPTIONS = {
     CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
     CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
+    CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+    CONF_LLM_HASS_API: DEFAULT_LLM_HASS_API,
     CONF_ADVANCED_OPTIONS: DEFAULT_ADVANCED_OPTIONS,
 }
 
