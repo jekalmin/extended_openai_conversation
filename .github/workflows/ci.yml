@@ -29,6 +29,7 @@ jobs:
       xmltodict-version: ${{ steps.get-versions.outputs.xmltodict-version }}
       beautifulsoup4-version: ${{ steps.get-versions.outputs.beautifulsoup4-version }}
       lxml-version: ${{ steps.get-versions.outputs.lxml-version }}
+      gazetteer-matcher-version: ${{ steps.get-versions.outputs.gazetteer-matcher-version }}
     steps:
       - name: Get versions from Home Assistant core
         id: get-versions
@@ -61,6 +62,10 @@ jobs:
           echo "home-assistant-intents-version=$HA_INTENTS_VERSION" >> $GITHUB_OUTPUT
           echo "home-assistant-intents version from HA core: $HA_INTENTS_VERSION"
 
+          GAZETTEER_MATCHER_VERSION=$(get_package_version "$CONVERSATION_MANIFEST" "gazetteer-matcher")
+          echo "gazetteer-matcher-version=$GAZETTEER_MATCHER_VERSION" >> $GITHUB_OUTPUT
+          echo "gazetteer-matcher version from HA core: $GAZETTEER_MATCHER_VERSION"
+          
           # Get rest dependencies
           REST_MANIFEST=$(curl -fsSL https://raw.githubusercontent.com/${{ env.HA_CORE_REPO }}/${{ env.HA_CORE_BRANCH }}/homeassistant/components/rest/manifest.json)
           XMLTODICT_VERSION=$(get_package_version "$REST_MANIFEST" "xmltodict")
@@ -123,7 +128,8 @@ jobs:
             "home-assistant-intents==${{ needs.prepare.outputs.home-assistant-intents-version }}" \
             "xmltodict==${{ needs.prepare.outputs.xmltodict-version }}" \
             "beautifulsoup4==${{ needs.prepare.outputs.beautifulsoup4-version }}" \
-            "lxml==${{ needs.prepare.outputs.lxml-version }}"
+            "lxml==${{ needs.prepare.outputs.lxml-version }}" \
+            "gazetteer-matcher==${{ needs.prepare.outputs.gazetteer-matcher-version }}"
           pip install -r requirements_test.txt
           pip install mypy
 
@@ -160,7 +166,8 @@ jobs:
             "home-assistant-intents==${{ needs.prepare.outputs.home-assistant-intents-version }}" \
             "xmltodict==${{ needs.prepare.outputs.xmltodict-version }}" \
             "beautifulsoup4==${{ needs.prepare.outputs.beautifulsoup4-version }}" \
-            "lxml==${{ needs.prepare.outputs.lxml-version }}"
+            "lxml==${{ needs.prepare.outputs.lxml-version }}" \
+            "gazetteer-matcher==${{ needs.prepare.outputs.gazetteer-matcher-version }}"
           pip install -r requirements_test.txt
 
       - name: Install Home Assistant stable
