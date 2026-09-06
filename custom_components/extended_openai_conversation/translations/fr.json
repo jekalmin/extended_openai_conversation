@@ -12,24 +12,24 @@
                     "api_key": "Clé d'API",
                     "base_url": "Base de l'URL",
                     "api_version": "Version de l'API",
-                    "organization": "Organization",
+                    "organization": "Organisation",
                     "skip_authentication": "Ignorer l'authentification",
-                    "api_provider": "Api Provider"
+                    "api_provider": "Fournisseur d'Api"
                 }
             }
         }
     },
     "config_subentries": {
         "conversation": {
-            "entry_type": "Conversation agent",
+            "entry_type": "Agent de conversation",
             "initiate_flow": {
-                "reconfigure": "Reconfigure conversation agent",
-                "user": "Add conversation agent"
+                "reconfigure": "Reconfigurer l'agent de conversation",
+                "user": "Ajouter un agent de conversation"
             },
             "step": {
                 "init": {
                     "data": {
-                        "max_tokens": "Nombre maximum de jetons facturé pour la réponse",
+                        "max_tokens": "Nombre maximum de jetons facturés pour la réponse",
                         "model": "Modèle d'IA",
                         "prompt": "Prompt",
                         "temperature": "Température",
@@ -38,11 +38,11 @@
                         "functions": "Fonctions",
                         "attach_username": "Joindre le nom d'utilisateur au message",
                         "use_tools": "Use Tools",
-                        "context_threshold": "Context Threshold",
-                        "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+                        "context_threshold": "Seuil de contexte",
+                        "context_truncate_strategy": "Stratégie de troncature du contexte en cas de dépassement du seuil"
                     },
                     "data_description": {
-                        "use_tools": "Whether to use tool calling or function calling in the conversation. If disabled, function calling will be used (see https://platform.openai.com/docs/guides/function-calling)"
+                        "use_tools": "Indique s'il faut utiliser l'appel d'outil ou l'appel de fonction dans la conversation. Si cette option est désactivée, l'appel de fonction sera utilisé. (see https://platform.openai.com/docs/guides/function-calling)"
                     }
                 }
             }
@@ -79,7 +79,7 @@
             }
         },
         "change_config": {
-            "name": "Change configuration",
+            "name": "Changer la configuration",
             "description": "Changes the configuration of the integration.",
             "fields": {
                 "config_entry": {
@@ -99,7 +99,7 @@
                     "description": "The API version."
                 },
                 "organization": {
-                    "name": "Organization",
+                    "name": "Organisation",
                     "description": "The organization."
                 },
                 "skip_authentication": {
