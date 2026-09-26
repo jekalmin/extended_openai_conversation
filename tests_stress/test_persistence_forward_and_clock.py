@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -24,10 +25,52 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
 from custom_components.extended_openai_conversation_responses.temporary_memory import (
     TemporaryMemory,
 )
+import custom_components.extended_openai_conversation_responses.usage as usage_module
+from custom_components.extended_openai_conversation_responses.usage import (
+    RequestUsage,
+    UsageManager,
+)
 from homeassistant.const import CONF_API_KEY
 from homeassistant.util import dt as dt_util
+from tests.test_usage_accounting_recovery import FakeStorage
 from tests_stress.conftest import record
 from tests_stress.test_temporary_memory_scale import MemoryStore
+
+
+async def test_usage_buckets_survive_dst_folds_and_backward_clock_jump(
+    monkeypatch, stress_trace
+) -> None:
+    """Each request is counted once on its HA-local date across clock discontinuities."""
+    dublin = ZoneInfo("Europe/Dublin")
+    now = datetime(2026, 3, 29, 0, 30, tzinfo=UTC)
+    monkeypatch.setattr(usage_module.dt_util, "utcnow", lambda: now)
+    monkeypatch.setattr(
+        usage_module.dt_util, "as_local", lambda value: value.astimezone(dublin)
+    )
+    primary, daily, details = FakeStorage(), FakeStorage(), FakeStorage()
+    manager = UsageManager(primary, daily, details, agent_subentry_id="dst-agent")
+    await manager.async_initialize()
+    instants = (
+        datetime(2026, 3, 29, 0, 30, tzinfo=UTC),
+        datetime(2026, 3, 29, 1, 30, tzinfo=UTC),
+        datetime(2026, 3, 28, 23, 30, tzinfo=UTC),
+        datetime(2026, 10, 25, 0, 30, tzinfo=UTC),
+        datetime(2026, 10, 25, 1, 30, tzinfo=UTC),
+    )
+    for index, instant in enumerate(instants):
+        now = instant
+        await manager.async_record_request(
+            successful=True, usage=RequestUsage(total_tokens=index + 1)
+        )
+    assert manager.totals.api_request_count == len(instants)
+    assert manager.summary_for_date("2026-03-28")["api_request_count"] == 1
+    assert manager.summary_for_date("2026-03-29")["api_request_count"] == 2
+    assert manager.summary_for_date("2026-10-25")["api_request_count"] == 2
+    restarted = UsageManager(primary, daily, details, agent_subentry_id="dst-agent")
+    await restarted.async_initialize()
+    assert restarted.totals.api_request_count == len(instants)
+    assert restarted.summary_for_date("2026-10-25")["api_request_count"] == 2
+    record(stress_trace, "usage_dst_discontinuity", requests=len(instants), days=3)
 
 
 async def test_opaque_future_agent_fields_survive_edit_backup_and_reload(

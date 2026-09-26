@@ -7,10 +7,12 @@ import json
 import logging
 import random
 from time import perf_counter
+import unicodedata
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockUser
 
+from custom_components.extended_openai_conversation_responses import backup
 from custom_components.extended_openai_conversation_responses.agent_config import (
     configured_function_tools_from_data,
 )
@@ -75,6 +77,81 @@ _TIERS = (
     ("pressure", 80, 20, 240, 80, 35, 50, 48, 20_000, 1_200),
     ("edge", 160, 40, 600, 180, 80, 120, 96, 45_000, 2_200),
 )
+
+
+async def test_bounded_unicode_and_nested_schema_round_trip_on_public_wire(
+    hass: HomeAssistant, monkeypatch, stress_seed: int, stress_trace: list[dict]
+) -> None:
+    """Valid Unicode identities and nested schemas survive wire and backup boundaries."""
+    owner = "unicode-owner"
+    other = "unicode-other"
+    for user in (owner, other):
+        MockUser(id=user, name=user, is_owner=True).add_to_hass(hass)
+    schema: dict = {"type": "string", "description": "leaf"}
+    for depth in range(12):
+        schema = {
+            "type": "object",
+            "properties": {f"level_{depth}": schema},
+            "additionalProperties": False,
+        }
+    tool = _tool("unicode_boundary", 3000)
+    tool["spec"]["description"] = "Unicode schema 🔧 مرحبا " * 120
+    tool["spec"]["parameters"] = schema
+    assert validate_function_schema(schema) == ()
+    entry = _make_entry(
+        "Unicode boundaries",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [tool],
+            CONF_MEMORY_MODE: MEMORY_MODE_AUTOMATIC,
+            CONF_KNOWLEDGE_ENABLED: True,
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    memory = await async_get_memory(hass, entry.entry_id, agent.subentry.subentry_id)
+    knowledge = await async_get_knowledge(
+        hass, entry.entry_id, agent.subentry.subentry_id
+    )
+    private = f"OTHER-PRIVATE-{stress_seed}"
+    await memory.async_add(
+        owner, "unicode owner note " + "🧠" * 2000, "nightly", "explicit"
+    )
+    await memory.async_add(other, private, "nightly", "explicit")
+    await knowledge.async_create("Unicode source", "valid edge", "مرحبا 🌍 " * 1000)
+    values = [
+        unicodedata.normalize("NFC", "cafe\u0301"),
+        unicodedata.normalize("NFD", "café"),
+        "👩\u200d🔬",
+        "مرحبا بالعالم",
+        "A\u200bB",
+        "  boundary\t\ntext  ",
+    ]
+    assert values[0] != values[1]
+    wire = _install_wire(
+        monkeypatch, agent, [_chat_sse_text("Unicode accepted") for _ in values]
+    )
+    for index, value in enumerate(values):
+        text = f"edge {index} {value}"
+        result = await _say(hass, entry.entry_id, owner, text)
+        assert _speech(result) == "Unicode accepted"
+        serialized = json.dumps(wire.requests[index]["body"], ensure_ascii=False)
+        assert text in serialized
+        assert private not in serialized
+        assert "Unicode schema 🔧 مرحبا" in serialized
+    snapshot = await backup.async_collect_backup_snapshot(hass, entry, agent.subentry)
+    assert (
+        backup.inspect_backup(snapshot, agent.subentry.subentry_id).config[
+            CONF_FUNCTION_TOOLS
+        ][0]["spec"]["parameters"]
+        == schema
+    )
+    record(
+        stress_trace, "unicode_nested_round_trip", forms=len(values), schema_depth=12
+    )
 
 
 def _profile(tier: int, stress_scale: int) -> tuple:
