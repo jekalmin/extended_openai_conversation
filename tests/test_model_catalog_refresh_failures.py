@@ -91,6 +91,52 @@ def _downloaded_candidate() -> dict:
     return candidate
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda value: value.update(schema_version=value["schema_version"] + 1),
+        lambda value: value["compatibility"].update(minimum_eoai_version="99.0.0"),
+    ],
+)
+async def test_incompatible_check_preserves_catalog_and_etag_recovery(
+    manager, monkeypatch, change
+):
+    candidate = _downloaded_candidate()
+    change(candidate)
+    manager._candidate_preserves_saved_requests = AsyncMock()
+    get = _install_transport(monkeypatch, candidate, etag='"incompatible"')
+
+    result = await manager.async_check(force=True)
+    assert result["incompatible_catalog"] == {
+        "schema_version": candidate["schema_version"],
+        "catalog_version": candidate["catalog_version"],
+        "minimum_eoai_version": candidate["compatibility"]["minimum_eoai_version"],
+    }
+    assert result["last_error"] is None
+    assert result["source"] == "bundled"
+    assert result["update_available"] is False
+    assert manager.store.saved["catalog"] is None
+    assert manager.store.saved["available_catalog"] is None
+    assert manager.store.saved["etag"] is None
+    assert manager.etag is None
+    manager._candidate_preserves_saved_requests.assert_not_called()
+    assert data.model_metadata("gpt-6-astra")["display_name"] == "gpt-6-astra"
+
+    restarted = runtime.ModelCatalogManager(manager.hass)
+    restarted.store = MemoryStore(manager.store.saved)
+    await restarted.async_load()
+    assert restarted.status()["incompatible_catalog"] == result["incompatible_catalog"]
+    assert restarted.etag is None
+
+    compatible = _downloaded_candidate()
+    _install_transport(monkeypatch, compatible, etag='"compatible"')
+    recovered = await restarted.async_check(force=True)
+    assert recovered["incompatible_catalog"] is None
+    assert recovered["update_available"] is True
+    assert recovered["available_catalog_version"] == compatible["catalog_version"]
+    assert get.call_args.kwargs["headers"] == {}
+
+
 def _versioned_candidate(*, increment: int = 1) -> dict:
     value = deepcopy(catalog.BUNDLED_CATALOG)
     value["catalog_version"] += increment

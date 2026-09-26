@@ -20,10 +20,11 @@ Downloaded data is stored in HA's `.storage/extended_openai_conversation_respons
 
 ## Data contract
 
-The root has exactly `schema_version`, `catalog_version`, `defaults`, and `models`:
+The root has `schema_version`, `catalog_version`, `compatibility`, `defaults`, and `models`:
 
-- `schema_version` is currently the integer **4**. Unsupported schemas are rejected. Stored older documents are migrated by the integration.
-- `catalog_version` is a positive, monotonically increasing integer. Increment it for any data change. Older versions and changed content with the same version are rejected.
+- `schema_version` is currently **6**. Increment it for any field or semantic change that needs new EOAI code. The validator also accepts schema 5 and migrates older persisted schemas where supported.
+- `catalog_version` is a monotonically increasing factual revision. Increment it for a capability-data change within an already supported schema. Older versions and changed content with the same version are rejected.
+- `compatibility.minimum_eoai_version` is the earliest integration release that understands this catalogue. A newer schema or minimum release is shown as an incompatible update; active and saved catalogues remain usable. Rejected data is never cached with an ETag, so a later compatible update can be discovered.
 - `defaults` gives conservative metadata for unknown exact IDs.
 - Each model has `id`, `display_name`, and `kind` (`alias` or `snapshot`). Full records declare the capability fields below. A snapshot with `alias_of` can instead declare only its actual overrides. Its parent must be an explicit catalogue ID; there is no family-name or date-pattern inference. Nested capability objects can override individual fields. The effective record is validated when the catalogue is loaded or applied.
 
@@ -49,4 +50,4 @@ Data-only catalogue updates cannot silently narrow previously accepted durable r
 
 Downloads have a 15-second timeout and a 256 KiB limit, use ETag/If-None-Match, and reject redirects. Validation rejects duplicate JSON keys, duplicate model IDs, unknown fields, invalid types, unsupported schemas, unsupported reasoning choices, and hot updates that would invalidate a previously accepted reasoning choice/capability. Updates and resets are serialized. HA Store persists the complete candidate before a single in-memory publication; HTTP, parsing, validation, and storage failures leave the previous catalogue active. No network request is made from synchronous model helpers or the conversation request path.
 
-When publishing metadata, edit the JSON, increment `catalog_version`, run `tests/test_model_catalog.py` and `tests/test_model_catalog_transitions.py`, and review any intended differences from `tests/fixtures/model_capability_parity.json`. That fixture was captured from the pre-migration helpers and must not be regenerated merely to hide a regression. Frontend tests exercise backend-supplied reasoning choices, and `tests_real_ha/test_model_catalog.py` covers the registered admin update/reset boundary and real HA storage.
+When publishing metadata, edit the single JSON feed and increment `catalog_version`. If consumer code must change, increment `schema_version`, update the supported validator declaration, and register the new semantic fingerprint in `ci/catalog_schema_contracts.json`. Ordinary CI runs `ci/catalog_contract_guard.py` to detect unversioned changes to key shapes and enum sets. Run `tests/test_model_catalog.py` and `tests/test_model_catalog_transitions.py`, and review any intended differences from `tests/fixtures/model_capability_parity.json`. That fixture was captured from the pre-migration helpers and must not be regenerated merely to hide a regression. Frontend tests exercise backend-supplied reasoning choices, and `tests_real_ha/test_model_catalog.py` covers the registered admin update/reset boundary and real HA storage.

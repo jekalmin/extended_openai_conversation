@@ -160,6 +160,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python ${{ needs.prepare.outputs.python-version }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -173,6 +175,11 @@ jobs:
 
       - name: Run Ruff linter
         run: ruff check custom_components/
+
+      - name: Guard catalogue schema contract
+        env:
+          CATALOG_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python ci/catalog_contract_guard.py
 
       - name: Run Ruff formatter check
         run: ruff format --check custom_components/

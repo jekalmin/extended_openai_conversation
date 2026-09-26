@@ -23,6 +23,7 @@ from .model_capabilities import frontend_capabilities
 from .model_catalog import (
     BUNDLED_CATALOG,
     MAX_CATALOG_BYTES,
+    IncompatibleCatalogError,
     activate_catalog,
     all_reasoning_efforts,
     catalog_model_metadata,
@@ -61,6 +62,7 @@ class ModelCatalogManager:
         self.etag: str | None = None
         self.last_checked = 0.0
         self.last_error: str | None = None
+        self.incompatible_catalog: dict[str, Any] | None = None
         self._lock = asyncio.Lock()
 
     async def async_load(self) -> None:
@@ -77,6 +79,17 @@ class ModelCatalogManager:
                     available = validate_catalog(available)
                 checked = saved.get("last_checked", 0)
                 etag = saved.get("etag")
+                incompatible = saved.get("incompatible_catalog")
+                if incompatible is not None and (
+                    not isinstance(incompatible, dict)
+                    or type(incompatible.get("schema_version")) is not int
+                    or type(incompatible.get("catalog_version")) is not int
+                    or (
+                        incompatible.get("minimum_eoai_version") is not None
+                        and not isinstance(incompatible["minimum_eoai_version"], str)
+                    )
+                ):
+                    raise ValueError("Invalid incompatible catalogue status")
                 if type(checked) not in (float, int) or not 0 <= checked <= time.time():
                     raise ValueError("Invalid catalogue check time")
                 if etag is not None and (
@@ -110,13 +123,19 @@ class ModelCatalogManager:
                 self.available_catalog = available
                 self.etag = etag
                 self.last_checked = checked
+                self.incompatible_catalog = incompatible
+                if incompatible is not None:
+                    # The response ETag belongs to rejected data, never to active data.
+                    self.etag = None
                 if migrated:
                     _LOGGER.debug(
                         "Migrated stored model capability catalogue to schema v4; "
                         "bundled model data is authoritative"
                     )
                     try:
-                        await self._save(candidate, available, etag, checked)
+                        await self._save(
+                            candidate, available, etag, checked, incompatible
+                        )
                     except Exception:
                         _LOGGER.warning("Unable to persist migrated model catalogue")
         except Exception:
@@ -124,6 +143,7 @@ class ModelCatalogManager:
             self.available_catalog = None
             self.etag = None
             self.last_checked = 0.0
+            self.incompatible_catalog = None
             self.last_error = (
                 "Stored model data could not be loaded; using bundled data."
             )
@@ -145,6 +165,7 @@ class ModelCatalogManager:
             ),
             "last_checked": self.last_checked,
             "last_error": self.last_error,
+            "incompatible_catalog": self.incompatible_catalog,
         }
 
     async def _save(
@@ -153,6 +174,7 @@ class ModelCatalogManager:
         available_catalog: dict[str, Any] | None,
         etag: str | None,
         checked: float,
+        incompatible_catalog: dict[str, Any] | None = None,
     ) -> None:
         await self.store.async_save(
             {
@@ -160,6 +182,7 @@ class ModelCatalogManager:
                 "available_catalog": available_catalog,
                 "etag": etag,
                 "last_checked": checked,
+                "incompatible_catalog": incompatible_catalog,
             }
         )
 
@@ -177,6 +200,7 @@ class ModelCatalogManager:
                 self.available_catalog,
                 self.etag,
                 checked,
+                self.incompatible_catalog,
             )
         except Exception:
             _LOGGER.warning("Unable to persist model catalogue check time")
@@ -258,6 +282,7 @@ class ModelCatalogManager:
                                 self.available_catalog,
                                 self.etag,
                                 now,
+                                self.incompatible_catalog,
                             )
                             self.last_checked = now
                             self.last_error = None
@@ -299,6 +324,23 @@ class ModelCatalogManager:
                 self.etag = etag
                 self.last_checked = now
                 self.last_error = None
+                self.incompatible_catalog = None
+            except IncompatibleCatalogError as exc:
+                incompatible = {
+                    "schema_version": exc.schema_version,
+                    "catalog_version": exc.catalog_version,
+                    "minimum_eoai_version": exc.minimum_eoai_version,
+                }
+                try:
+                    await self._save(
+                        self.catalog, self.available_catalog, None, now, incompatible
+                    )
+                except Exception:
+                    _LOGGER.warning("Unable to persist incompatible catalogue status")
+                self.etag = None
+                self.last_checked = now
+                self.last_error = None
+                self.incompatible_catalog = incompatible
             except ClientError, TimeoutError, _TransientCatalogUpdateError:
                 await self._record_failed_check(now, transient=True)
             except Exception:
@@ -320,7 +362,13 @@ class ModelCatalogManager:
                 validate_catalog_transition(self.catalog, candidate)
                 if not await self._candidate_preserves_saved_requests(candidate):
                     raise ValueError("Catalogue update invalidates saved requests")
-                await self._save(candidate, None, self.etag, self.last_checked)
+                await self._save(
+                    candidate,
+                    None,
+                    self.etag,
+                    self.last_checked,
+                    self.incompatible_catalog,
+                )
             except Exception:
                 self.last_error = "Model data update could not be applied; the current catalogue was kept."
                 _LOGGER.warning(self.last_error)
@@ -414,7 +462,9 @@ class ModelCatalogManager:
                 available = None
             etag = self.etag if available is not None else None
             try:
-                await self._save(None, available, etag, self.last_checked)
+                await self._save(
+                    None, available, etag, self.last_checked, self.incompatible_catalog
+                )
             except Exception:
                 self.last_error = (
                     "Model data reset failed; the current catalogue was kept."
