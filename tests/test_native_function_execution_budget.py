@@ -370,7 +370,7 @@ async def test_provider_loop_exhaustion_is_explicit(hass, monkeypatch) -> None:
     assert entity._execute_function_tool.await_count == 2
 
 
-async def test_tool_edit_between_request_and_execution_uses_current_definition(
+async def test_tool_edit_between_request_and_execution_rejects_stale_call(
     hass,
 ) -> None:
     stale = _tool("notify", {"type": "service", "service": "notify.old"})
@@ -392,9 +392,10 @@ async def test_tool_edit_between_request_and_execution_uses_current_definition(
     entity._configured_function_tools_from_data = Mock(return_value=[current])
     entity._execute_function_tool = _executor(entity)
 
-    await entity._async_handle_chat_log(_chat_log(hass), [stale], [])
+    with pytest.raises(FunctionNotFound):
+        await entity._async_handle_chat_log(_chat_log(hass), [stale], [])
 
-    assert entity._execute_function_tool.await_args_list[0].args[0] is current
+    entity._execute_function_tool.assert_not_awaited()
     entity._configured_function_tools_from_data.assert_called_with(latest_data)
 
 

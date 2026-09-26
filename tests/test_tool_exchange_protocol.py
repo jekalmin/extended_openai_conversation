@@ -249,9 +249,7 @@ async def test_serial_budget_failure_is_protocol_valid_on_following_turn(hass) -
     entity = _entity(
         hass,
         [
-            _function_call_stream(
-                [("call-1", "first", {}), ("call-2", "second", {})]
-            ),
+            _function_call_stream([("call-1", "first", {}), ("call-2", "second", {})]),
             _final_stream("Recovered"),
         ],
         limit=1,
@@ -347,11 +345,7 @@ async def test_provider_failure_after_execution_never_retries_side_effect(hass) 
 async def test_cancellation_closes_current_and_skips_later_serial_call(hass) -> None:
     entity = _entity(
         hass,
-        [
-            _function_call_stream(
-                [("call-1", "first", {}), ("call-2", "second", {})]
-            )
-        ],
+        [_function_call_stream([("call-1", "first", {}), ("call-2", "second", {})])],
         limit=2,
     )
     started = asyncio.Event()
@@ -427,13 +421,9 @@ async def test_unknown_provider_tool_is_closed_without_dispatch(hass) -> None:
     assert tool_result_data(results[0])["result"]["status"] == "error"
 
 
-async def test_parallel_eligibility_is_reassessed_from_current_definitions(hass) -> None:
-    first_old = _tool(
-        "first", function_type="native", native_name="get_history"
-    )
-    second_old = _tool(
-        "second", function_type="native", native_name="get_statistics"
-    )
+async def test_parallel_batch_rejects_edited_definition_before_execution(hass) -> None:
+    first_old = _tool("first", function_type="native", native_name="get_history")
+    second_old = _tool("second", function_type="native", native_name="get_statistics")
     first_current = _tool(
         "first", function_type="native", native_name="execute_service"
     )
@@ -441,9 +431,7 @@ async def test_parallel_eligibility_is_reassessed_from_current_definitions(hass)
     entity = _entity(
         hass,
         [
-            _function_call_stream(
-                [("call-1", "first", {}), ("call-2", "second", {})]
-            ),
+            _function_call_stream([("call-1", "first", {}), ("call-2", "second", {})]),
             _final_stream(),
         ],
     )
@@ -472,17 +460,16 @@ async def test_parallel_eligibility_is_reassessed_from_current_definitions(hass)
         return _result(entity, tool_input)
 
     entity._execute_function_tool = AsyncMock(side_effect=execute)
-    await entity._async_handle_chat_log(
-        _chat_log(hass),
-        [first_old, second_old],
-        [],
-        function_tools_factory=current_tools,
-    )
+    with pytest.raises(FunctionNotFound):
+        await entity._async_handle_chat_log(
+            _chat_log(hass),
+            [first_old, second_old],
+            [],
+            function_tools_factory=current_tools,
+        )
 
-    assert maximum_concurrent == 1
-    assert [
-        call.args[1].tool_name for call in entity._execute_function_tool.await_args_list
-    ] == ["first", "second"]
+    assert maximum_concurrent == 0
+    entity._execute_function_tool.assert_not_awaited()
 
 
 async def test_parallel_failure_preserves_successful_sibling_result(hass) -> None:
@@ -529,7 +516,9 @@ async def test_parallel_failure_preserves_successful_sibling_result(hass) -> Non
     assert tool_result_data(results[1]) == {"result": "second-ok"}
 
 
-async def test_iteration_exhaustion_leaves_each_round_call_closed(hass, monkeypatch) -> None:
+async def test_iteration_exhaustion_leaves_each_round_call_closed(
+    hass, monkeypatch
+) -> None:
     import custom_components.extended_openai_conversation_responses.entity as entity_module
 
     monkeypatch.setattr(entity_module, "MAX_TOOL_ITERATIONS", 2)

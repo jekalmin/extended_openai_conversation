@@ -182,7 +182,12 @@ def _resolve_current_tool(
         current_candidate = current_effective.get(tool_input.tool_name)
         if current_candidate is None:
             raise FunctionNotFound(tool_input.tool_name)
-        if current_candidate != request_tool:
+        same_ha_reference = request_tool.get("function", {}).get(
+            "type"
+        ) == "ha_llm" and current_candidate.get("function") == request_tool.get(
+            "function"
+        )
+        if current_candidate != request_tool and not same_ha_reference:
             raise FunctionNotFound(tool_input.tool_name)
 
     return latest_function_tool_for_execution(entity, candidate)
@@ -493,10 +498,10 @@ async def async_execute_tool_exchange(
         )
     _reject_duplicate_tool_call_ids(pending_tool_calls)
     prior_results = {
-        content.tool_call_id
-        for content in chat_log.content
+        call_id
+        for content in getattr(chat_log, "content", ())
         if is_tool_result_content(content)
-        and isinstance(getattr(content, "tool_call_id", None), str)
+        and isinstance((call_id := getattr(content, "tool_call_id", None)), str)
     }
     if any(call.id in prior_results for call in pending_tool_calls):
         raise HomeAssistantError("Provider repeated a completed tool call id")

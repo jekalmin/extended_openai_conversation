@@ -307,8 +307,8 @@ def test_truthy_non_string_tool_name_keeps_request_round_definition() -> None:
     resolver.assert_not_called()
 
 
-def test_ha_llm_schema_edit_rejects_stale_request_round() -> None:
-    """A changed saved schema invalidates provider arguments from the old round."""
+def test_ha_llm_reference_match_preserves_request_round_schema() -> None:
+    """A stable saved HA reference keeps the schema emitted in this provider round."""
     reference = {
         "type": "ha_llm",
         "source_type": "platform",
@@ -336,8 +336,7 @@ def test_ha_llm_schema_edit_rejects_stale_request_round() -> None:
     )
     agent, entry_lookup, _resolver = _resolution_agent([current_tool])
 
-    with pytest.raises(FunctionNotFound):
-        latest_function_tool_for_execution(agent, request_tool)
+    assert latest_function_tool_for_execution(agent, request_tool) is request_tool
     entry_lookup.assert_called_once_with("entry-1")
 
 

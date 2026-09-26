@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     CONF_API_MODE,
@@ -28,8 +30,9 @@ from tests_real_ha.test_provider_wire_e2e import (
 from tests_stress.conftest import record
 
 
+@pytest.mark.parametrize("recreate", [False, True])
 async def test_edited_tool_is_not_rebound_after_provider_reply(
-    hass: HomeAssistant, monkeypatch, stress_trace: list[dict]
+    hass: HomeAssistant, monkeypatch, stress_trace: list[dict], recreate: bool
 ) -> None:
     """Provider arguments advertised against A never dispatch edited B."""
     name = "stale_provider_tool"
@@ -88,6 +91,11 @@ async def test_edited_tool_is_not_rebound_after_provider_reply(
     )
     await asyncio.wait_for(entered.wait(), timeout=10)
     subentry = next(iter(entry.subentries.values()))
+    if recreate:
+        hass.config_entries.async_update_subentry(
+            entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: []}
+        )
+        subentry = next(iter(entry.subentries.values()))
     hass.config_entries.async_update_subentry(
         entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: [edited]}
     )

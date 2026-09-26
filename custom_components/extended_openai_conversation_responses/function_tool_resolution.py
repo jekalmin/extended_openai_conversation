@@ -31,16 +31,23 @@ _INTEGRATION_TOOL_TYPES = frozenset(
 
 def current_configuration_data(agent: Any) -> Any:
     """Return the live subentry mapping, retaining its object identity."""
+    entry_id = getattr(getattr(agent, "entry", None), "entry_id", None)
+    subentry = getattr(agent, "subentry", None)
+    subentry_id = getattr(subentry, "subentry_id", None)
+    if entry_id is None or subentry_id is None:
+        return getattr(subentry, "data", None)
     getter = getattr(
         getattr(agent.hass, "config_entries", None), "async_get_entry", None
     )
-    latest_entry = getter(agent.entry.entry_id) if callable(getter) else None
+    latest_entry = getter(entry_id) if callable(getter) else None
     latest_subentry = (
-        latest_entry.subentries.get(agent.subentry.subentry_id)
-        if latest_entry is not None
-        else None
+        latest_entry.subentries.get(subentry_id) if latest_entry is not None else None
     )
-    return latest_subentry.data if latest_subentry is not None else agent.subentry.data
+    return (
+        latest_subentry.data
+        if latest_subentry is not None
+        else getattr(subentry, "data", None)
+    )
 
 
 def configured_function_tool_for_execution(
@@ -109,6 +116,12 @@ def latest_function_tool_for_execution(
         return function_tool
 
     current_tool = configured_function_tool_for_execution(agent, tool_name)
+    # HA owns the callable's live schema. A stable saved reference keeps the
+    # request-round projection, while the live HA tool validates its arguments.
+    if function.get("type") == "ha_llm":
+        if current_tool.get("function") != function:
+            raise FunctionNotFound(tool_name)
+        return function_tool
     if current_tool != function_tool:
         raise FunctionNotFound(tool_name)
     return function_tool
