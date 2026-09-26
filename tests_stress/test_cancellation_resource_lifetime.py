@@ -20,7 +20,7 @@ from custom_components.extended_openai_conversation_responses.const import (
     DEFAULT_CONF_FUNCTION_TOOLS,
 )
 from homeassistant.components import conversation
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
@@ -49,6 +49,17 @@ async def _agent(hass: HomeAssistant, title: str) -> Any:
     agent = conversation.async_get_agent(hass, entry.entry_id)
     assert agent is not None
     return agent
+
+
+async def _say_text(hass: HomeAssistant, agent: Any, text: str) -> Any:
+    return await conversation.async_converse(
+        hass=hass,
+        text=text,
+        conversation_id=None,
+        context=Context(),
+        language="en",
+        agent_id=agent.entry.entry_id,
+    )
 
 
 @pytest.mark.parametrize(
@@ -193,7 +204,8 @@ async def test_slow_success_does_not_serialize_other_agent(
     slow = await _agent(hass, "Slow dependency")
     fast = await _agent(hass, "Independent dependency")
     assert slow is not fast
-    assert _raw_client(slow)._client is not _raw_client(fast)._client
+    # HA intentionally shares its HTTP transport across integration entries.
+    assert _raw_client(slow)._client is _raw_client(fast)._client
     service_calls = await _prepare_service(hass)
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -251,12 +263,19 @@ async def test_slow_success_does_not_serialize_other_agent(
             request=request,
         )
 
-    monkeypatch.setattr(_raw_client(slow)._client, "send", slow_send)
-    monkeypatch.setattr(_raw_client(fast)._client, "send", fast_send)
-    blocked = asyncio.create_task(_say(hass, slow))
+    async def send(request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
+        if "Slow request" in request.content.decode():
+            return await slow_send(request, *args, **kwargs)
+        assert "Independent request" in request.content.decode()
+        return await fast_send(request, *args, **kwargs)
+
+    monkeypatch.setattr(_raw_client(slow)._client, "send", send)
+    blocked = asyncio.create_task(_say_text(hass, slow, "Slow request"))
     try:
         await asyncio.wait_for(entered.wait(), timeout=10)
-        independent = await asyncio.wait_for(_say(hass, fast), timeout=10)
+        independent = await asyncio.wait_for(
+            _say_text(hass, fast, "Independent request"), timeout=10
+        )
         assert _speech(independent) == "Independent success."
         assert not blocked.done()
     finally:
