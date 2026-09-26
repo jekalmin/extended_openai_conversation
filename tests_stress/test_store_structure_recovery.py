@@ -67,6 +67,9 @@ async def test_two_corrupt_stores_leave_usage_intact_and_recover_independently(
     await agent._usage.async_record_request(
         successful=True, usage=RequestUsage(total_tokens=7)
     )
+    # Routine usage writes are deliberately coalesced. Establish a completed
+    # durable generation before the cold-start corruption boundary.
+    await agent._usage._async_save_aggregates()
     await hass.async_block_till_done()
     knowledge_path = Path(agent._knowledge._storage._store.path)
     temporary_path = Path(agent._temporary_memory._store.path)
