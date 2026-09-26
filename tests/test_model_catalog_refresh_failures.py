@@ -345,10 +345,11 @@ async def test_update_rejects_invalid_response_etag(
     assert manager.etag is None
     activate.assert_not_called()
     assert save.await_count == 1
-    saved_catalog, saved_available, saved_etag, _checked = save.await_args.args
+    saved_catalog, saved_available, saved_etag, _checked, incompatible = save.await_args.args
     assert saved_catalog is None
     assert saved_available is None
     assert saved_etag is None
+    assert incompatible is None
 
 
 @pytest.mark.asyncio
@@ -373,10 +374,11 @@ async def test_update_rejects_catalogue_version_rollback(hass, monkeypatch) -> N
     assert manager.etag == '"current"'
     activate.assert_not_called()
     assert save.await_count == 1
-    saved_catalog, saved_available, saved_etag, _checked = save.await_args.args
+    saved_catalog, saved_available, saved_etag, _checked, incompatible = save.await_args.args
     assert saved_catalog == current
     assert saved_available is None
     assert saved_etag == '"current"'
+    assert incompatible is None
 
 
 @pytest.mark.asyncio
