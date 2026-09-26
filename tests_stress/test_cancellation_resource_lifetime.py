@@ -225,9 +225,13 @@ async def test_slow_success_does_not_serialize_other_agent(
     elif dependency == "archive":
         assert slow._archive is not None
         original = slow._archive.async_record_turn
+        archive_calls = 0
 
         async def archive(*args: Any, **kwargs: Any) -> Any:
-            await gated()
+            nonlocal archive_calls
+            archive_calls += 1
+            if archive_calls == 1:
+                await gated()
             return await original(*args, **kwargs)
 
         monkeypatch.setattr(slow._archive, "async_record_turn", archive)
@@ -266,7 +270,10 @@ async def test_slow_success_does_not_serialize_other_agent(
     async def send(request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
         if "Slow request" in request.content.decode():
             return await slow_send(request, *args, **kwargs)
-        assert "Independent request" in request.content.decode()
+        assert any(
+            marker in request.content.decode()
+            for marker in ("Independent request", "Sibling request")
+        )
         return await fast_send(request, *args, **kwargs)
 
     monkeypatch.setattr(_raw_client(slow)._client, "send", send)
@@ -277,6 +284,10 @@ async def test_slow_success_does_not_serialize_other_agent(
             _say_text(hass, fast, "Independent request"), timeout=10
         )
         assert _speech(independent) == "Independent success."
+        sibling = await asyncio.wait_for(
+            _say_text(hass, slow, "Sibling request"), timeout=10
+        )
+        assert _speech(sibling) == "Independent success."
         assert not blocked.done()
     finally:
         release.set()
@@ -284,4 +295,6 @@ async def test_slow_success_does_not_serialize_other_agent(
     assert _speech(await asyncio.wait_for(blocked, timeout=10)) == "Slow success."
     assert slow_requests == (2 if dependency == "service" else 1)
     assert len(service_calls) == (1 if dependency == "service" else 0)
-    record(stress_trace, "slow_success", dependency=dependency, agents=2)
+    record(
+        stress_trace, "slow_success", dependency=dependency, agents=2, conversations=3
+    )
