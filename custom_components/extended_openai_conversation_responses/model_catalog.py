@@ -313,7 +313,7 @@ def validate_catalog(value: Any) -> _PreparedCatalog:
         raise ValueError("Invalid model catalogue envelope")
     schema = value.get("schema_version")
     version = value.get("catalog_version")
-    if type(schema) is not int or type(version) is not int or version < 1:
+    if type(schema) is not int or schema < 1 or type(version) is not int or version < 1:
         raise ValueError("Invalid model catalogue version")
     compatibility = value.get("compatibility")
     minimum = None

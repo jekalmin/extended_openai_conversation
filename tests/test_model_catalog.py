@@ -112,6 +112,13 @@ def test_future_schema_and_newer_release_have_distinct_error():
             data.validate_catalog(candidate)
 
 
+def test_invalid_schema_number_is_not_an_incompatible_update():
+    candidate = deepcopy(data.BUNDLED_CATALOG)
+    candidate["schema_version"] = 0
+    with pytest.raises(ValueError, match="Invalid model catalogue version"):
+        data.validate_catalog(candidate)
+
+
 def test_required_current_models_and_invalid_aliases():
     expected = {
         "gpt-6-astra",
