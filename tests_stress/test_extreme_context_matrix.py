@@ -11,6 +11,7 @@ import unicodedata
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockUser
+import yaml
 
 from custom_components.extended_openai_conversation_responses import backup
 from custom_components.extended_openai_conversation_responses.agent_config import (
@@ -147,12 +148,12 @@ async def test_bounded_unicode_and_nested_schema_round_trip_on_public_wire(
         assert private not in serialized
         assert "Unicode schema 🔧 مرحبا" in serialized
     snapshot = await backup.async_collect_backup_snapshot(hass, entry, agent.subentry)
-    assert (
+    backed_up_tools = yaml.safe_load(
         backup.inspect_backup(snapshot, agent.subentry.subentry_id).config[
             CONF_FUNCTION_TOOLS
-        ][0]["spec"]["parameters"]
-        == schema
+        ]
     )
+    assert backed_up_tools[0]["spec"]["parameters"] == schema
     record(
         stress_trace, "unicode_nested_round_trip", forms=len(values), schema_depth=12
     )
