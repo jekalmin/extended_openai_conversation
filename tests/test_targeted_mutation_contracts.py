@@ -194,7 +194,9 @@ async def test_parallel_batch_cancels_pending_sibling_after_ordered_failure() ->
     assert second_cancelled.is_set()
 
 
-async def test_parallel_outcomes_capture_child_exception_without_aborting_batch() -> None:
+async def test_parallel_outcomes_capture_child_exception_without_aborting_batch() -> (
+    None
+):
     """Outcome mode returns ordinary child exceptions in provider order."""
     first = _tool("first", {"type": "knowledge", "operation": "search"})
     second = _tool("second", {"type": "knowledge", "operation": "list"})
@@ -221,7 +223,9 @@ async def test_parallel_outcomes_capture_child_exception_without_aborting_batch(
     [async_execute_parallel_safe_batch, async_execute_parallel_safe_batch_outcomes],
     ids=["ordered", "outcomes"],
 )
-async def test_parallel_helpers_cancel_children_when_parent_is_cancelled(runner: Any) -> None:
+async def test_parallel_helpers_cancel_children_when_parent_is_cancelled(
+    runner: Any,
+) -> None:
     """Cancelling the parent leaves no still-running child tool tasks."""
     first = _tool("first", {"type": "knowledge", "operation": "search"})
     second = _tool("second", {"type": "knowledge", "operation": "list"})
@@ -303,8 +307,8 @@ def test_truthy_non_string_tool_name_keeps_request_round_definition() -> None:
     resolver.assert_not_called()
 
 
-def test_ha_llm_reference_match_preserves_request_round_schema() -> None:
-    """A stable saved HA reference keeps the schema emitted in this provider round."""
+def test_ha_llm_schema_edit_rejects_stale_request_round() -> None:
+    """A changed saved schema invalidates provider arguments from the old round."""
     reference = {
         "type": "ha_llm",
         "source_type": "platform",
@@ -332,7 +336,8 @@ def test_ha_llm_reference_match_preserves_request_round_schema() -> None:
     )
     agent, entry_lookup, _resolver = _resolution_agent([current_tool])
 
-    assert latest_function_tool_for_execution(agent, request_tool) is request_tool
+    with pytest.raises(FunctionNotFound):
+        latest_function_tool_for_execution(agent, request_tool)
     entry_lookup.assert_called_once_with("entry-1")
 
 

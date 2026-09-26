@@ -29,6 +29,20 @@ _INTEGRATION_TOOL_TYPES = frozenset(
 )
 
 
+def current_configuration_data(agent: Any) -> Any:
+    """Return the live subentry mapping, retaining its object identity."""
+    getter = getattr(
+        getattr(agent.hass, "config_entries", None), "async_get_entry", None
+    )
+    latest_entry = getter(agent.entry.entry_id) if callable(getter) else None
+    latest_subentry = (
+        latest_entry.subentries.get(agent.subentry.subentry_id)
+        if latest_entry is not None
+        else None
+    )
+    return latest_subentry.data if latest_subentry is not None else agent.subentry.data
+
+
 def configured_function_tool_for_execution(
     agent: Any,
     tool_name: str,
@@ -38,15 +52,7 @@ def configured_function_tool_for_execution(
     if not callable(resolver):
         raise FunctionNotFound(tool_name)
 
-    latest_entry = agent.hass.config_entries.async_get_entry(agent.entry.entry_id)
-    latest_subentry = (
-        latest_entry.subentries.get(agent.subentry.subentry_id)
-        if latest_entry is not None
-        else None
-    )
-    latest_data = (
-        latest_subentry.data if latest_subentry is not None else agent.subentry.data
-    )
+    latest_data = current_configuration_data(agent)
     current_tools = resolver(latest_data)
     current_tool = next(
         (
@@ -81,12 +87,11 @@ def latest_function_tool_for_execution(
     agent: Any,
     function_tool: dict[str, Any],
 ) -> dict[str, Any]:
-    """Return the newest still-available definition immediately before execution.
+    """Reject changed configured definitions before executing a provider call.
 
-    Configured Function Tools may be edited, disabled, deleted, or made unavailable
-    through their Function Group after a provider request has already been emitted.
-    Integration-owned runtime definitions remain authoritative for that request round;
-    persisted user tools must still exist and be enabled at dispatch time.
+    The provider generated arguments against the advertised request snapshot. A
+    later edit cannot silently substitute a different schema or implementation.
+    Integration-owned runtime definitions remain authoritative for that round.
     """
     function = function_tool.get("function")
     if (
@@ -104,10 +109,6 @@ def latest_function_tool_for_execution(
         return function_tool
 
     current_tool = configured_function_tool_for_execution(agent, tool_name)
-
-    # A saved HA reference owns exposure settings, not the live request schema.
-    if function.get("type") == "ha_llm":
-        if current_tool.get("function") != function:
-            raise FunctionNotFound(tool_name)
-        return function_tool
-    return current_tool
+    if current_tool != function_tool:
+        raise FunctionNotFound(tool_name)
+    return function_tool

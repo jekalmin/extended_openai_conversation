@@ -584,6 +584,9 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             force_finalizer_only = False
 
             for n_requests in range(MAX_TOOL_ITERATIONS):
+                from .function_tool_resolution import current_configuration_data
+
+                request_config_data = current_configuration_data(self)
                 request_function_tools = (
                     function_tools_factory()
                     if function_tools_factory is not None
@@ -899,6 +902,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                     exposed_entities,
                     function_tools_factory=function_tools_factory,
                     recovery_state=recovery_state,
+                    request_config_data=request_config_data,
                 )
 
                 if api_mode == API_MODE_RESPONSES:

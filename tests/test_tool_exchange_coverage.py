@@ -64,8 +64,12 @@ def _tool(name: str = "demo", **extra):
 
 
 def _patch_content_types(monkeypatch) -> None:
-    monkeypatch.setattr(tool_exchange.conversation, "AssistantContent", FakeAssistantContent)
-    monkeypatch.setattr(tool_exchange.conversation, "ToolResultContent", FakeToolResultContent)
+    monkeypatch.setattr(
+        tool_exchange.conversation, "AssistantContent", FakeAssistantContent
+    )
+    monkeypatch.setattr(
+        tool_exchange.conversation, "ToolResultContent", FakeToolResultContent
+    )
 
 
 def test_error_text_handles_interruption_empty_detail_and_bounded_output() -> None:
@@ -81,7 +85,9 @@ def test_error_text_handles_interruption_empty_detail_and_bounded_output() -> No
     assert text.endswith("…")
 
 
-def test_retained_tool_calls_since_returns_only_new_assistant_calls(monkeypatch) -> None:
+def test_retained_tool_calls_since_returns_only_new_assistant_calls(
+    monkeypatch,
+) -> None:
     _patch_content_types(monkeypatch)
     old = FakeAssistantContent([_call("old")])
     new = FakeAssistantContent([_call("a"), _call("b")])
@@ -138,7 +144,9 @@ def test_append_unresolved_uses_first_unresolved_for_round_failure_and_is_idempo
     assert tool_result_data(chat_log.added[1])["result"]["status"] == "skipped"
 
 
-def test_append_unresolved_is_noop_without_calls_or_unresolved_calls(monkeypatch) -> None:
+def test_append_unresolved_is_noop_without_calls_or_unresolved_calls(
+    monkeypatch,
+) -> None:
     _patch_content_types(monkeypatch)
     chat_log = FakeChatLog()
     tool_exchange.append_unresolved_tool_results(chat_log, "agent", [])
@@ -165,7 +173,7 @@ def test_index_tools_keeps_first_valid_named_definition() -> None:
     assert indexed == {"same": first}
 
 
-def test_resolve_current_tool_rejects_removed_tool_and_uses_current_definition(monkeypatch) -> None:
+def test_resolve_current_tool_rejects_removed_or_edited_tool(monkeypatch) -> None:
     call = _call("call", "demo")
     request = _tool("demo", marker="request")
     current = _tool("demo", marker="current")
@@ -173,14 +181,20 @@ def test_resolve_current_tool_rejects_removed_tool_and_uses_current_definition(m
     monkeypatch.setattr(tool_exchange, "latest_function_tool_for_execution", latest)
 
     entity = object()
+    with pytest.raises(FunctionNotFound):
+        tool_exchange._resolve_current_tool(
+            entity,
+            call,
+            {"demo": request},
+            lambda: [current],
+        )
+    latest.assert_not_called()
+
     result = tool_exchange._resolve_current_tool(
-        entity,
-        call,
-        {"demo": request},
-        lambda: [current],
+        entity, call, {"demo": request}, lambda: [request]
     )
     assert result == {"resolved": True}
-    latest.assert_called_once_with(entity, current)
+    latest.assert_called_once_with(entity, request)
 
     with pytest.raises(FunctionNotFound):
         tool_exchange._resolve_current_tool(entity, call, {}, None)
@@ -269,9 +283,13 @@ def test_append_recovery_honors_independent_recovery_cap(monkeypatch) -> None:
     entity = SimpleNamespace(entity_id="agent")
     call = _call("call")
 
-    assert tool_exchange._append_recovery(chat_log, entity, call, failure, state) is True
+    assert (
+        tool_exchange._append_recovery(chat_log, entity, call, failure, state) is True
+    )
     assert state.used == 1
-    assert tool_exchange._append_recovery(chat_log, entity, call, failure, state) is False
+    assert (
+        tool_exchange._append_recovery(chat_log, entity, call, failure, state) is False
+    )
     assert len(chat_log.added) == 1
 
 
@@ -286,6 +304,97 @@ async def test_execute_tool_exchange_empty_batch_is_noop() -> None:
 
     entity._execute_function_tool.assert_not_awaited()
     assert budget.used == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_recreate_identical_tool_cannot_rebind_outstanding_call(
+    monkeypatch,
+) -> None:
+    _patch_content_types(monkeypatch)
+    old_data = {"function_tools": "same bytes"}
+    new_data = {"function_tools": "same bytes"}
+    assert old_data == new_data and old_data is not new_data
+    subentry = SimpleNamespace(data=new_data)
+    entry = SimpleNamespace(subentries={"agent": subentry})
+    call = _call("call-1")
+    chat_log = FakeChatLog([FakeAssistantContent([call])])
+    execute = AsyncMock()
+    entity = SimpleNamespace(
+        entity_id="agent",
+        entry=SimpleNamespace(entry_id="entry"),
+        subentry=SimpleNamespace(subentry_id="agent", data=old_data),
+        hass=SimpleNamespace(
+            config_entries=SimpleNamespace(async_get_entry=lambda _: entry)
+        ),
+        _execute_function_tool=execute,
+    )
+
+    with pytest.raises(FunctionNotFound, match="configuration changed"):
+        await tool_exchange.async_execute_tool_exchange(
+            entity,
+            chat_log,
+            [call],
+            [_tool()],
+            FunctionCallBudget(2),
+            None,
+            [],
+            request_config_data=old_data,
+        )
+
+    execute.assert_not_awaited()
+    assert chat_log.added[0].tool_call_id == "call-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("call_id", ["", "x" * 1025, "bad\nline"])
+async def test_invalid_provider_call_id_never_executes(monkeypatch, call_id) -> None:
+    _patch_content_types(monkeypatch)
+    call = _call(call_id)
+    execute = AsyncMock()
+    entity = SimpleNamespace(entity_id="agent", _execute_function_tool=execute)
+    chat_log = FakeChatLog([FakeAssistantContent([call])])
+    with pytest.raises(HomeAssistantError, match="invalid tool call id"):
+        await tool_exchange.async_execute_tool_exchange(
+            entity, chat_log, [call], [_tool()], FunctionCallBudget(2), None, []
+        )
+    execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_replayed_completed_call_id_never_executes(monkeypatch) -> None:
+    _patch_content_types(monkeypatch)
+    call = _call("call-1")
+    execute = AsyncMock()
+    entity = SimpleNamespace(entity_id="agent", _execute_function_tool=execute)
+    chat_log = FakeChatLog(
+        [
+            FakeAssistantContent([call]),
+            FakeToolResultContent("agent", "call-1", "demo", {"result": "done"}),
+            FakeAssistantContent([call]),
+        ]
+    )
+    with pytest.raises(HomeAssistantError, match="repeated a completed"):
+        await tool_exchange.async_execute_tool_exchange(
+            entity, chat_log, [call], [_tool()], FunctionCallBudget(2), None, []
+        )
+    execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("second_args", [{}, {"different": True}])
+async def test_duplicate_id_in_one_provider_batch_never_executes(
+    monkeypatch, second_args
+) -> None:
+    _patch_content_types(monkeypatch)
+    calls = [_call("same", args={}), _call("same", args=second_args)]
+    execute = AsyncMock()
+    entity = SimpleNamespace(entity_id="agent", _execute_function_tool=execute)
+    chat_log = FakeChatLog([FakeAssistantContent(calls)])
+    with pytest.raises(HomeAssistantError, match="duplicate tool call id"):
+        await tool_exchange.async_execute_tool_exchange(
+            entity, chat_log, calls, [_tool()], FunctionCallBudget(2), None, []
+        )
+    execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -316,7 +425,9 @@ async def test_serial_exchange_failure_closes_current_and_later_retained_calls(
 
 
 @pytest.mark.asyncio
-async def test_parallel_exchange_budget_failure_marks_the_first_refused_call(monkeypatch) -> None:
+async def test_parallel_exchange_budget_failure_marks_the_first_refused_call(
+    monkeypatch,
+) -> None:
     _patch_content_types(monkeypatch)
     calls = [_call("a", "alpha"), _call("b", "beta")]
     tools = [_tool("alpha"), _tool("beta")]
@@ -399,7 +510,9 @@ async def test_parallel_exchange_records_success_and_failure_then_raises_first_e
 
 
 @pytest.mark.asyncio
-async def test_recovery_parallel_validation_exhaustion_closes_exchange(monkeypatch) -> None:
+async def test_recovery_parallel_validation_exhaustion_closes_exchange(
+    monkeypatch,
+) -> None:
     _patch_content_types(monkeypatch)
     call = _call("a", "alpha")
     chat_log = FakeChatLog([FakeAssistantContent([call])])
@@ -446,7 +559,9 @@ async def test_recovery_parallel_validation_exhaustion_closes_exchange(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_recovery_parallel_mixes_correctable_success_and_runtime_failure(monkeypatch) -> None:
+async def test_recovery_parallel_mixes_correctable_success_and_runtime_failure(
+    monkeypatch,
+) -> None:
     _patch_content_types(monkeypatch)
     calls = [_call("recover", "recover"), _call("ok", "ok"), _call("bad", "bad")]
     tools = [_tool(call.tool_name) for call in calls]
@@ -496,7 +611,10 @@ async def test_recovery_parallel_mixes_correctable_success_and_runtime_failure(m
         )
 
     by_id = {item.tool_call_id: item for item in chat_log.added}
-    assert tool_result_data(by_id["recover"])["result"]["reason"] == "correctable_tool_error"
+    assert (
+        tool_result_data(by_id["recover"])["result"]["reason"]
+        == "correctable_tool_error"
+    )
     assert by_id["ok"] is success
     assert tool_result_data(by_id["bad"])["result"]["status"] == "error"
     assert state.used == 1

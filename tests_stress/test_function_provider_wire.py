@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from custom_components.extended_openai_conversation_responses.const import (
@@ -18,8 +19,82 @@ from tests_real_ha.test_knowledge_provider_wire_e2e import (
     _chat_tool_result,
     _tool_names,
 )
-from tests_real_ha.test_provider_wire_e2e import _chat_sse_text, _install_wire, _speech
+from tests_real_ha.test_provider_wire_e2e import (
+    _chat_sse_text,
+    _install_wire,
+    _raw_client,
+    _speech,
+)
 from tests_stress.conftest import record
+
+
+async def test_edited_tool_is_not_rebound_after_provider_reply(
+    hass: HomeAssistant, monkeypatch, stress_trace: list[dict]
+) -> None:
+    """Provider arguments advertised against A never dispatch edited B."""
+    name = "stale_provider_tool"
+    original = {
+        "spec": {
+            "name": name,
+            "description": "Original",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "function": {"type": "template", "value_template": "ORIGINAL"},
+        "enabled": True,
+    }
+    edited = {
+        **original,
+        "spec": {**original["spec"], "description": "Edited"},
+        "function": {"type": "template", "value_template": "MUST_NOT_EXECUTE"},
+    }
+    entry = _make_entry(
+        "Stale provider tool",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_FUNCTION_TOOLS: [original],
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    wire = _install_wire(
+        monkeypatch,
+        agent,
+        [
+            _chat_sse_tool_call("stale-call", name, {}),
+            _chat_sse_text("unexpected continuation"),
+        ],
+    )
+    send = wire.send
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def suspended_send(request, *args, **kwargs):
+        if not wire.requests:
+            entered.set()
+            await release.wait()
+        return await send(request, *args, **kwargs)
+
+    monkeypatch.setattr(_raw_client(agent)._client, "send", suspended_send)
+    turn = asyncio.create_task(
+        conversation.async_converse(
+            hass=hass,
+            text="Call the tool",
+            conversation_id=None,
+            context=Context(),
+            language="en",
+            agent_id=entry.entry_id,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=10)
+    subentry = next(iter(entry.subentries.values()))
+    hass.config_entries.async_update_subentry(
+        entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: [edited]}
+    )
+    release.set()
+    await asyncio.wait_for(turn, timeout=10)
+    assert len(wire.requests) == 1
+    record(stress_trace, "summary", layer="real SDK wire", stale_tool_rejections=1)
 
 
 async def test_group_load_tool_execution_result_and_session_isolation(
