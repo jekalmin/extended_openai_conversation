@@ -81,9 +81,11 @@ class _CatalogResponse:
 class _CatalogSession:
     def __init__(self, responses: list[_CatalogResponse]) -> None:
         self.responses = iter(responses)
+        self.calls: list[dict[str, Any]] = []
 
     def get(self, *args: Any, **kwargs: Any) -> _CatalogResponse:
-        del args, kwargs
+        del args
+        self.calls.append(kwargs)
         return next(self.responses)
 
 
@@ -124,7 +126,9 @@ async def test_slow_invalid_and_failed_refresh_preserve_active_operations(
             if cycle == 0:
                 model["reasoning"]["efforts"].append("minimal")
                 model["reasoning"]["by_api"]["responses"]["efforts"].append("minimal")
-                model["reasoning"]["by_api"]["chat_completions"]["efforts"].append("minimal")
+                model["reasoning"]["by_api"]["chat_completions"]["efforts"].append(
+                    "minimal"
+                )
             else:
                 model["display_name"] = f"Catalog endurance {cycle}"
             entered = asyncio.Event()
@@ -134,6 +138,10 @@ async def test_slow_invalid_and_failed_refresh_preserve_active_operations(
                     _CatalogResponse(
                         json.dumps(candidate).encode(), entered=entered, release=release
                     ),
+                    _CatalogResponse(
+                        json.dumps({**candidate, "schema_version": 99}).encode()
+                    ),
+                    _CatalogResponse(json.dumps(candidate).encode()),
                     _CatalogResponse(b'{"invalid": true}'),
                     _CatalogResponse(b"", status=503),
                 ]
@@ -162,6 +170,19 @@ async def test_slow_invalid_and_failed_refresh_preserve_active_operations(
             after = await _say(hass, entry.entry_id, 3 * cycle + 1)
             assert _speech(after) == "Catalogue request completed."
 
+            incompatible = await _command(admin, "check")
+            assert incompatible["success"] is True
+            assert (
+                incompatible["result"]["incompatible_catalog"]["schema_version"] == 99
+            )
+            assert manager.catalog == candidate
+            assert manager.etag is None
+            assert get_reasoning_effort_options("gpt-5.6") == activated_efforts
+            compatible = await _command(admin, "check")
+            assert compatible["success"] is True
+            assert compatible["result"]["incompatible_catalog"] is None
+            assert session.calls[2]["headers"] == {}
+
             for outcome in ("invalid", "unavailable"):
                 failed = await _command(admin, "check")
                 assert failed["success"] is False, outcome
@@ -178,6 +199,7 @@ async def test_slow_invalid_and_failed_refresh_preserve_active_operations(
             layer="Real HA WebSocket and provider wire",
             catalog_refresh_cycles=cycles,
             catalog_failed_refreshes=2 * cycles,
+            catalog_incompatible_refreshes=cycles,
             public_turns=3 * cycles,
         )
     finally:
