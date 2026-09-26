@@ -103,6 +103,7 @@ async def test_edited_tool_is_not_rebound_after_provider_reply(
     result = await asyncio.wait_for(turn, timeout=10)
     assert result.response.error_code is not None
     assert len(wire.requests) == 1
+    await hass.async_block_till_done()
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     record(stress_trace, "summary", layer="real SDK wire", stale_tool_rejections=1)
