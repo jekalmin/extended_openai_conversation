@@ -138,8 +138,12 @@ async def test_bounded_unicode_and_nested_schema_round_trip_on_public_wire(
         text = f"edge {index} {value}"
         result = await _say(hass, entry.entry_id, owner, text)
         assert _speech(result) == "Unicode accepted"
-        serialized = json.dumps(wire.requests[index]["body"], ensure_ascii=False)
-        assert text in serialized
+        body = wire.requests[index]["body"]
+        user_messages = [
+            item["content"] for item in body["messages"] if item.get("role") == "user"
+        ]
+        assert text in user_messages
+        serialized = json.dumps(body, ensure_ascii=False)
         assert private not in serialized
         assert "Unicode schema 🔧 مرحبا" in serialized
     snapshot = await backup.async_collect_backup_snapshot(hass, entry, agent.subentry)
