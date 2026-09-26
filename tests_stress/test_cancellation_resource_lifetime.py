@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from copy import deepcopy
 import gc
 from typing import Any
 
@@ -12,10 +13,16 @@ import pytest
 
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
+    CONF_API_MODE,
+    CONF_ARCHIVE_ENABLED,
+    CONF_CHAT_MODEL,
+    CONF_FUNCTION_TOOLS,
+    DEFAULT_CONF_FUNCTION_TOOLS,
 )
+from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
+from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
 from tests_real_ha.test_provider_wire_e2e import (
-    _agent,
     _chat_sse_text,
     _chat_sse_tool_call,
     _prepare_service,
@@ -27,7 +34,35 @@ from tests_stress.conftest import record
 from tests_stress.test_runtime_soak import _resource_footprint
 
 
-@pytest.mark.parametrize("phase", ["provider", "service", "archive", "post_archive"])
+async def _agent(hass: HomeAssistant, title: str) -> Any:
+    entry = _make_entry(
+        title,
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])],
+            CONF_ARCHIVE_ENABLED: True,
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    return agent
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "before_validation",
+        "after_resolution",
+        "provider",
+        "pre_dispatch",
+        "service",
+        "archive",
+        "post_archive",
+    ],
+)
 async def test_cancelled_boundary_releases_request_and_fresh_turn_succeeds(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
@@ -35,17 +70,46 @@ async def test_cancelled_boundary_releases_request_and_fresh_turn_succeeds(
     phase: str,
 ) -> None:
     """A gated cancellation cannot replay a side effect or poison the next turn."""
-    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    agent = await _agent(hass, "Cancellation boundary")
     service_calls = await _prepare_service(hass)
     entered = asyncio.Event()
     release = asyncio.Event()
     requests = 0
+    cancelled = False
 
     async def gated() -> None:
         entered.set()
         await release.wait()
 
-    if phase == "service":
+    if phase == "before_validation":
+        import custom_components.extended_openai_conversation_responses.conversation as conversation_module
+
+        original_reconcile = conversation_module.async_reconcile_runtime_configuration
+
+        async def reconcile(*args: Any, **kwargs: Any) -> Any:
+            await gated()
+            return await original_reconcile(*args, **kwargs)
+
+        monkeypatch.setattr(
+            conversation_module, "async_reconcile_runtime_configuration", reconcile
+        )
+    elif phase == "after_resolution":
+        original_begin = agent._async_begin_archive_session
+
+        async def begin_archive(*args: Any, **kwargs: Any) -> Any:
+            await gated()
+            return await original_begin(*args, **kwargs)
+
+        monkeypatch.setattr(agent, "_async_begin_archive_session", begin_archive)
+    elif phase == "pre_dispatch":
+        original_dispatch = agent._async_dispatch_function_tool
+
+        async def dispatch(*args: Any, **kwargs: Any) -> Any:
+            await gated()
+            return await original_dispatch(*args, **kwargs)
+
+        monkeypatch.setattr(agent, "_async_dispatch_function_tool", dispatch)
+    elif phase == "service":
 
         async def service(call: Any) -> None:
             service_calls.append(call)
@@ -79,10 +143,8 @@ async def test_cancelled_boundary_releases_request_and_fresh_turn_succeeds(
             await gated()
         body = (
             _chat_sse_tool_call()
-            if phase == "service" and requests == 1
-            else _chat_sse_text(
-                "Fresh turn succeeds." if requests > 1 else "First turn."
-            )
+            if phase in {"service", "pre_dispatch"} and requests == 1
+            else _chat_sse_text("Fresh turn succeeds." if cancelled else "First turn.")
         )
         return httpx.Response(
             200,
@@ -99,6 +161,7 @@ async def test_cancelled_boundary_releases_request_and_fresh_turn_succeeds(
         active.cancel()
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(active, timeout=10)
+        cancelled = True
     finally:
         release.set()
         if not active.done():
@@ -106,11 +169,12 @@ async def test_cancelled_boundary_releases_request_and_fresh_turn_succeeds(
             with suppress(asyncio.CancelledError):
                 await active
 
+    first_requests = 0 if phase in {"before_validation", "after_resolution"} else 1
     assert len(service_calls) == (1 if phase == "service" else 0)
-    assert requests == 1
+    assert requests == first_requests
     recovered = await _say(hass, agent)
     assert _speech(recovered) == "Fresh turn succeeds."
-    assert requests == 2
+    assert requests == first_requests + 1
     assert len(service_calls) == (1 if phase == "service" else 0)
     await hass.async_block_till_done()
     gc.collect()
@@ -126,8 +190,10 @@ async def test_slow_success_does_not_serialize_other_agent(
     dependency: str,
 ) -> None:
     """An unrelated agent completes while one dependency remains gated."""
-    slow = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
-    fast = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    slow = await _agent(hass, "Slow dependency")
+    fast = await _agent(hass, "Independent dependency")
+    assert slow is not fast
+    assert _raw_client(slow)._client is not _raw_client(fast)._client
     service_calls = await _prepare_service(hass)
     entered = asyncio.Event()
     release = asyncio.Event()
