@@ -37,7 +37,12 @@ export function parameterControlState(capability = {}, effort = null, configured
 }
 
 export function apiPathSelectable(metadata = {}, api, toolsRequired = false, effort = null, webSearch = false) {
-  if (api === "auto") return true;
+  if (api === "auto") {
+    const key = `${effort == null ? "null" : effort}:${Number(Boolean(toolsRequired))}:${Number(Boolean(webSearch))}`;
+    return metadata?.auto_paths && Object.hasOwn(metadata.auto_paths, key)
+      ? Boolean(metadata.auto_paths[key])
+      : true;
+  }
   if (!metadata?.api?.[api]) return false;
   const evaluated = metadata?.evaluations?.[api]?.[String(effort)];
   if (evaluated) return evaluated.reasoning && (!toolsRequired || evaluated.function) && (!webSearch || evaluated.web_search);
@@ -54,6 +59,9 @@ export function pickerModels(result = {}, selectedModel = "") {
 }
 
 export function modelDataStatusText(result = {}) {
+  if (result.incompatible_catalog) {
+    return "A newer model catalogue is available, but it requires a newer version of Extended OpenAI Conversation.";
+  }
   const active = Number(result.catalog_version);
   const available = Number(result.available_catalog_version);
   const activeLabel = Number.isInteger(active) ? `v${active}` : "the current version";

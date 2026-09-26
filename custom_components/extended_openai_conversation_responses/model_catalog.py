@@ -8,7 +8,37 @@ from pathlib import Path
 import re
 from typing import Any, cast
 
+from packaging.version import InvalidVersion, Version
+
+EOAI_VERSION = Version(
+    json.loads((Path(__file__).parent / "manifest.json").read_text("utf-8"))["version"]
+)
+
 MAX_CATALOG_BYTES = 256 * 1024
+SUPPORTED_SCHEMA_VERSIONS = frozenset({5, 6})
+CURRENT_SCHEMA_VERSION = 6
+COMPATIBILITY_MESSAGE = (
+    "A newer model catalogue is available, but it requires a newer version "
+    "of Extended OpenAI Conversation."
+)
+
+
+class IncompatibleCatalogError(ValueError):
+    """A well-formed catalogue envelope requires newer consumer code."""
+
+    def __init__(
+        self,
+        *,
+        schema_version: int,
+        catalog_version: int,
+        minimum_eoai_version: str | None = None,
+    ) -> None:
+        super().__init__(COMPATIBILITY_MESSAGE)
+        self.schema_version = schema_version
+        self.catalog_version = catalog_version
+        self.minimum_eoai_version = minimum_eoai_version
+
+
 _ID = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}\Z")
 _EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 _SUPPORT = {"always", "conditional", "never", "undocumented"}
@@ -279,12 +309,42 @@ def _merge_snapshot(parent: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
 
 def validate_catalog(value: Any) -> _PreparedCatalog:
     """Validate raw catalogue data and prepare exact snapshot capabilities."""
-    _keys(value, {"schema_version", "catalog_version", "defaults", "models"})
-    if (
-        value.get("schema_version") != 5
-        or type(value.get("catalog_version")) is not int
+    if not isinstance(value, dict):
+        raise ValueError("Invalid model catalogue envelope")
+    schema = value.get("schema_version")
+    version = value.get("catalog_version")
+    if type(schema) is not int or schema < 1 or type(version) is not int or version < 1:
+        raise ValueError("Invalid model catalogue version")
+    compatibility = value.get("compatibility")
+    minimum = None
+    if compatibility is not None:
+        _keys(compatibility, {"minimum_eoai_version"})
+        minimum = compatibility["minimum_eoai_version"]
+        if not isinstance(minimum, str) or len(minimum) > 64:
+            raise ValueError("Invalid minimum EOAI version")
+        try:
+            required_version = Version(minimum)
+        except InvalidVersion as exc:
+            raise ValueError("Invalid minimum EOAI version") from exc
+    if schema not in SUPPORTED_SCHEMA_VERSIONS or (
+        minimum is not None and required_version > EOAI_VERSION
     ):
-        raise ValueError("Unsupported model catalogue schema")
+        # Do not inspect unknown semantics or project any of their fields.
+        if not isinstance(value.get("defaults"), dict) or not isinstance(
+            value.get("models"), list
+        ):
+            raise ValueError("Invalid model catalogue envelope")
+        raise IncompatibleCatalogError(
+            schema_version=schema,
+            catalog_version=version,
+            minimum_eoai_version=minimum,
+        )
+    _keys(
+        value,
+        {"schema_version", "catalog_version", "defaults", "models"}
+        | ({"compatibility"} if schema == 6 else set()),
+        {"compatibility"} if schema == 5 else set(),
+    )
     if value["catalog_version"] < 7:
         raise ValueError("catalog_version must be at least 7")
     _validate_metadata(value["defaults"])

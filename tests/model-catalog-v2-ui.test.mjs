@@ -75,12 +75,13 @@ import {modelFieldPresentation, webSearchControlState} from "../custom_component
     reasoning:{supported:true,efforts:["none","high","max"],by_api:{responses:{efforts:["none","high","max"]},chat_completions:{efforts:["none","high"]}}},
     recommended_profile:{reasoning_effort:"high"},
     evaluations:{responses:{none:{reasoning:true,function:true,web_search:true},high:{reasoning:true,function:true,web_search:true},max:{reasoning:true,function:true,web_search:true}},chat_completions:{none:{reasoning:true,function:true,web_search:false},high:{reasoning:true,function:false,web_search:false},max:{reasoning:false,function:false,web_search:false}}},
-    auto_paths:{"high:0:0":"chat_completions","high:1:0":"responses","max:0:0":"responses"},
+    auto_paths:{"high:0:0":"chat_completions","high:1:0":"responses","max:0:0":"responses","max:1:1":null},
   };
   const panel = {_draft:{chat_model:"gpt-5.6",api_mode:"chat_completions",reasoning_effort:"high"},_result:{model_capabilities:capabilities,options:{api_mode:[{value:"auto"},{value:"responses"},{value:"chat_completions"}]}}};
   assert.equal(apiPathSelectable(capabilities,"chat_completions",false,"max"),false);
   assert.equal(apiPathSelectable(capabilities,"chat_completions",true,"high"),false);
   assert.equal(apiPathSelectable(capabilities,"chat_completions",true,"none"),true);
+  assert.equal(apiPathSelectable(capabilities,"auto",true,"max",true),false);
   assert.deepEqual(modelFieldPresentation(panel,"reasoning_effort","high").options.map(({value})=>value),["none","high"]);
   panel._draft.api_mode="responses";
   assert.deepEqual(modelFieldPresentation(panel,"reasoning_effort","high").options.map(({value})=>value),["none","high","max"]);

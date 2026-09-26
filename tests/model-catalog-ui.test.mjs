@@ -40,6 +40,10 @@ assert.match(controls, /Check for updates/);
 assert.match(controls, /Apply update/);
 assert.match(controls, /Restore bundled data/);
 assert.equal(modelDataStatusText(result), "Up to date — model data v2");
+assert.equal(
+  modelDataStatusText({...result, incompatible_catalog:{schema_version:99,catalog_version:3}}),
+  "A newer model catalogue is available, but it requires a newer version of Extended OpenAI Conversation.",
+);
 
 let refreshes = 0;
 bindModelDataControls(panel, () => { refreshes++; });
