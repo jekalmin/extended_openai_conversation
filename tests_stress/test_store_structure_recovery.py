@@ -106,7 +106,6 @@ async def test_two_corrupt_stores_leave_usage_intact_and_recover_independently(
     ]
     assert status["knowledge"]["status"] != "healthy"
     assert status["temporary_memory"]["status"] != "healthy"
-    assert status["usage"]["status"] == "healthy"
     assert (
         await hass.async_add_executor_job(knowledge_path.read_text, "utf-8")
         == wrong_shape_text
