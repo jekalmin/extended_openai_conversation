@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
+from copy import deepcopy
 from datetime import timedelta
 import random
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+import yaml
 
 from custom_components.extended_openai_conversation_responses import backup
 from custom_components.extended_openai_conversation_responses.const import (
+    CONF_FUNCTION_TOOLS,
     CONF_KNOWLEDGE_ENABLED,
     CONF_MEMORY_MODE,
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPORARY_MEMORY,
     CONFIG_ENTRY_VERSION,
+    DEFAULT_CONF_FUNCTION_TOOLS,
     DOMAIN,
     MEMORY_MODE_MANUAL,
 )
@@ -36,7 +42,7 @@ from custom_components.extended_openai_conversation_responses.temporary_memory i
 from homeassistant.components import conversation
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.const import CONF_API_KEY
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.util import dt as dt_util
 from tests_stress.conftest import record
 from tests_stress.health import HealthChecks, assert_enhanced_health
@@ -87,6 +93,7 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
     )
     checkpoints: list[dict] = []
     turns = 0
+    conversations: dict[str, str] = {}
 
     async def managers():
         return (
@@ -113,10 +120,20 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
                 "checkpoint",
                 "restore",
                 "reload",
+                "conversation_turn",
+                "cancel_turn",
+                "tool_toggle",
             ),
-            weights=(16, 6, 10, 5, 8, 4, 8, 3, 8, 4, 4, 7, 4, 5),
+            weights=(16, 6, 10, 5, 8, 4, 8, 3, 8, 4, 4, 7, 4, 5, 10, 3, 4),
             k=1,
         )[0]
+        record(
+            stress_trace,
+            "sequence_choice",
+            seed=stress_seed,
+            step=step,
+            choice=operation,
+        )
         users = [f"chaos-user-{number}" for number in range(4)]
         if operation == "memory_add":
             user = rng.choice(users)
@@ -210,6 +227,26 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done()
             record(stress_trace, operation, step=step, max_tokens=options["max_tokens"])
+        elif operation == "tool_toggle":
+            options = dict(subentry.data)
+            previous = (
+                yaml.safe_load(options[CONF_FUNCTION_TOOLS])
+                if options.get(CONF_FUNCTION_TOOLS)
+                else DEFAULT_CONF_FUNCTION_TOOLS
+            )
+            tool = deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])
+            tool["enabled"] = not previous[0].get("enabled", True)
+            options[CONF_FUNCTION_TOOLS] = yaml.safe_dump([tool], sort_keys=False)
+            hass.config_entries.async_update_subentry(entry, subentry, data=options)
+            await hass.async_block_till_done()
+            assert await hass.config_entries.async_reload(entry.entry_id)
+            await hass.async_block_till_done()
+            assert (
+                yaml.safe_load(subentry.data[CONF_FUNCTION_TOOLS])[0]["enabled"]
+                is tool["enabled"]
+            )
+            conversations.clear()
+            record(stress_trace, operation, step=step, enabled=tool["enabled"])
         elif operation == "exposure_toggle":
             entity_id = "light.chaos_probe"
             exposed = bool(step % 2)
@@ -239,18 +276,34 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
             assert _semantic(
                 await backup.async_collect_backup_snapshot(hass, entry, subentry)
             ) == _semantic(checkpoint)
+            conversations.clear()
         elif operation == "reload":
             record(stress_trace, operation, step=step)
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done()
+            conversations.clear()
 
         agent = conversation.async_get_agent(hass, entry.entry_id)
         assert agent is not None
 
         async def model(
-            log: conversation.ChatLog, _agent_entity_id: str = agent.entity_id, **kwargs
+            log: conversation.ChatLog,
+            _agent_entity_id: str = agent.entity_id,
+            _step: int = step,
+            _operation: str = operation,
+            **kwargs,
         ) -> None:
             del kwargs
+            contents = [
+                item.content
+                for item in log.content
+                if isinstance(getattr(item, "content", None), str)
+            ]
+            markers = [f"private-chaos-{number}-" for number in range(4)]
+            present = [
+                marker for marker in markers if any(marker in text for text in contents)
+            ]
+            assert len(present) <= 1, (stress_seed, _step, _operation, present)
             log.async_add_assistant_content_without_tools(
                 conversation.AssistantContent(
                     agent_id=_agent_entity_id, content="chaos healthy"
@@ -258,6 +311,68 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
             )
 
         monkeypatch.setattr(agent, "_async_handle_chat_log", model)
+        if operation == "conversation_turn":
+            user_index = rng.randrange(4)
+            user = users[user_index]
+            result = await conversation.async_converse(
+                hass=hass,
+                text=f"private-chaos-{user_index}-turn-{step}",
+                conversation_id=conversations.get(user),
+                context=Context(user_id=user),
+                language="en",
+                agent_id=entry.entry_id,
+            )
+            assert (
+                result.response.as_dict()["speech"]["plain"]["speech"]
+                == "chaos healthy"
+            )
+            assert result.conversation_id
+            conversations[user] = result.conversation_id
+            record(
+                stress_trace,
+                operation,
+                step=step,
+                user=user,
+                conversation_id=result.conversation_id,
+            )
+        elif operation == "cancel_turn":
+            entered = asyncio.Event()
+            release = asyncio.Event()
+
+            async def blocked_model(
+                log: conversation.ChatLog,
+                _entered: asyncio.Event = entered,
+                _release: asyncio.Event = release,
+                **kwargs,
+            ) -> None:
+                _entered.set()
+                await _release.wait()
+                await model(log, **kwargs)
+
+            monkeypatch.setattr(agent, "_async_handle_chat_log", blocked_model)
+            task = asyncio.create_task(
+                conversation.async_converse(
+                    hass=hass,
+                    text=f"cancel-chaos-{step}",
+                    conversation_id=None,
+                    context=Context(user_id=users[step % len(users)]),
+                    language="en",
+                    agent_id=entry.entry_id,
+                )
+            )
+            try:
+                await asyncio.wait_for(entered.wait(), timeout=10)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+                monkeypatch.setattr(agent, "_async_handle_chat_log", model)
+            record(stress_trace, operation, step=step)
         await assert_enhanced_health(
             hass,
             entry,

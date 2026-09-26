@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from pathlib import Path
 
@@ -16,15 +17,127 @@ from custom_components.extended_openai_conversation_responses.const import (
     SUBSYSTEM_STATUS_KEY,
     TEMPORARY_MEMORY_BALANCED,
 )
+from custom_components.extended_openai_conversation_responses.usage import RequestUsage
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
 from tests_real_ha.test_corrupt_subsystem_store_startup_isolation import (
     _purge_cached_managers,
     _real_store_io,  # noqa: F401 - imported fixture is registered for this module
 )
 from tests_stress.conftest import record
+
+
+@pytest.mark.no_fail_on_log_exception
+@pytest.mark.asyncio
+async def test_two_corrupt_stores_leave_usage_intact_and_recover_independently(
+    hass: HomeAssistant,
+    _real_store_io: None,  # noqa: F811 - genuine Store fixture
+    stress_trace: list[dict],
+) -> None:
+    """Wrong-shape and future-version stores degrade separately on one cold start."""
+    entry = _make_entry(
+        "Simultaneous store corruption",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_KNOWLEDGE_ENABLED: True,
+            CONF_TEMPORARY_MEMORY: TEMPORARY_MEMORY_BALANCED,
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    assert agent._knowledge is not None
+    assert agent._temporary_memory is not None
+    assert agent._usage is not None
+    await agent._knowledge.async_create(
+        "Healthy source", "Reference", "Preserved source"
+    )
+    await agent._temporary_memory.async_add(
+        "user:corruption-owner",
+        "Preserved temporary note",
+        (dt_util.utcnow() + timedelta(hours=1)).isoformat(),
+        "acceptance",
+        owner_scope_id="user:corruption-owner",
+    )
+    await agent._usage.async_record_request(
+        successful=True, usage=RequestUsage(total_tokens=7)
+    )
+    # Routine usage writes are deliberately coalesced. Establish a completed
+    # durable generation before the cold-start corruption boundary.
+    await agent._usage._async_save_aggregates()
+    await hass.async_block_till_done()
+    knowledge_path = Path(agent._knowledge._storage._store.path)
+    temporary_path = Path(agent._temporary_memory._store.path)
+    original_knowledge = await hass.async_add_executor_job(
+        knowledge_path.read_text, "utf-8"
+    )
+    original_temporary = await hass.async_add_executor_job(
+        temporary_path.read_text, "utf-8"
+    )
+    wrong_shape = json.loads(original_knowledge)
+    wrong_shape["data"]["sources"] = {"wrong": "mapping"}
+    wrong_shape_text = json.dumps(wrong_shape)
+    future = json.loads(original_temporary)
+    future["version"] = 999
+    future_text = json.dumps(future)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    _purge_cached_managers(hass.data)
+    await hass.async_add_executor_job(
+        knowledge_path.write_text, wrong_shape_text, "utf-8"
+    )
+    await hass.async_add_executor_job(temporary_path.write_text, future_text, "utf-8")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    degraded = conversation.async_get_agent(hass, entry.entry_id)
+    assert degraded is not None
+    assert degraded._knowledge is None
+    assert degraded._temporary_memory is None
+    assert degraded._usage is not None
+    assert degraded._usage.totals.api_request_count == 1
+    status = hass.data[SUBSYSTEM_STATUS_KEY][
+        (entry.entry_id, degraded.subentry.subentry_id)
+    ]
+    assert status["knowledge"]["status"] != "healthy"
+    assert status["temporary_memory"]["status"] != "healthy"
+    assert (
+        await hass.async_add_executor_job(knowledge_path.read_text, "utf-8")
+        == wrong_shape_text
+    )
+    assert (
+        await hass.async_add_executor_job(temporary_path.read_text, "utf-8")
+        == future_text
+    )
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    _purge_cached_managers(hass.data)
+    await hass.async_add_executor_job(
+        knowledge_path.write_text, original_knowledge, "utf-8"
+    )
+    await hass.async_add_executor_job(
+        temporary_path.write_text, original_temporary, "utf-8"
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    recovered = conversation.async_get_agent(hass, entry.entry_id)
+    assert recovered is not None
+    assert recovered._knowledge is not None
+    assert recovered._knowledge.source_count == 1
+    assert recovered._temporary_memory is not None
+    notes = await recovered._temporary_memory.async_active(
+        "user:corruption-owner", owner_scope_id="user:corruption-owner"
+    )
+    assert [note.content for note in notes] == ["Preserved temporary note"]
+    assert recovered._usage is not None
+    assert recovered._usage.totals.api_request_count == 1
+    record(stress_trace, "simultaneous_store_recovery", corrupt_stores=2)
 
 
 @pytest.mark.no_fail_on_log_exception
