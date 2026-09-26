@@ -346,6 +346,7 @@ class RequestRules:
         self._lock = asyncio.Lock()
         self._initialized = False
         self._committed_state: dict[str, Any] | None = None
+        self._generation = 0
 
     async def async_initialize(self) -> None:
         """Load stored rules while preserving newly unsupported patterns for repair."""
@@ -456,9 +457,10 @@ class RequestRules:
                 raise
 
     def revision(self) -> str:
-        """Return a deterministic token for the current durable rule set."""
+        """Return a revision that also detects a committed A -> B -> A cycle."""
         payload = json.dumps(
             {
+                "generation": self._generation,
                 "defaults": self._defaults,
                 "wording_groups": self._wording_groups,
                 "groups": self._groups,
@@ -1160,6 +1162,8 @@ class RequestRules:
 
     def _remember_committed_state(self) -> None:
         """Capture the exact last committed Request Rule configuration."""
+        if self._initialized:
+            self._generation += 1
         self._committed_state = {
             "defaults": deepcopy(self._defaults),
             "wording_groups": deepcopy(self._wording_groups),

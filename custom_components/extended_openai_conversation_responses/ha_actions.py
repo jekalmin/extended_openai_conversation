@@ -23,7 +23,11 @@ from homeassistant.const import (
 )
 from homeassistant.core import Context, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
-from homeassistant.helpers import target as target_helpers
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    target as target_helpers,
+)
 
 from .ha_permissions import async_require_control_permission, get_active_ha_context
 
@@ -45,22 +49,29 @@ async def async_call_ha_action(
     """
     context = context or get_active_ha_context()
     entity_ids = _resolve_target_entity_ids(hass, data, target)
+    target_identity = _target_identity(hass, entity_ids)
+    service_identity = _service_identity(hass, domain, service)
     await async_require_control_permission(hass, entity_ids, context=context)
 
-    # Registry-backed selectors can resolve to a different entity set while the
-    # async permission check is in progress. Direct entity_id targets cannot, so
-    # avoid resolving those a second time (and avoid unnecessary registry work).
+    # A visible entity_id can be reused by a different registry entry. Registry
+    # entries are replaced on updates, so identity also catches A -> B -> A
+    # membership changes that a second textual resolution would miss.
     selection = _target_selection(data, target)
-    if any(
+    indirect = any(
         key in selection
         for key in (ATTR_DEVICE_ID, ATTR_AREA_ID, ATTR_FLOOR_ID, ATTR_LABEL_ID)
+    )
+    if (
+        (indirect and _resolve_target_entity_ids(hass, data, target) != entity_ids)
+        or not _same_target_identity(
+            _target_identity(hass, entity_ids), target_identity
+        )
+        or _service_identity(hass, domain, service) is not service_identity
     ):
-        resolved_after_authorization = _resolve_target_entity_ids(hass, data, target)
-        if resolved_after_authorization != entity_ids:
-            raise HomeAssistantError(
-                "Home Assistant target changed while authorization was in progress; "
-                "please retry"
-            )
+        raise HomeAssistantError(
+            "Home Assistant target changed while authorization was in progress; "
+            "please retry"
+        )
 
     return await _async_call_ha_action_unchecked(
         hass,
@@ -300,6 +311,50 @@ def _resolve_target_entity_ids(
         hass, target_helpers.TargetSelection(selection)
     )
     return set(referenced.referenced | referenced.indirectly_referenced)
+
+
+def _target_identity(
+    hass: HomeAssistant, entity_ids: set[str]
+) -> tuple[tuple[str, Any, Any, Any], ...]:
+    """Capture registry/runtime owners, including device membership generations."""
+    if not entity_ids:
+        return ()
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    identities: list[tuple[str, Any, Any, Any]] = []
+    for entity_id in sorted(entity_ids):
+        entry = entities.async_get(entity_id)
+        device = (
+            devices.async_get(entry.device_id)
+            if entry is not None and entry.device_id
+            else None
+        )
+        identities.append(
+            (
+                entity_id,
+                entry,
+                device,
+                hass.states.get(entity_id),
+            )
+        )
+    return tuple(identities)
+
+
+def _same_target_identity(
+    current: tuple[tuple[str, Any, Any, Any], ...],
+    previous: tuple[tuple[str, Any, Any, Any], ...],
+) -> bool:
+    """Compare ownership by object generation rather than entry field equality."""
+    return len(current) == len(previous) and all(
+        left[0] == right[0]
+        and all(now is then for now, then in zip(left[1:], right[1:], strict=True))
+        for left, right in zip(current, previous, strict=True)
+    )
+
+
+def _service_identity(hass: HomeAssistant, domain: str, service: str) -> Any:
+    """Capture the current HA service owner across the authorization await."""
+    return hass.services.async_services_for_domain(domain).get(service)
 
 
 def _target_selection(

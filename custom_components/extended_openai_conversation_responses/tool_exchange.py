@@ -160,6 +160,9 @@ def _resolve_current_tool(
     function_tools_factory: Callable[[], list[dict[str, Any]]] | None,
 ) -> dict[str, Any]:
     """Resolve one request-round call against current effective availability."""
+    check_aba = getattr(entity, "_assert_no_aba_configuration", None)
+    if callable(check_aba):
+        check_aba()
     request_tool = request_tools_by_name.get(tool_input.tool_name)
     if request_tool is None:
         raise FunctionNotFound(tool_input.tool_name)

@@ -476,6 +476,77 @@ def test_persisted_projection_tracks_title_and_authoritative_data_replacement(
     assert new_projection.revision != replaced.revision
 
 
+@pytest.mark.parametrize(
+    ("field", "intermediate"),
+    [
+        ("functions", []),
+        ("function_groups", [{"id": "lights", "name": "Lighting", "functions": ["demo"]}]),
+        ("guest_mode_enabled", False),
+        ("voice_device_mappings", {"kitchen": "user:one"}),
+        ("exposed_entities_enabled", False),
+    ],
+)
+async def test_agent_revision_rejects_aba_while_writer_is_suspended(
+    monkeypatch, field, intermediate
+) -> None:
+    """An in-flight management writer cannot accept a restored old value."""
+    _hass, _entry, subentry = _hass_with_agent()
+    monkeypatch.setattr(
+        function_repair, "_persisted_projections", function_repair.OrderedDict()
+    )
+    original = deepcopy(subentry.data)
+    assert original[field] != intermediate
+    expected = function_repair.persisted_config_projection(subentry).revision
+    entered, resume = asyncio.Event(), asyncio.Event()
+
+    async def stale_writer() -> None:
+        entered.set()
+        await resume.wait()
+        function_repair.require_agent_config_revision(subentry, expected)
+
+    task = asyncio.create_task(stale_writer())
+    await entered.wait()
+    subentry.data = {**original, field: intermediate}
+    assert function_repair.persisted_config_projection(subentry).revision != expected
+    subentry.data = deepcopy(original)
+    resume.set()
+    with pytest.raises(HomeAssistantError, match="changed in another tab"):
+        await task
+    assert dict(subentry.data) == original
+
+
+def test_agent_revision_lineage_survives_projection_cache_eviction(monkeypatch) -> None:
+    """A busy installation must not turn an evicted stale token valid again."""
+    class Agent:
+        pass
+
+    monkeypatch.setattr(
+        function_repair, "_persisted_projections", function_repair.OrderedDict()
+    )
+    monkeypatch.setattr(function_repair, "_revision_lineages", {})
+    monkeypatch.setattr(function_repair, "_PROJECTION_CACHE_LIMIT", 2)
+    target = Agent()
+    target.data = agent_config_defaults()
+    target.title = "ABA target"
+    target.subentry_id = "aba"
+    original = deepcopy(target.data)
+    stale = function_repair.persisted_config_projection(target).revision
+    others = []
+    for index in range(3):
+        other = Agent()
+        other.data = agent_config_defaults()
+        other.title = f"Other {index}"
+        other.subentry_id = f"other-{index}"
+        others.append(other)
+        function_repair.persisted_config_projection(other)
+    assert id(target) not in function_repair._persisted_projections
+
+    target.data = {**original, "guest_mode_enabled": False}
+    target.data = deepcopy(original)
+    with pytest.raises(HomeAssistantError, match="changed in another tab"):
+        function_repair.require_agent_config_revision(target, stale)
+
+
 async def test_import_replaces_cached_configuration_projection(monkeypatch) -> None:
     hass, _entry, _subentry = _hass_with_agent()
     monkeypatch.setattr(
@@ -1673,7 +1744,7 @@ async def test_configuration_patch_preserves_omitted_fields_and_skips_local_snap
     assert subentry.data["max_tokens"] == 750
     assert hass.config_entries.updates == 1
 
-    await management_ui.async_management_command(
+    local_saved = await management_ui.async_management_command(
         hass,
         "admin",
         True,
@@ -1696,9 +1767,7 @@ async def test_configuration_patch_preserves_omitted_fields_and_skips_local_snap
             "subentry_id": "agent-1",
             "section": "configuration",
             "action": "update",
-            "revision": management_ui._agent_config_revision(
-                subentry.data, subentry.title
-            ),
+            "revision": local_saved["revision"],
             "config": {"max_tokens": 900},
         },
     )

@@ -102,15 +102,19 @@ def _concurrent_data(subentry, name: str) -> dict:
 
 
 @pytest.mark.parametrize("action", ["save", "delete"])
+@pytest.mark.parametrize("aba", [False, True])
 async def test_tool_cross_store_mutation_rejects_agent_change_during_rule_lookup(
-    hass, monkeypatch, action
+    hass, monkeypatch, action, aba
 ) -> None:
     entry, subentry = _setup_entry(hass)
     rules = _Rules()
     newer = _concurrent_data(subentry, "concurrent_tool")
+    original = deepcopy(subentry.data)
 
     async def lookup_rules(*_args, **_kwargs):
         subentry.data = newer
+        if aba:
+            subentry.data = deepcopy(original)
         return rules
 
     monkeypatch.setattr(
@@ -133,9 +137,12 @@ async def test_tool_cross_store_mutation_rejects_agent_change_during_rule_lookup
         await async_management_command(hass, "admin", True, message)
 
     hass.config_entries.async_update_subentry.assert_not_called()
-    assert any(
-        tool["spec"]["name"] == "concurrent_tool"
-        for tool in yaml.safe_load(subentry.data[CONF_FUNCTION_TOOLS])
+    assert (
+        any(
+            tool["spec"]["name"] == "concurrent_tool"
+            for tool in yaml.safe_load(subentry.data[CONF_FUNCTION_TOOLS])
+        )
+        is not aba
     )
 
 

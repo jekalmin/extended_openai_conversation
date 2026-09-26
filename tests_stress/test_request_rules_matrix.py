@@ -65,6 +65,23 @@ async def manager(*rules: dict) -> RequestRules:
     return result
 
 
+async def test_rule_revision_detects_aba_during_suspended_writer(stress_trace) -> None:
+    """The matcher may return to A while a management writer holds A's token."""
+    rules = await manager(rule("initial", "turn on"))
+    original = rules.revision()
+    await rules.async_set_defaults({**DEFAULT_MATCHING, "fuzzy": True})
+    record(stress_trace, "request_rules_to_b", revision=rules.revision())
+    await rules.async_set_defaults(DEFAULT_MATCHING)
+    record(stress_trace, "request_rules_to_a", revision=rules.revision())
+    assert rules.revision() != original
+    with pytest.raises(ValueError, match="changed in another tab"):
+        await rules.async_set_defaults(
+            {**DEFAULT_MATCHING, "fuzzy_threshold": 91},
+            expected_revision=original,
+        )
+    assert rules.snapshot()["defaults"] == DEFAULT_MATCHING
+
+
 def test_behavioral_inventory_is_classified() -> None:
     assert set(MATCH_TYPES) == CLASSIFIED_MATCHERS, (
         "Classify any new Request Rule matcher in enhanced matrix"

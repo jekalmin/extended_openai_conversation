@@ -9,6 +9,7 @@ from functools import lru_cache
 from hashlib import sha256
 from time import perf_counter
 from typing import Any
+from weakref import ReferenceType, ref
 
 import yaml
 
@@ -75,6 +76,27 @@ class _RepairState:
 
 
 _persisted_projections: OrderedDict[int, _PersistedProjection] = OrderedDict()
+_revision_lineages: dict[int, tuple[ReferenceType[Any], Any, str, str]] = {}
+
+
+def _remember_revision_lineage(
+    subentry: Any, data: Any, title: str, revision: str
+) -> None:
+    """Retain the last generation while a live HA subentry exists."""
+    key = id(subentry)
+
+    def forget(dead: ReferenceType[Any]) -> None:
+        current = _revision_lineages.get(key)
+        if current is not None and current[0] is dead:
+            del _revision_lineages[key]
+
+    try:
+        owner = ref(subentry, forget)
+    except TypeError:
+        # Small unit-test namespaces are not weak-referenceable. Their bounded
+        # projection cache still tracks replacement within each test.
+        return
+    _revision_lineages[key] = (owner, data, title, revision)
 
 
 def editable_function_tools(options: dict[str, Any]) -> Any:
@@ -404,7 +426,32 @@ def persisted_config_projection(
 
     if diagnostics is not None:
         diagnostics["projection_cache_hit"] = False
-    revision = agent_config_revision(subentry.data, subentry.title)
+    data, title = subentry.data, subentry.title
+    content_revision = agent_config_revision(data, title)
+    # Content alone misses A -> B -> A. Keep the previous projection alive so
+    # replacement of HA's authoritative data mapping is a new generation even
+    # when the restored bytes equal the original bytes.
+    lineage = _revision_lineages.get(key)
+    previous = (
+        lineage[3]
+        if lineage is not None and lineage[0]() is subentry
+        else cached.revision
+        if cached is not None and cached.subentry is subentry
+        else None
+    )
+    if (
+        lineage is not None
+        and lineage[0]() is subentry
+        and lineage[1] is data
+        and lineage[2] == title
+    ):
+        revision = lineage[3]
+    else:
+        revision = (
+            sha256(f"{previous}:{content_revision}".encode()).hexdigest()
+            if previous is not None
+            else content_revision
+        )
     defaults = {
         CONF_USAGE_REQUEST_RETENTION_DAYS: DEFAULT_USAGE_REQUEST_RETENTION_DAYS,
         CONF_USAGE_RUN_RETENTION_DAYS: DEFAULT_USAGE_RUN_RETENTION_DAYS,
@@ -427,10 +474,19 @@ def persisted_config_projection(
     ):
         projection.repair_state = cached.repair_state
     _persisted_projections[key] = projection
+    _remember_revision_lineage(subentry, subentry.data, subentry.title, revision)
     _persisted_projections.move_to_end(key)
     if len(_persisted_projections) > _PROJECTION_CACHE_LIMIT:
         _persisted_projections.popitem(last=False)
     return projection
+
+
+def saved_agent_config_revision(subentry: Any, data: Any, title: str) -> str:
+    """Return the authoritative post-save revision after HA replaces its data."""
+    if subentry.title == title and dict(subentry.data) == dict(data):
+        return persisted_config_projection(subentry).revision
+    # Lightweight test doubles may record a save without applying it.
+    return agent_config_revision(data, title)
 
 
 def normalized_persisted_config_snapshot(
@@ -544,6 +600,7 @@ def seed_persisted_config_projection(
         repair_snapshot=deepcopy(snapshot) if repair_state is not None else None,
     )
     _persisted_projections[key] = projection
+    _remember_revision_lineage(current, current.data, current.title, revision)
     _persisted_projections.move_to_end(key)
     if len(_persisted_projections) > _PROJECTION_CACHE_LIMIT:
         _persisted_projections.popitem(last=False)
@@ -604,7 +661,7 @@ def persist_valid_function_configuration(
     )
     hass.config_entries.async_update_subentry(entry, subentry, data=normalized)
     snapshot = agent_config_snapshot(normalized)
-    revision = agent_config_revision(normalized, subentry.title)
+    revision = saved_agent_config_revision(subentry, normalized, subentry.title)
     seed_persisted_config_projection(entry, subentry, snapshot, revision)
     return {
         "functions": snapshot[CONF_FUNCTION_TOOLS],
@@ -890,7 +947,9 @@ async def async_function_repair(
                 "valid": True,
                 "errors": {},
                 "title": saved_title,
-                "revision": agent_config_revision(persisted, saved_title),
+                "revision": saved_agent_config_revision(
+                    subentry, persisted, saved_title
+                ),
                 "config": snapshot,
                 "agent": management_loading_performance._agent_snapshot(
                     hass, entry, subentry, config=persisted, title=saved_title
@@ -989,7 +1048,7 @@ async def async_function_repair(
     return {
         "valid": True,
         "tools": deepcopy(validated_tools),
-        "revision": agent_config_revision(persisted, subentry.title),
+        "revision": saved_agent_config_revision(subentry, persisted, subentry.title),
         "agent": management_loading_performance._agent_snapshot(
             hass, entry, subentry, config=persisted
         ),

@@ -17,6 +17,15 @@ from homeassistant.components import conversation  # noqa: E402
 from homeassistant.helpers import config_validation as cv, llm  # noqa: E402
 from homeassistant.helpers.template import TemplateEnvironment  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def mock_ha_action_owners(monkeypatch):
+    """Unit HA doubles do not include registries or service ownership records."""
+    from custom_components.extended_openai_conversation_responses import ha_actions
+
+    monkeypatch.setattr(ha_actions, "_target_identity", lambda *_: ())
+    monkeypatch.setattr(ha_actions, "_service_identity", lambda *_: None)
+
 # Home Assistant dev changed ToolResultContent(tool_result=...) to
 # ToolResultContent(result=llm.ToolResult(...)). Keep legacy unit-test fixtures
 # valid on both APIs without replacing the class or changing isinstance checks.

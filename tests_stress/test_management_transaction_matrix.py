@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 
 import pytest
@@ -13,9 +14,14 @@ from custom_components.extended_openai_conversation_responses.agent_config impor
 )
 from custom_components.extended_openai_conversation_responses.const import (
     CONF_FUNCTION_GROUPS,
+    CONF_FUNCTION_TOOLS,
     CONF_SKIP_AUTHENTICATION,
     CONFIG_ENTRY_VERSION,
     DOMAIN,
+)
+from custom_components.extended_openai_conversation_responses.management_function_repair import (
+    persisted_config_projection,
+    require_agent_config_revision,
 )
 from custom_components.extended_openai_conversation_responses.management_ui import (
     _persist_function_configuration,
@@ -24,6 +30,7 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
     async_get_request_rules,
 )
 from homeassistant.const import CONF_API_KEY
+from homeassistant.exceptions import HomeAssistantError
 from tests_stress.conftest import record
 
 
@@ -69,6 +76,50 @@ def _tool(name: str) -> dict:
         "function": {"type": "template", "value_template": "transaction marker"},
         "enabled": True,
     }
+
+
+@pytest.mark.parametrize(
+    ("field", "intermediate"),
+    [
+        (CONF_FUNCTION_TOOLS, [_tool("nightly_aba")]),
+        (CONF_FUNCTION_GROUPS, [_group("nightly_aba", ["nightly_aba"])]),
+        ("guest_mode_enabled", False),
+        ("voice_device_mappings", {"kitchen": "user:one"}),
+        ("exposed_entities_enabled", False),
+    ],
+)
+async def test_agent_config_aba_rejects_suspended_management_writer(
+    hass, stress_trace, field, intermediate
+) -> None:
+    """A restored value cannot validate a token from before two HA updates."""
+    entry, subentry = await _entry(hass)
+    original = dict(subentry.data)
+    if field == CONF_FUNCTION_GROUPS:
+        original[CONF_FUNCTION_TOOLS] = [_tool("nightly_aba")]
+        hass.config_entries.async_update_subentry(entry, subentry, data=original)
+    assert original.get(field) != intermediate
+    expected = persisted_config_projection(subentry).revision
+    entered, resume = asyncio.Event(), asyncio.Event()
+
+    async def stale_writer() -> None:
+        entered.set()
+        await resume.wait()
+        require_agent_config_revision(subentry, expected)
+
+    task = asyncio.create_task(stale_writer())
+    await entered.wait()
+    hass.config_entries.async_update_subentry(
+        entry, subentry, data={**original, field: intermediate}
+    )
+    hass.config_entries.async_update_subentry(entry, subentry, data=original)
+    await hass.async_block_till_done()
+    assert dict(subentry.data) == original
+    resume.set()
+    with pytest.raises(HomeAssistantError, match="changed in another tab"):
+        await task
+    record(stress_trace, "agent_config_aba", field=field, revisions=3)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
 
 
 async def test_function_tools_and_groups_commit_as_one_subentry_revision(

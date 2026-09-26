@@ -433,6 +433,65 @@ async def test_provider_exposed_tool_deleted_before_call_fails_closed(
     assert executed == []
 
 
+async def test_provider_tool_call_rejects_disabled_then_restored_config(
+    hass: HomeAssistant,
+    monkeypatch: Any,
+) -> None:
+    """A provider call from A cannot execute after Function Tools go A-B-A."""
+    entry = _make_entry(
+        "Function Tool ABA",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [_tool(_TOOL_NAME, "Original implementation")],
+            CONF_FUNCTION_GROUPS: [],
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    original = deepcopy(dict(agent.subentry.data))
+    executed: list[dict[str, Any]] = []
+    original_execute = agent._execute_function_tool
+
+    async def record_execute(function_tool, *args):
+        executed.append(deepcopy(function_tool))
+        return await original_execute(function_tool, *args)
+
+    monkeypatch.setattr(agent, "_execute_function_tool", record_execute)
+    _agent, wire, task = await _run_gated_tool_turn(
+        hass,
+        monkeypatch,
+        agent,
+        [_chat_sse_tool_call("call-aba", _TOOL_NAME, {})],
+    )
+    disabled = deepcopy(original)
+    disabled_tools = deepcopy(disabled[CONF_FUNCTION_TOOLS])
+    disabled_tools[0]["enabled"] = False
+    disabled[CONF_FUNCTION_TOOLS] = disabled_tools
+    hass.config_entries.async_update_subentry(entry, agent.subentry, data=disabled)
+    hass.config_entries.async_update_subentry(entry, agent.subentry, data=original)
+    assert dict(agent.subentry.data) == original
+    wire.release_reply.set()
+    result = await task
+    assert result.response.error_code is not None
+    assert executed == []
+
+    await hass.async_block_till_done()
+    fresh_agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert fresh_agent is not None
+    fresh_wire = _install_wire(
+        monkeypatch, fresh_agent, [_chat_sse_text("Fresh request succeeded.")]
+    )
+    fresh = await _say(hass, fresh_agent, "try again")
+    assert _speech(fresh) == "Fresh request succeeded."
+    assert len(fresh_wire.requests) == 1
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
 async def test_provider_exposed_tool_edit_uses_latest_definition_before_execution(
     hass: HomeAssistant,
     monkeypatch: Any,
@@ -489,4 +548,3 @@ async def test_provider_exposed_tool_edit_uses_latest_definition_before_executio
     assert _speech(result) == "Latest implementation used."
     assert len(executed) == 1
     assert executed[0]["function"]["value_template"] == "New implementation"
-

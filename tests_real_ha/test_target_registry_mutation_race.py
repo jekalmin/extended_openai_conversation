@@ -8,6 +8,7 @@ import pytest
 
 from custom_components.extended_openai_conversation_responses import ha_actions
 from homeassistant.const import ATTR_AREA_ID
+from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import (
@@ -22,10 +23,12 @@ _DOMAIN = "registry_race_test"
 _SERVICE = "mark"
 
 
+@pytest.mark.parametrize("return_to_original_area", [False, True])
 @pytest.mark.asyncio
 async def test_registry_reassignment_between_resolution_and_dispatch_fails_closed(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
+    return_to_original_area: bool,
 ) -> None:
     """An indirect target may not change membership after authorization starts."""
     area_registry = ar.async_get(hass)
@@ -100,6 +103,8 @@ async def test_registry_reassignment_between_resolution_and_dispatch_fails_close
     # entity in area A. Move the device while the permission await is suspended;
     # the same area selector no longer resolves to that authorized entity.
     device_registry.async_update_device(device.id, area_id=area_b.id)
+    if return_to_original_area:
+        device_registry.async_update_device(device.id, area_id=area_a.id)
     await hass.async_block_till_done()
     allow_permission.set()
 
@@ -115,9 +120,127 @@ async def test_registry_reassignment_between_resolution_and_dispatch_fails_close
         hass,
         _DOMAIN,
         _SERVICE,
-        data={ATTR_AREA_ID: area_b.id},
+        data={ATTR_AREA_ID: area_a.id if return_to_original_area else area_b.id},
         blocking=True,
     )
     assert len(service_calls) == 1
-    assert service_calls[0].data[ATTR_AREA_ID] == area_b.id
+    assert service_calls[0].data[ATTR_AREA_ID] == (
+        area_a.id if return_to_original_area else area_b.id
+    )
     assert permission_calls == 2
+
+
+@pytest.mark.parametrize("replace_registry_entry", [False, True])
+@pytest.mark.asyncio
+async def test_recreated_entity_with_same_id_cannot_inherit_authorization(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    replace_registry_entry: bool,
+) -> None:
+    """Registry identity, not the visible entity_id, owns the authorization."""
+    registry = er.async_get(hass)
+    original = registry.async_get_or_create(
+        domain="light",
+        platform=_DOMAIN,
+        unique_id="original-light",
+        suggested_object_id="reused_light",
+    )
+    hass.states.async_set(original.entity_id, "off")
+    calls: list[ServiceCall] = []
+    hass.services.async_register(_DOMAIN, _SERVICE, calls.append)
+    entered, resume = asyncio.Event(), asyncio.Event()
+
+    async def gated_permission(_hass, entity_ids, *, context=None):
+        assert entity_ids == {original.entity_id}
+        entered.set()
+        await resume.wait()
+
+    monkeypatch.setattr(
+        ha_actions, "async_require_control_permission", gated_permission
+    )
+    action = asyncio.create_task(
+        ha_actions.async_call_ha_action(
+            hass,
+            _DOMAIN,
+            _SERVICE,
+            data={ATTR_ENTITY_ID: original.entity_id},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), _WAIT_TIMEOUT)
+    hass.states.async_remove(original.entity_id)
+    if replace_registry_entry:
+        registry.async_remove(original.entity_id)
+        replacement = registry.async_get_or_create(
+            domain="light",
+            platform=_DOMAIN,
+            unique_id="replacement-light",
+            suggested_object_id="reused_light",
+        )
+    else:
+        replacement = original
+    assert replacement.entity_id == original.entity_id
+    assert (replacement.id != original.id) is replace_registry_entry
+    hass.states.async_set(replacement.entity_id, "off")
+    await hass.async_block_till_done()
+    resume.set()
+    with pytest.raises(HomeAssistantError, match="target changed.*retry"):
+        await asyncio.wait_for(action, _WAIT_TIMEOUT)
+    assert calls == []
+
+    await ha_actions.async_call_ha_action(
+        hass,
+        _DOMAIN,
+        _SERVICE,
+        data={ATTR_ENTITY_ID: replacement.entity_id},
+        blocking=True,
+    )
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_service_reload_does_not_dispatch_stale_request(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reloaded dependency cannot receive a request authorized for its predecessor."""
+    entity_id = "light.reload_target"
+    hass.states.async_set(entity_id, "off")
+    old_calls: list[ServiceCall] = []
+    new_calls: list[ServiceCall] = []
+    hass.services.async_register(_DOMAIN, _SERVICE, old_calls.append)
+    entered, resume = asyncio.Event(), asyncio.Event()
+
+    async def gated_permission(_hass, entity_ids, *, context=None):
+        assert entity_ids == {entity_id}
+        entered.set()
+        await resume.wait()
+
+    monkeypatch.setattr(
+        ha_actions, "async_require_control_permission", gated_permission
+    )
+    action = asyncio.create_task(
+        ha_actions.async_call_ha_action(
+            hass,
+            _DOMAIN,
+            _SERVICE,
+            data={ATTR_ENTITY_ID: entity_id},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(entered.wait(), _WAIT_TIMEOUT)
+    hass.services.async_remove(_DOMAIN, _SERVICE)
+    hass.services.async_register(_DOMAIN, _SERVICE, new_calls.append)
+    resume.set()
+    with pytest.raises(HomeAssistantError, match="target changed.*retry"):
+        await asyncio.wait_for(action, _WAIT_TIMEOUT)
+    assert old_calls == new_calls == []
+
+    await ha_actions.async_call_ha_action(
+        hass,
+        _DOMAIN,
+        _SERVICE,
+        data={ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    assert len(new_calls) == 1

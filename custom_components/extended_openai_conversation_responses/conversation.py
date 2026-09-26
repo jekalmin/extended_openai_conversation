@@ -256,6 +256,9 @@ _ACTIVE_LLM_CONTEXT: ContextVar[Any | None] = ContextVar(
 _ACTIVE_RUNTIME_RECONCILED: ContextVar[bool] = ContextVar(
     "extended_openai_active_runtime_reconciled", default=False
 )
+_ACTIVE_REQUEST_CONFIG_DATA: ContextVar[Any | None] = ContextVar(
+    "extended_openai_active_request_config_data", default=None
+)
 _PROCESS_METADATA: ContextVar[dict[str, Any] | None] = ContextVar(
     "extended_openai_process_metadata", default=None
 )
@@ -632,15 +635,21 @@ class ExtendedOpenAIAgentEntity(
             async with conversation_request_lease(self):
                 with conversation_debug_trace(self, user_input) as trace:
                     with formatted_tool_cache():
-                        async with voice_identity_scope(self, user_input):
-                            await async_reconcile_runtime_configuration(self)
-                            reconciled_token = _ACTIVE_RUNTIME_RECONCILED.set(True)
-                            try:
-                                result = await self._async_process_with_continuity(
-                                    user_input
-                                )
-                            finally:
-                                _ACTIVE_RUNTIME_RECONCILED.reset(reconciled_token)
+                        config_token = _ACTIVE_REQUEST_CONFIG_DATA.set(
+                            self.subentry.data
+                        )
+                        try:
+                            async with voice_identity_scope(self, user_input):
+                                await async_reconcile_runtime_configuration(self)
+                                reconciled_token = _ACTIVE_RUNTIME_RECONCILED.set(True)
+                                try:
+                                    result = await self._async_process_with_continuity(
+                                        user_input
+                                    )
+                                finally:
+                                    _ACTIVE_RUNTIME_RECONCILED.reset(reconciled_token)
+                        finally:
+                            _ACTIVE_REQUEST_CONFIG_DATA.reset(config_token)
                     if trace is not None:
                         trace.result = result
                     return result
@@ -1038,6 +1047,9 @@ class ExtendedOpenAIAgentEntity(
         # Call the LLM
 
         try:
+            check_aba = getattr(self, "_assert_no_aba_configuration", None)
+            if callable(check_aba):
+                check_aba()
             continue_mode = _get_continue_conversation_mode(self.subentry.data)
             conditional_decision = await self._async_handle_chat_log(
                 chat_log,
@@ -1732,6 +1744,17 @@ class ExtendedOpenAIAgentEntity(
                 trace, function_tool, tool_input, started, successful, content
             )
 
+    def _assert_no_aba_configuration(self) -> None:
+        """Reject a request whose HA config mapping left and returned to A."""
+        started_with = _ACTIVE_REQUEST_CONFIG_DATA.get()
+        if started_with is None:
+            return
+        current = self.subentry.data
+        if current is not started_with and current == started_with:
+            raise HomeAssistantError(
+                "Agent configuration changed during this request; please retry"
+            )
+
     async def _async_dispatch_function_tool(
         self,
         function_tool: dict[str, Any],
@@ -1740,6 +1763,9 @@ class ExtendedOpenAIAgentEntity(
         exposed_entities: list[dict[str, Any]],
     ) -> conversation.ToolResultContent:
         """Execute an integration-owned tool or a configured tool."""
+        check_aba = getattr(self, "_assert_no_aba_configuration", None)
+        if callable(check_aba):
+            check_aba()
         function_type = function_tool.get("function", {}).get("type")
         policy = self._effective_guest_policy()
         if function_type == "ha_llm" and policy.guest_active:

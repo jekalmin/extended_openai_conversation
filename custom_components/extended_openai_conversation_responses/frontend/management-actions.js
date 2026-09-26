@@ -53,6 +53,25 @@ async function runFrontendMutation(panel, control, label, operation) {
   }
 }
 
+export async function saveConfigurationAcrossRestart(panel, payload, submitted, submittedTitle) {
+  const baseline = panel._configData;
+  const agentId = panel._agentId;
+  try {
+    return await panel._call("configuration", "save", payload);
+  } catch (error) {
+    if (!String(error?.message || error).includes("Configuration changed in another tab") ||
+        !baseline?.server_epoch || panel._configData !== baseline) throw error;
+    const latest = await panel._call("configuration", "get");
+    if (latest?.server_epoch === baseline.server_epoch || !latest?.server_epoch ||
+        latest.title !== baseline.title || !same(latest.config, baseline.config) ||
+        panel._agentId !== agentId || !same(panel._draft, submitted) ||
+        panel._draftTitle !== submittedTitle) throw error;
+    // A new HA process lost the in-memory revision lineage. The persisted
+    // baseline is unchanged, so the draft can safely use its fresh revision.
+    return panel._call("configuration", "save", {...payload, revision: latest.revision});
+  }
+}
+
 async function saveConfiguration(panel, button) {
   if (!panel._draft || !panel._selectedAgent?.() || panel._configurationSaving) return;
   const submitted = clone(panel._draft), submittedTitle = panel._draftTitle;
@@ -62,11 +81,11 @@ async function saveConfiguration(panel, button) {
   panel._configurationSaving = true;
   panel._setSaving(button, true);
   try {
-    const result = await panel._call("configuration", "save", {
+    const result = await saveConfigurationAcrossRestart(panel, {
       config: changed,
       ...(dirty.has("__title") ? {title: submittedTitle} : {}),
       revision: panel._configData?.revision,
-    });
+    }, submitted, submittedTitle);
     showErrors(panel, result.errors || {});
     if (!result.valid) {
       panel._toast("Fix the highlighted configuration errors", true);
