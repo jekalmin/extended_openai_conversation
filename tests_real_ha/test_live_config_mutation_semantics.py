@@ -26,14 +26,14 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
+from tests_real_ha.test_knowledge_provider_wire_e2e import _chat_sse_tool_call
 from tests_real_ha.test_provider_wire_e2e import (
-    _ScriptedWire,
     _chat_sse_text,
     _install_wire,
     _raw_client,
+    _ScriptedWire,
     _speech,
 )
-from tests_real_ha.test_knowledge_provider_wire_e2e import _chat_sse_tool_call
 
 _GROUP_ID = "live-group"
 _TOOL_NAME = "live_status"
