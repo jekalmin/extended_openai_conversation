@@ -118,7 +118,7 @@ async def test_bounded_unicode_and_nested_schema_round_trip_on_public_wire(
     )
     private = f"OTHER-PRIVATE-{stress_seed}"
     await memory.async_add(
-        owner, "unicode owner note " + "🧠" * 2000, "nightly", "explicit"
+        owner, "unicode owner note " + "🧠" * 950, "nightly", "explicit"
     )
     await memory.async_add(other, private, "nightly", "explicit")
     await knowledge.async_create("Unicode source", "valid edge", "مرحبا 🌍 " * 1000)

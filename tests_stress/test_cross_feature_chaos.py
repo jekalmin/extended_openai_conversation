@@ -10,6 +10,7 @@ import random
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+import yaml
 
 from custom_components.extended_openai_conversation_responses import backup
 from custom_components.extended_openai_conversation_responses.const import (
@@ -228,16 +229,22 @@ async def test_seeded_cross_store_chaos_preserves_valid_agent_state(
             record(stress_trace, operation, step=step, max_tokens=options["max_tokens"])
         elif operation == "tool_toggle":
             options = dict(subentry.data)
-            tool = deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])
-            tool["enabled"] = not bool(
-                (options.get(CONF_FUNCTION_TOOLS) or [{}])[0].get("enabled", False)
+            previous = (
+                yaml.safe_load(options[CONF_FUNCTION_TOOLS])
+                if options.get(CONF_FUNCTION_TOOLS)
+                else DEFAULT_CONF_FUNCTION_TOOLS
             )
-            options[CONF_FUNCTION_TOOLS] = [tool]
+            tool = deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])
+            tool["enabled"] = not previous[0].get("enabled", True)
+            options[CONF_FUNCTION_TOOLS] = yaml.safe_dump([tool], sort_keys=False)
             hass.config_entries.async_update_subentry(entry, subentry, data=options)
             await hass.async_block_till_done()
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done()
-            assert subentry.data[CONF_FUNCTION_TOOLS][0]["enabled"] is tool["enabled"]
+            assert (
+                yaml.safe_load(subentry.data[CONF_FUNCTION_TOOLS])[0]["enabled"]
+                is tool["enabled"]
+            )
             conversations.clear()
             record(stress_trace, operation, step=step, enabled=tool["enabled"])
         elif operation == "exposure_toggle":
