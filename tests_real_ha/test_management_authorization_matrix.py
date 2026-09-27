@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from pytest_homeassistant_custom_component.common import MockUser
 
+from custom_components.extended_openai_conversation_responses import backup
 from homeassistant.core import HomeAssistant
 from tests_real_ha.test_management_backend_acceptance import (
     CLIENT_ID,
@@ -18,7 +19,10 @@ from tests_real_ha.test_management_backend_acceptance import (
     _setup_entry,
 )
 
-INVENTORY = Path(__file__).resolve().parents[1] / "tests_stress/management_action_inventory.json"
+INVENTORY = (
+    Path(__file__).resolve().parents[1]
+    / "tests_stress/management_action_inventory.json"
+)
 
 # One representative per admin-controlled section. Handler-specific privacy and
 # cross-user ID tests remain in test_user_ownership_privacy.py.
@@ -46,7 +50,8 @@ async def test_reviewed_admin_sections_reject_non_admin_at_real_websocket(
 ) -> None:
     inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
     classified = {
-        section for section, spec in inventory["sections"].items()
+        section
+        for section, spec in inventory["sections"].items()
         if "admin_only" in spec["authorization_classes"].values()
     }
     assert set(ADMIN_REPRESENTATIVES) == classified
@@ -60,7 +65,10 @@ async def test_reviewed_admin_sections_reject_non_admin_at_real_websocket(
     client = await hass_ws_client(hass, hass.auth.async_create_access_token(token))
 
     for section, action in ADMIN_REPRESENTATIVES.items():
-        assert inventory["sections"][section]["authorization_classes"][action] == "admin_only"
+        assert (
+            inventory["sections"][section]["authorization_classes"][action]
+            == "admin_only"
+        )
         denied = await _management_response(
             client, entry=entry, section=section, action=action
         )
@@ -92,8 +100,53 @@ async def test_reviewed_admin_sections_reject_non_admin_at_real_websocket(
         ("guest_mode", "get"),
         ("usage", "summary"),
     ):
-        assert inventory["sections"][section]["authorization_classes"][action] == "authenticated_read"
+        assert (
+            inventory["sections"][section]["authorization_classes"][action]
+            == "authenticated_read"
+        )
         allowed = await _management_response(
             client, entry=entry, section=section, action=action
         )
         assert allowed["success"] is True, (section, action, allowed)
+
+
+@pytest.mark.asyncio
+async def test_each_admin_action_denies_non_admin_before_any_mutation(
+    hass: HomeAssistant, hass_ws_client: Any
+) -> None:
+    """Catch an action added to a section without its per-action admin gate."""
+    inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
+    actions = [
+        (section, action)
+        for section, spec in inventory["sections"].items()
+        for action in spec["actions"]
+        if spec["authorization_classes"][action] == "admin_only"
+    ]
+    entry = _entry("Per-action authorization")
+    await _setup_entry(hass, entry)
+    subentry = next(
+        s for s in entry.subentries.values() if s.subentry_type == "conversation"
+    )
+    initial_config = dict(subentry.data)
+    snapshot = await backup.async_collect_backup_snapshot(hass, entry, subentry)
+    snapshot.pop("created_at", None)
+    restricted = MockUser(id="management-action-restricted", is_owner=False)
+    restricted.add_to_hass(hass)
+    token = await hass.auth.async_create_refresh_token(restricted, CLIENT_ID)
+    client = await hass_ws_client(hass, hass.auth.async_create_access_token(token))
+
+    for section, action in actions:
+        denied = await _management_response(
+            client, entry=entry, section=section, action=action
+        )
+        assert denied["success"] is False, (section, action, denied)
+        assert "Administrator permission is required" in denied["error"]["message"], (
+            section,
+            action,
+            denied,
+        )
+        assert subentry.data == initial_config, (section, action)
+
+    after = await backup.async_collect_backup_snapshot(hass, entry, subentry)
+    after.pop("created_at", None)
+    assert after == snapshot
