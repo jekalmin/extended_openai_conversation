@@ -112,6 +112,14 @@ def test_management_actions_have_reviewed_evidence() -> None:
                     and node.name == test_name
                 ]
                 assert len(tests) == 1, (section, action, reference)
+                mentioned = {
+                    node.value
+                    for node in ast.walk(tests[0])
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                }
+                assert action in test_name or action in mentioned, (
+                    section, action, reference
+                )
                 assert any(
                     isinstance(node, ast.Assert)
                     or (
