@@ -69,6 +69,7 @@ async def test_repair_configuration_validate_and_save_preserve_quarantined_tools
     monkeypatch.setattr(
         management_ui, "entry_and_agent", lambda *_args, **_kwargs: (entry, subentry)
     )
+    monkeypatch.setattr(guidance, "exposed_attribute_catalog", lambda *_args: {})
     base = {"section": "function_repair", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id}
     validated = await management_ui.async_management_command(
         hass, "admin", True, {**base, "action": "configuration_validate", "config": {"max_tokens": 700}}

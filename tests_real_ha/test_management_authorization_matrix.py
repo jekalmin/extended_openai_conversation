@@ -84,8 +84,8 @@ async def test_reviewed_admin_sections_reject_non_admin_at_real_websocket(
         )
         assert allowed["success"] is True, (section, action, allowed)
         if (section, action) == ("backup", "create"):
-            assert "format" in allowed["result"]
-            assert "memories" in allowed["result"]
+            assert "format" in allowed["result"]["document"]
+            assert "memories" in allowed["result"]["document"]
 
     for section, action in (
         ("overview", "summary"),
