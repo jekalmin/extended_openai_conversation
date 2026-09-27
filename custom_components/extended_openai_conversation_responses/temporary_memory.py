@@ -12,13 +12,13 @@ import logging
 from typing import Any, cast
 from uuid import uuid4
 
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .memory import validate_memory_privacy
 from .persistence_hardening import _async_settle_transactional_save
 from .scope import SHARED_HOUSEHOLD_SCOPE_ID
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 _ACTIVE_OWNER_SCOPE_ID: ContextVar[str | None] = ContextVar(
@@ -56,7 +56,7 @@ class TemporaryMemoryRecord:
     owner_scope_id: str | None = None
 
 
-class TemporaryMemoryStore(Store[dict[str, Any]]):
+class TemporaryMemoryStore(PropagatingWriteStore):
     """Versioned private Home Assistant storage."""
 
 

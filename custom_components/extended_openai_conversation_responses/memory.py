@@ -33,6 +33,7 @@ from .const import (
 )
 from .persistence_hardening import _async_settle_transactional_save
 from .scope import LEGACY_ANONYMOUS_SCOPE_ID
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class EmbeddingCacheStorage(Protocol):
         """Save cached embeddings."""
 
 
-class MemoryStore(Store[dict[str, Any]]):
+class MemoryStore(PropagatingWriteStore):
     """Versioned Home Assistant Store backend."""
 
     async def _async_migrate_func(

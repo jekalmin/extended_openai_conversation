@@ -1,0 +1,107 @@
+[
+  {
+    "owner": "persistent_memory",
+    "classification": "transactional_durable",
+    "guarantee": "Facts and indexes roll back before a failed mutation returns; embedding vectors are separate regenerable data.",
+    "stores": [{"module": "memory.py", "constructor": "MemoryStore", "count": 1}],
+    "evidence": ["tests/test_memory_mutation_integrity.py::test_durable_save_failure_rolls_back_live_manager", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+  },
+  {
+    "owner": "memory_embedding_cache",
+    "classification": "best_effort_or_coalesced",
+    "guarantee": "Vectors can be discarded and regenerated without losing durable facts.",
+    "stores": [{"module": "memory.py", "constructor": "Store", "count": 1}],
+    "evidence": ["tests/test_memory_mutation_integrity.py::test_durable_save_failure_rolls_back_live_manager"]
+  },
+  {
+    "owner": "temporary_memory",
+    "classification": "transactional_durable",
+    "guarantee": "Acknowledged temporary facts survive reload until expiry; failed writes restore the prior live generation.",
+    "stores": [{"module": "temporary_memory.py", "constructor": "TemporaryMemoryStore", "count": 1}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_temporary_memory_failure_does_not_publish_or_reload_new_fact"]
+  },
+  {
+    "owner": "knowledge",
+    "classification": "transactional_durable",
+    "guarantee": "Library mutations publish only after the strict Store commits and roll back on writer failure.",
+    "stores": [{"module": "knowledge.py", "constructor": "KnowledgeStore", "count": 1}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_knowledge_fsync_enospc_rolls_back_and_recovers"]
+  },
+  {
+    "owner": "request_rules",
+    "classification": "transactional_durable",
+    "guarantee": "Rule revisions and compiled generations advance only after durable commit.",
+    "stores": [{"module": "request_rules.py", "constructor": "RequestRuleStore", "count": 1}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_request_rules_atomic_replace_erofs_rolls_back_and_recovers"]
+  },
+  {
+    "owner": "conversation_archive",
+    "classification": "transactional_durable",
+    "guarantee": "Metadata is the durable intent journal for partition changes; restart completes committed intent without exposing an uncommitted generation.",
+    "stores": [{"module": "conversation_archive.py", "constructor": "PropagatingWriteStore", "count": 2}],
+    "evidence": ["tests/test_conversation_archive.py::test_partition_write_failure_recovers_private_state_on_restart", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+  },
+  {
+    "owner": "guest_mode",
+    "classification": "transactional_durable",
+    "guarantee": "A changed schedule is not visible to authorization until the writer commits.",
+    "stores": [{"module": "guest_mode.py", "constructor": "PropagatingWriteStore", "count": 1}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_guest_schedule_failure_does_not_publish_and_retries"]
+  },
+  {
+    "owner": "delayed_function_tools",
+    "classification": "transactional_durable",
+    "guarantee": "A scheduled call is acknowledged and armed only after its record commits; terminal tombstones prevent replay.",
+    "stores": [{"module": "delayed_tools.py", "constructor": "PropagatingWriteStore", "count": 1}],
+    "evidence": ["tests/test_delayed_tools.py::test_schedule_is_persisted_before_becoming_live", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+  },
+  {
+    "owner": "model_catalogue",
+    "classification": "transactional_durable",
+    "guarantee": "Explicit catalogue apply/reset publishes only after persistence; check timestamps are best effort.",
+    "stores": [{"module": "model_catalog_manager.py", "constructor": "PropagatingWriteStore", "count": 1}],
+    "evidence": ["tests/test_model_catalog_refresh_failures.py::test_reset_persistence_failure_keeps_published_catalog_and_can_retry", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+  },
+  {
+    "owner": "quiet_hours",
+    "classification": "transactional_durable",
+    "guarantee": "Policy and control ownership are persisted before policy acknowledgement or device side effects.",
+    "stores": [{"module": "quiet_hours_runtime.py", "constructor": "PropagatingWriteStore", "count": 1}],
+    "evidence": ["tests/test_quiet_hours_runtime.py::test_update_config_rolls_back_then_succeeds", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+  },
+  {
+    "owner": "broadcast_settings",
+    "classification": "transactional_durable",
+    "guarantee": "The master switch and queued-delivery cleanup change only after the saved switch commits.",
+    "stores": [{"module": "intercom.py", "constructor": "PropagatingWriteStore", "count": 1}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_broadcast_switch_failure_does_not_report_enabled"]
+  },
+  {
+    "owner": "usage_history",
+    "classification": "best_effort_or_coalesced",
+    "guarantee": "Accounting is coalesced and must not fail an otherwise healthy Assist request; later writes recover.",
+    "stores": [{"module": "usage.py", "constructor": "Store", "count": 3}],
+    "evidence": ["tests/test_usage.py::test_persistence_failure_keeps_successful_request_and_run_in_memory"]
+  },
+  {
+    "owner": "backup_restore_journal",
+    "classification": "transactional_durable",
+    "guarantee": "Journal writes use explicit disk read-back because HA Store can swallow WriteError; a separate Store verifies the committed decision.",
+    "stores": [{"module": "restore_recovery.py", "constructor": "Store", "count": 2}],
+    "evidence": ["tests_stress/test_os_storage_faults.py::test_restore_journal_replace_eacces_never_claims_commit", "tests_stress/test_backup_fault_matrix.py::test_committed_restore_finishes_after_configuration_write_failure"]
+  },
+  {
+    "owner": "agent_configuration_and_subentries",
+    "classification": "ha_owned",
+    "guarantee": "HA config-entry update results are authoritative; EOAI does not replace HA's persistence model.",
+    "stores": [],
+    "evidence": ["tests_stress/test_management_transaction_matrix.py::test_agent_config_aba_rejects_suspended_management_writer"]
+  },
+  {
+    "owner": "backup_transfer_staging",
+    "classification": "ephemeral",
+    "guarantee": "Temporary upload and preview files are not acknowledged as restored durable state.",
+    "stores": [],
+    "evidence": ["tests_stress/test_backup_transfer_preview_races.py::test_two_imports_reject_stale_preview_and_changed_target"]
+  }
+]

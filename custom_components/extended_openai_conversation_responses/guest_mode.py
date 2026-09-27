@@ -15,7 +15,6 @@ from homeassistant.helpers import (
     entity_registry as er,
     target as target_helpers,
 )
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .agent_config import CONF_GUEST_WEB_SEARCH, DEFAULT_GUEST_WEB_SEARCH
@@ -54,6 +53,7 @@ from .const import (
 )
 from .functions.security import FunctionSecurity, classify_tool
 from .helpers import get_exposed_entities
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ class GuestModeManager:
 
     def __init__(self, hass: HomeAssistant, entry_id: str, subentry_id: str) -> None:
         self.hass = hass
-        self._store = Store[dict[str, Any]](
+        self._store = PropagatingWriteStore(
             hass,
             GUEST_MODE_STORAGE_VERSION,
             f"{GUEST_MODE_STORAGE_PREFIX}.{entry_id}.{subentry_id}",
