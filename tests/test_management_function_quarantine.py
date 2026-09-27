@@ -18,7 +18,7 @@ from custom_components.extended_openai_conversation_responses.agent_config impor
 )
 from custom_components.extended_openai_conversation_responses.agent_test import (
     AgentTestResult,
-    TestCheck,
+    TestCheck as AgentTestCheck,
 )
 from custom_components.extended_openai_conversation_responses.const import (
     CONF_API_PROVIDER,
@@ -139,7 +139,7 @@ async def test_diagnostics_quarantines_invalid_tools_and_reports_warning(
         observed["tools"] = yaml.safe_load(safe_subentry.data[CONF_FUNCTION_TOOLS])
         return AgentTestResult(
             "Passed",
-            [TestCheck("Provider request", "Passed", "Request succeeded")],
+            [AgentTestCheck("Provider request", "Passed", "Request succeeded")],
         )
 
     monkeypatch.setattr(quarantine, "async_test_configured_agent", original)
@@ -468,7 +468,7 @@ async def test_tolerant_agent_test_clean_and_collection_level_warning_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clean_result = AgentTestResult(
-        "Passed", [TestCheck("Provider request", "Passed", "ok")]
+        "Passed", [AgentTestCheck("Provider request", "Passed", "ok")]
     )
     provider = AsyncMock(return_value=clean_result)
     monkeypatch.setattr(quarantine, "async_test_configured_agent", provider)
@@ -498,7 +498,7 @@ async def test_tolerant_agent_test_clean_and_collection_level_warning_paths(
         lambda raw: raw,
     )
     warned = AgentTestResult(
-        "Passed", [TestCheck("Provider request", "Passed", "ok")]
+        "Passed", [AgentTestCheck("Provider request", "Passed", "ok")]
     )
     provider.return_value = warned
 
