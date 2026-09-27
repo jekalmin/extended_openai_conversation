@@ -139,21 +139,35 @@ def _named_paths() -> list[TransitionPath]:
         _path(
             "guest-security",
             states(
-                {"memory_mode": "manual", "knowledge_enabled": True},
                 {
-                    "guest_mode_enabled": True,
                     "memory_mode": "manual",
+                    "memory_auto_retrieve_limit": 3,
+                    "conversation_continuity": "user",
                     "knowledge_enabled": True,
                 },
                 {
                     "guest_mode_enabled": True,
                     "memory_mode": "manual",
+                    "memory_auto_retrieve_limit": 3,
+                    "conversation_continuity": "user",
+                    "knowledge_enabled": True,
+                },
+                {
+                    "guest_mode_enabled": True,
+                    "memory_mode": "manual",
+                    "memory_auto_retrieve_limit": 3,
+                    "conversation_continuity": "user",
                     "knowledge_enabled": True,
                     "guest_function_policy": "custom",
                     "guest_knowledge_policy": "custom",
                     "guest_shared_memory_policy": "read_only",
                 },
-                {"memory_mode": "manual", "knowledge_enabled": True},
+                {
+                    "memory_mode": "manual",
+                    "memory_auto_retrieve_limit": 3,
+                    "conversation_continuity": "user",
+                    "knowledge_enabled": True,
+                },
             ),
         ),
         _path(

@@ -355,9 +355,9 @@ async def test_complete_user_journey(
             recovered_knowledge = await async_get_knowledge(
                 hass, entry.entry_id, subentry.subentry_id
             )
-            assert (await recovered_knowledge.async_search("long-lived"))[
-                0
-            ].source_id == source_id
+            assert (
+                await recovered_knowledge.async_get(source_id)
+            ).source_id == source_id
     if journey == "installation-to-mature":
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert await hass.config_entries.async_remove(entry.entry_id)
