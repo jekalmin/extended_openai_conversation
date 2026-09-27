@@ -49,4 +49,5 @@ jobs:
             tests/test_openai_sdk_wire.py \
             tests/test_openai_sdk_malformed_wire.py \
             tests/test_openai_sdk_error_matrix.py \
-            tests/test_openai_sdk_catalog_matrix.py
+            tests/test_openai_sdk_catalog_matrix.py \
+            tests/test_openai_sdk_multicall_wire.py
