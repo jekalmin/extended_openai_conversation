@@ -22,7 +22,10 @@ async function ensureCatalogData(panel) {
   try {
     await lookupModelData(panel, model, "lookup", current);
     if (!current()) return;
-    panel._configRestoreFocus = searchTarget ? `#${CSS.escape(searchTarget)}` : '[data-config="chat_model"]';
+    // A late catalog response must not replace an editor while the user is
+    // typing. The next ordinary render will use the now-cached model data.
+    if (panel.shadowRoot?.activeElement?.matches?.("input,textarea,[contenteditable='true']")) return;
+    if (searchTarget) panel._configRestoreFocus = `#${CSS.escape(searchTarget)}`;
     panel._render();
   } catch (err) {
     panel._toast?.(`Unable to inspect model capabilities: ${err.message || String(err)}`, true);

@@ -10,9 +10,11 @@ const routes = NAVIGATION.flatMap(page => page.sections.length
   ? page.sections.map(section => `${page.id}/${section.id}`) : [page.id]);
 
 test("every shipped route has an explicit nightly browser acceptance level", () => {
+  expect(inventory.schema_version).toBe(2);
   expect(Object.keys(inventory.routes).sort()).toEqual([...routes].sort());
   expect(Object.values(inventory.routes).every(level =>
     ["full-crud", "read-write", "read-only", "render-navigation"].includes(level))).toBe(true);
+  expect(Object.keys(inventory.journeys).sort()).toEqual([...routes].sort());
 });
 
 for (const [viewport, width] of [["mobile", 390], ["tablet", 820], ["desktop", 1600]]) {

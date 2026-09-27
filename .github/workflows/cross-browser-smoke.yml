@@ -8,9 +8,6 @@ on:
     branches:
       - develop
   pull_request:
-    paths:
-      - "playwright.cross-browser-smoke.config.mjs"
-      - ".github/workflows/cross-browser-smoke.yml"
 
 concurrency:
   group: cross-browser-smoke-${{ github.ref }}
@@ -20,9 +17,36 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
-    name: Firefox and WebKit critical paths
+  classify:
+    name: Classify frontend contract changes
     runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+      - name: Classify PR dependency changes
+        id: changes
+        shell: bash
+        run: |
+          python -m unittest ci.test_classify_frontend_changes -v
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            git diff --no-renames --name-only \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/frontend-changed-files.txt"
+            python ci/classify_frontend_changes.py "$RUNNER_TEMP/frontend-changed-files.txt" --output "$GITHUB_OUTPUT"
+          fi
+  smoke:
+    name: Shipped bundle critical paths (Chromium, Firefox, WebKit)
+    runs-on: ubuntu-latest
+    needs: classify
+    if: needs.classify.outputs.frontend == 'true'
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -36,10 +60,12 @@ jobs:
       - name: Install Playwright test runner
         run: npm install --no-save --package-lock=false --no-audit --no-fund @playwright/test@1.63.0
 
-      - name: Install Firefox and WebKit
-        run: npx playwright install --with-deps firefox webkit
+      - name: Install Chromium, Firefox and WebKit
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run critical functional smoke journeys
+        env:
+          SHIPPED_BUNDLE: "1"
         run: npx playwright test --config=playwright.cross-browser-smoke.config.mjs
 
       - name: Upload cross-browser diagnostics

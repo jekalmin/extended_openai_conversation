@@ -388,7 +388,10 @@ test("real browser full backup restores cross-feature state through genuine HA",
 
   await page.goto(realFixtureUrl("assistant/basics"));
   let panel = page.locator("extended-openai-management-panel");
+  const originalModel = await panel.locator('[data-config="chat_model"]').inputValue();
   await panel.locator('[data-config="__title"]').fill("Real HA backup source");
+  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Real HA backup source");
+  await expect(panel.locator('[data-config="chat_model"]')).toHaveValue(originalModel);
   await panel.getByRole("button", {name: "Save changes", exact: true}).click();
   await expect(panel.getByText("Unsaved changes", {exact: true})).toHaveCount(0);
 
@@ -426,6 +429,10 @@ test("real browser full backup restores cross-feature state through genuine HA",
   panel = page.locator("extended-openai-management-panel");
   await panel.locator('[data-config="__title"]').fill("Real HA backup mutated");
   await panel.getByRole("button", {name: "Save changes", exact: true}).click();
+  await expect(panel.getByText("Unsaved changes", {exact: true})).toHaveCount(0);
+  await page.goto(realFixtureUrl("assistant/basics"));
+  panel = page.locator("extended-openai-management-panel");
+  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Real HA backup mutated");
 
   await page.goto(realFixtureUrl("data-memory/memories"));
   panel = page.locator("extended-openai-management-panel");

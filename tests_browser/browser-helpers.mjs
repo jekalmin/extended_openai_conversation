@@ -1,6 +1,6 @@
 import {expect} from "@playwright/test";
 
-export const fixtureUrl = (route, extra = "") => `/tests_browser/fixture.html?route=${route}${extra}`;
+export const fixtureUrl = (route, extra = "") => `/tests_browser/fixture.html?route=${route}${extra}${process.env.SHIPPED_BUNDLE === "1" ? "&bundle=1" : ""}`;
 
 export function trackPageErrors(page) {
   const diagnostics = [];

@@ -2,6 +2,7 @@
 // Mutations are applied here, never optimistically in the panel under test.
 export function createDataCollectionBackend(size = 100) {
   let revision = 1;
+  let knowledgeEnabled = true;
   let nextId = size;
   const timestamp = () => `2026-09-01T12:${String(revision++).padStart(2, "0")}:00Z`;
   const state = {
@@ -19,6 +20,12 @@ export function createDataCollectionBackend(size = 100) {
     if (section === "knowledge") {
       if (action === "list") return {sources: clone(state.sources)};
       if (action === "get") return {source: clone(state.sources.find(source => source.source_id === message.source_id))};
+      if (action === "set_enabled") {
+        if (typeof message.enabled !== "boolean") throw new Error("Knowledge availability requires a boolean enabled field");
+        knowledgeEnabled = message.enabled;
+        return {knowledge_enabled: knowledgeEnabled, revision: `collection-${revision++}`,
+          feature_status: {state: knowledgeEnabled ? "available" : "disabled", enabled: knowledgeEnabled, source_count: state.sources.length}};
+      }
       let source;
       if (action === "create") {
         source = {source_id: `source-${nextId++}`, title: message.title, description: message.description, content: message.content, character_count: message.content.length, enabled: message.enabled, updated_at: timestamp()};
@@ -32,6 +39,8 @@ export function createDataCollectionBackend(size = 100) {
         state.sources = state.sources.filter(item => item.source_id !== message.source_id);
         return {deleted: before - state.sources.length, stats: {knowledge_source_count: state.sources.length},
           feature_status: {source_count: state.sources.length, enabled: true}};
+      } else {
+        throw new Error(`Unhandled Knowledge fixture action: ${action}`);
       }
       return {source: clone(source), summary: clone(source), stats: {knowledge_source_count: state.sources.length},
         feature_status: {source_count: state.sources.length, enabled: true}};

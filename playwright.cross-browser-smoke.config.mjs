@@ -1,5 +1,8 @@
 import {defineConfig, devices} from "@playwright/test";
 
+const browserPort = process.env.PLAYWRIGHT_PORT || "4173";
+const python = process.platform === "win32" ? "python" : "python3";
+
 export default defineConfig({
   testDir: "./tests_browser",
   testMatch: ["management-panel.spec.mjs", "management-crud.spec.mjs"],
@@ -14,17 +17,21 @@ export default defineConfig({
     ? [["line"], ["html", {outputFolder: "playwright-report", open: "never"}]]
     : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: `http://127.0.0.1:${browserPort}`,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "python3 -m http.server 4173 --bind 127.0.0.1",
-    url: "http://127.0.0.1:4173/tests_browser/fixture.html",
+    command: `${python} ci/browser_fixture_server.py ${browserPort}`,
+    url: `http://127.0.0.1:${browserPort}/tests_browser/fixture.html`,
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,
   },
   projects: [
+    {
+      name: "chromium",
+      use: {...devices["Desktop Chrome"]},
+    },
     {
       name: "firefox",
       use: {...devices["Desktop Firefox"]},
