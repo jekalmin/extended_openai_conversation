@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import yaml
@@ -190,3 +191,321 @@ async def test_overview_fallback_uses_persisted_provider_and_model(
     assert runtime["provider"] == "openai"
     assert runtime["model"] == "gpt-5.6-luna"
     assert runtime["client_loaded"] is False
+
+
+def test_management_quarantine_clean_paths_use_strict_helpers_and_reset_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = {CONF_FUNCTION_TOOLS: "clean"}
+    strict_tools = Mock(return_value=[{"spec": {"name": "clean"}}])
+    strict_groups = Mock(return_value=[{"id": "g", "functions": ["clean"]}])
+    strict_merge = Mock(return_value={"merged": True})
+    monkeypatch.setattr(quarantine, "function_tools_issue", lambda _raw: ([], None))
+    monkeypatch.setattr(quarantine, "_STRICT_CONFIGURED_TOOLS", strict_tools)
+    monkeypatch.setattr(quarantine, "_STRICT_VALIDATE_FUNCTION_GROUPS", strict_groups)
+    monkeypatch.setattr(quarantine, "_STRICT_MERGE_AGENT_CONFIG", strict_merge)
+
+    token = quarantine._QUARANTINED_FUNCTION_NAMES.set(frozenset({"stale"}))
+    try:
+        assert quarantine._usable_function_tools(data) == [{"spec": {"name": "clean"}}]
+        assert quarantine._QUARANTINED_FUNCTION_NAMES.get() == frozenset()
+    finally:
+        quarantine._QUARANTINED_FUNCTION_NAMES.reset(token)
+
+    groups = [{"id": "g", "functions": ["clean"]}]
+    tools = [{"spec": {"name": "clean"}}]
+    assert quarantine._management_validate_function_groups(groups, tools) == [
+        {"id": "g", "functions": ["clean"]}
+    ]
+    strict_groups.assert_called_once_with(groups, tools)
+
+    assert quarantine._management_merge_agent_config(data, {"x": 1}) == {
+        "merged": True
+    }
+    strict_merge.assert_called_once_with(data, {"x": 1})
+
+
+def test_management_group_validation_filters_only_quarantined_members(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    def strict(groups, tools):
+        captured["groups"] = groups
+        captured["tools"] = tools
+        return groups
+
+    monkeypatch.setattr(quarantine, "_STRICT_VALIDATE_FUNCTION_GROUPS", strict)
+    allow = quarantine._ALLOW_QUARANTINED_TOOLS.set(True)
+    names = quarantine._QUARANTINED_FUNCTION_NAMES.set(
+        frozenset({"broken", "missing"})
+    )
+    try:
+        result = quarantine._management_validate_function_groups(
+            [
+                {"id": "g", "functions": ["keep", "broken", 123]},
+                {"id": "no-functions"},
+                "not-a-group",
+            ],
+            [{"spec": {"name": "keep"}}],
+        )
+    finally:
+        quarantine._QUARANTINED_FUNCTION_NAMES.reset(names)
+        quarantine._ALLOW_QUARANTINED_TOOLS.reset(allow)
+
+    assert result[0]["functions"] == ["keep", 123]
+    assert captured["groups"][0]["functions"] == ["keep", 123]
+
+
+def test_restore_quarantined_group_members_preserves_hidden_raw_members() -> None:
+    groups = [
+        {"id": "g1", "functions": ["valid"]},
+        {"id": "g2", "functions": ["already", "broken"]},
+        {"id": "missing-original", "functions": ["valid"]},
+    ]
+    raw = [
+        {"id": "g1", "functions": ["valid", "broken", "other"]},
+        {"id": "g2", "functions": ["already", "broken"]},
+        {"id": "malformed", "functions": "not-a-list"},
+    ]
+
+    restored = quarantine._restore_quarantined_group_members(
+        groups, raw, frozenset({"broken"})
+    )
+
+    assert restored[0]["functions"] == ["valid", "broken"]
+    assert restored[1]["functions"] == ["already", "broken"]
+    assert restored[2]["functions"] == ["valid"]
+    assert groups[0]["functions"] == ["valid"]
+
+    assert quarantine._restore_quarantined_group_members(
+        groups, raw, frozenset()
+    ) == groups
+    assert quarantine._restore_quarantined_group_members(
+        groups, object(), frozenset({"broken"})
+    ) == groups
+
+
+def test_management_merge_in_quarantine_preserves_raw_function_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = {
+        CONF_FUNCTION_TOOLS: "raw-tools",
+        CONF_FUNCTION_GROUPS: [{"id": "raw-group"}],
+        "other": "old",
+    }
+    monkeypatch.setattr(
+        quarantine, "function_tools_issue", lambda _raw: ([], "broken")
+    )
+    monkeypatch.setattr(
+        quarantine,
+        "_safe_function_configuration",
+        lambda _raw: {"safe": True},
+    )
+    monkeypatch.setattr(
+        quarantine,
+        "_STRICT_MERGE_AGENT_CONFIG",
+        lambda source, updates: {**source, **updates},
+    )
+
+    token = quarantine._ALLOW_QUARANTINED_TOOLS.set(True)
+    try:
+        merged = quarantine._management_merge_agent_config(
+            raw, {"other": "new"}
+        )
+    finally:
+        quarantine._ALLOW_QUARANTINED_TOOLS.reset(token)
+
+    assert merged["other"] == "new"
+    assert merged[CONF_FUNCTION_TOOLS] == "raw-tools"
+    assert merged[CONF_FUNCTION_GROUPS] == [{"id": "raw-group"}]
+
+
+def test_tolerant_persist_delegates_when_configuration_is_clean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    delegated = Mock(return_value={"revision": "delegated"})
+    monkeypatch.setattr(
+        quarantine,
+        "isolated_function_tools",
+        lambda _raw: ([], [], None),
+    )
+    monkeypatch.setattr(
+        quarantine, "persist_valid_function_configuration", delegated
+    )
+    hass = SimpleNamespace()
+    entry = SimpleNamespace()
+    subentry = SimpleNamespace(data={})
+
+    result = quarantine._tolerant_persist_function_configuration(
+        hass,
+        entry,
+        subentry,
+        [{"spec": {"name": "ok"}}],
+        [],
+        extra_updates={"x": 1},
+        expected_revision="revision",
+    )
+
+    assert result == {"revision": "delegated"}
+    delegated.assert_called_once()
+
+
+def test_tolerant_persist_rejects_stale_duplicate_and_unisolatable_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invalid = [{"index": 0, "name": "broken"}]
+    monkeypatch.setattr(
+        quarantine,
+        "isolated_function_tools",
+        lambda _raw: ([], invalid, "broken"),
+    )
+    monkeypatch.setattr(quarantine, "repair_revision", lambda _subentry: "current")
+    subentry = SimpleNamespace(data={CONF_FUNCTION_TOOLS: "raw"})
+
+    with pytest.raises(quarantine.HomeAssistantError, match="changed in another tab"):
+        quarantine._tolerant_persist_function_configuration(
+            SimpleNamespace(),
+            SimpleNamespace(),
+            subentry,
+            [],
+            [],
+            expected_revision="stale",
+        )
+
+    monkeypatch.setattr(
+        quarantine,
+        "editable_function_tools",
+        lambda _raw: [{"spec": {"name": "broken"}}],
+    )
+    with pytest.raises(quarantine.HomeAssistantError, match="already exists"):
+        quarantine._tolerant_persist_function_configuration(
+            SimpleNamespace(),
+            SimpleNamespace(),
+            subentry,
+            [{"spec": {"name": "broken"}}],
+            [],
+            expected_revision="current",
+        )
+
+    monkeypatch.setattr(quarantine, "editable_function_tools", lambda _raw: "bad")
+    with pytest.raises(
+        quarantine.HomeAssistantError, match="cannot be isolated safely"
+    ):
+        quarantine._tolerant_persist_function_configuration(
+            SimpleNamespace(),
+            SimpleNamespace(),
+            subentry,
+            [],
+            [],
+            expected_revision="current",
+        )
+
+
+def test_tolerant_persist_keeps_invalid_raw_tool_and_hidden_group_member(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invalid_tool = {"spec": {"name": "broken"}, "function": {"type": "legacy"}}
+    raw_groups = [{"id": "g", "functions": ["valid", "broken"]}]
+    subentry = SimpleNamespace(
+        data={
+            CONF_FUNCTION_TOOLS: yaml.safe_dump([invalid_tool]),
+            CONF_FUNCTION_GROUPS: raw_groups,
+            "guest_mode_enabled": False,
+        }
+    )
+    invalid = [{"index": 0, "name": "broken"}]
+    monkeypatch.setattr(
+        quarantine,
+        "isolated_function_tools",
+        lambda _raw: ([], invalid, "broken"),
+    )
+    monkeypatch.setattr(
+        quarantine,
+        "editable_function_tools",
+        lambda _raw: [deepcopy(invalid_tool)],
+    )
+    monkeypatch.setattr(quarantine, "repair_revision", lambda _subentry: "new-revision")
+    monkeypatch.setattr(
+        quarantine,
+        "preserve_legacy_guest_policy",
+        lambda _old, new: new,
+    )
+
+    class ConfigEntries:
+        def async_update_subentry(self, _entry, target, *, data):
+            target.data = data
+
+    hass = SimpleNamespace(config_entries=ConfigEntries())
+    tools = [{"spec": {"name": "valid"}, "function": {"type": "template"}}]
+    groups = [{"id": "g", "functions": ["valid"]}]
+
+    result = quarantine._tolerant_persist_function_configuration(
+        hass,
+        SimpleNamespace(),
+        subentry,
+        tools,
+        groups,
+        extra_updates={"guest_mode_enabled": True},
+        expected_revision="new-revision",
+    )
+
+    persisted = yaml.safe_load(subentry.data[CONF_FUNCTION_TOOLS])
+    assert persisted == [*tools, invalid_tool]
+    assert subentry.data[CONF_FUNCTION_GROUPS] == [
+        {"id": "g", "functions": ["valid", "broken"]}
+    ]
+    assert subentry.data["guest_mode_enabled"] is True
+    assert result == {
+        "functions": tools,
+        "function_groups": groups,
+        "revision": "new-revision",
+    }
+
+
+@pytest.mark.asyncio
+async def test_tolerant_agent_test_clean_and_collection_level_warning_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clean_result = AgentTestResult(
+        "Passed", [TestCheck("Provider request", "Passed", "ok")]
+    )
+    provider = AsyncMock(return_value=clean_result)
+    monkeypatch.setattr(quarantine, "async_test_configured_agent", provider)
+    monkeypatch.setattr(
+        quarantine,
+        "isolated_function_tools",
+        lambda _raw: ([], [], None),
+    )
+    entry = SimpleNamespace()
+    subentry = SimpleNamespace(data={}, subentry_id="agent", title="Assistant")
+
+    assert (
+        await quarantine._tolerant_agent_test(
+            SimpleNamespace(), entry, subentry
+        )
+        is clean_result
+    )
+
+    monkeypatch.setattr(
+        quarantine,
+        "isolated_function_tools",
+        lambda _raw: ([], [], "collection-level corruption"),
+    )
+    monkeypatch.setattr(
+        quarantine,
+        "_safe_function_configuration",
+        lambda raw: raw,
+    )
+    warned = AgentTestResult(
+        "Passed", [TestCheck("Provider request", "Passed", "ok")]
+    )
+    provider.return_value = warned
+
+    result = await quarantine._tolerant_agent_test(
+        SimpleNamespace(), entry, subentry
+    )
+
+    assert result.checks[-1].name == "Function Tools"
+    assert result.checks[-1].status == "Warning"
+    assert "configuration was quarantined" in result.checks[-1].message
