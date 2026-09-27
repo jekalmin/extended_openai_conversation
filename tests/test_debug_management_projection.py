@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 
 from custom_components.extended_openai_conversation_responses.debug import DebugManager
+from custom_components.extended_openai_conversation_responses import (
+    debug_management_projection as projection,
+)
 from custom_components.extended_openai_conversation_responses.debug_management_projection import (
     debug_run_summaries,
     debug_trace_page,
@@ -97,3 +100,72 @@ def test_debug_run_summary_cannot_return_an_unbounded_error_object() -> None:
     assert len(json.dumps(summary["error"])) < MANAGEMENT_DEBUG_SUMMARY_VALUE_CHARACTERS + 500
     assert summary["provider_request_count"] == 7
     assert summary["continuity_mode"] == "device"
+
+
+def test_projection_depth_container_and_budget_limits_fail_closed() -> None:
+    deep: object = "leaf"
+    for _ in range(projection._MAX_DEPTH + 2):
+        deep = {"next": deep}
+
+    budget = projection._ProjectionBudget(10_000)
+    projected = projection._project_value(deep, budget)
+    serialized = json.dumps(projected)
+    assert "management debug depth limit reached" in serialized
+    assert budget.truncated is True
+
+    many = {f"k{index}": index for index in range(projection._MAX_CONTAINER_ITEMS + 20)}
+    budget = projection._ProjectionBudget(100_000)
+    projected_many = projection._project_value(many, budget)
+    assert projected_many["__management_truncated__"] is True
+    assert len([key for key in projected_many if key != "__management_truncated__"]) == (
+        projection._MAX_CONTAINER_ITEMS
+    )
+    assert budget.truncated is True
+
+    budget = projection._ProjectionBudget(4)
+    projected_small = projection._project_value({"abcdef": "value"}, budget)
+    assert projected_small == {"__management_truncated__": True}
+    assert budget.remaining == 0
+    assert budget.truncated is True
+
+
+def test_bounded_value_and_text_share_page_budget_and_handle_non_json_values() -> None:
+    page = projection._ProjectionBudget(5)
+    text, meta = projection._bounded_text("abcdefgh", 100, page)
+    assert text == "abcde\n<management debug text truncated>"
+    assert meta["truncated"] is True
+    assert page.remaining == 0
+    assert page.truncated is True
+
+    class Custom:
+        def __str__(self) -> str:
+            return "custom-value"
+
+    page = projection._ProjectionBudget(6)
+    value, value_meta = projection._bounded_value(
+        {"custom": Custom()}, 100, page
+    )
+    assert value_meta["truncated"] is True
+    assert page.remaining == 0
+    assert page.truncated is True
+    assert "__management_truncated__" in value or "custom" in value
+
+
+def test_debug_trace_page_clamps_provider_window_and_missing_id() -> None:
+    manager, debug_id = _captured_manager()
+
+    assert projection.debug_trace_page(manager, "missing") is None
+
+    page = projection.debug_trace_page(
+        manager,
+        debug_id,
+        provider_offset=-50,
+        provider_limit=10_000,
+    )
+    assert page is not None
+    provider = page["management_projection"]["provider_requests"]
+    assert provider["offset"] == 0
+    assert provider["limit"] == projection.MANAGEMENT_DEBUG_PROVIDER_PAGE_MAX
+    assert provider["returned"] == min(
+        7, projection.MANAGEMENT_DEBUG_PROVIDER_PAGE_MAX
+    )
