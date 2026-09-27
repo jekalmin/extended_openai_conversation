@@ -76,6 +76,7 @@ test("Request Rules support create, precedence changes, reload, edit, and delete
   await expect(panel.getByRole("heading", {name: "Request Rules", exact: true})).toBeVisible();
   await panel.getByRole("button", {name: "Create rule", exact: true}).first().click();
   await expect(panel.locator("#rule-dialog")).toHaveJSProperty("open", true);
+  await expect(panel.locator("#rule-enabled-edit")).toHaveCount(0);
   await panel.locator("#rule-name").fill("Browser rule");
   await panel.locator("#rule-phrases").fill("browser route");
   await panel.locator("#rule-match").selectOption("contains");
@@ -87,6 +88,7 @@ test("Request Rules support create, precedence changes, reload, edit, and delete
   await expect(panel.getByRole("heading", {name: "Browser rule", exact: true})).toBeVisible();
 
   let card = panel.locator(".request-rule-card").filter({hasText: "Browser rule"});
+  await expect(card.locator(".rule-enabled")).toBeChecked();
   await card.locator('.rule-move[data-direction="up"]').click();
   await expect.poll(async () => panel.locator(".request-rule-card h2").allTextContents()).toEqual(["Browser rule", "Baseline rule"]);
 
@@ -95,6 +97,7 @@ test("Request Rules support create, precedence changes, reload, edit, and delete
   await expect.poll(async () => panel.locator(".request-rule-card h2").allTextContents()).toEqual(["Browser rule", "Baseline rule"]);
   card = panel.locator(".request-rule-card").filter({hasText: "Browser rule"});
   await card.locator(".rule-edit").click();
+  await expect(panel.locator("#rule-enabled-edit")).toHaveCount(0);
   await panel.locator("#rule-name").fill("Browser rule edited");
   await panel.locator("#rule-model").fill("gpt-5-nano");
   await panel.locator("#rule-save").click();

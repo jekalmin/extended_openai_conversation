@@ -21,7 +21,7 @@ This project began as a fork of [jekalmin/extended_openai_conversation](https://
 - **Conversation continuity & context management** — preserve useful conversational context while keeping long conversations bounded.
 - **Temporary & Persistent Memory** — retain short-lived context with expiry or longer-term useful facts and preferences.
 - **Knowledge Library** — give agents larger local reference material that can be searched on demand.
-- **Request Rules & local handling** — build conditional local shortcuts, chain actions and Function Tools, route selected AI requests, and safely share reusable rules.
+- **Request Rules & local handling** — build conditional local shortcuts, chain native Home Assistant actions and Function Tools, route selected AI requests, and safely share reusable rules. Native conversation responses override the rule acknowledgement; Stop and false conditions follow Home Assistant script flow. Continue to AI runs only after normal local completion. New rules start enabled, while imported rules start disabled. See the [Request Rules guide](docs/features/request-rules.md) for response and variable semantics.
 - **Function Tools & Function Groups** — add custom capabilities and load large tool collections only when needed.
 - **Delayed Function Tools** — persist eligible delayed work and re-check current authorization before it executes.
 - **Voice Identity** — map Assist devices/satellites to Home Assistant users so retained data can follow the person speaking.

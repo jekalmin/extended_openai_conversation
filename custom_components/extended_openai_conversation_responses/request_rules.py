@@ -29,6 +29,7 @@ from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import condition as ha_condition, config_validation as cv
 from homeassistant.helpers.script import Script, async_validate_actions_config
+from homeassistant.helpers.typing import UNDEFINED
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -190,6 +191,7 @@ class RuleEvaluation:
     request_override: dict[str, str] | None = None
     successful: bool = True
     provider_input: str | None = None
+    terminal: bool = False
 
 
 class _MatchCursor:
@@ -2268,24 +2270,55 @@ def _native_result_sequence(
     return sequence
 
 
-def _fatal_wait_probes(
+def _outcome_probes(
     actions: Sequence[Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Detect HA waits that abort a script without raising to its caller."""
-    sequence: list[dict[str, Any]] = []
-    markers: list[str] = []
-    for action in actions:
-        fatal_wait = (
-            "wait_template" in action or "wait_for_trigger" in action
-        ) and action.get("continue_on_timeout") is False
-        if fatal_wait:
-            marker = f"__eoai_wait_completed_{uuid4().hex}"
-            markers.append(marker)
-            sequence.append({"variables": {marker: False}})
-        sequence.append(dict(action))
-        if fatal_wait:
-            sequence.append({"variables": {marker: True}})
-    return sequence, markers
+) -> tuple[list[dict[str, Any]], str, str]:
+    """Observe normal completion and successful stops via HA script variables.
+
+    Initialize markers in the outer script scope so native nested sequences can
+    update them too. Parallel branches retain HA's own variable write ordering.
+    """
+    completed = f"__eoai_completed_{uuid4().hex}"
+    stopped = f"__eoai_stopped_{uuid4().hex}"
+
+    def instrument(value: Any, key: str = "") -> Any:
+        if isinstance(value, Mapping):
+            # Descend through script containers only, never service data or
+            # template payloads that happen to have a key called "stop".
+            return {
+                name: instrument(item, name)
+                if name
+                in {
+                    "sequence",
+                    "then",
+                    "else",
+                    "default",
+                    "choose",
+                    "parallel",
+                    "repeat",
+                }
+                else item
+                for name, item in value.items()
+            }
+        if isinstance(value, list):
+            sequence: list[Any] = []
+            for item in value:
+                if (
+                    key in {"sequence", "then", "else", "default"}
+                    and isinstance(item, Mapping)
+                    and "stop" in item
+                ):
+                    sequence.append(
+                        {"variables": {stopped: not item.get("error", False)}}
+                    )
+                sequence.append(instrument(item))
+            return sequence
+        return value
+
+    sequence = [{"variables": {completed: False, stopped: False}}]
+    sequence.extend(instrument(list(actions), "sequence"))
+    sequence.append({"variables": {completed: True}})
+    return sequence, completed, stopped
 
 
 def _resolve_guest_slot_templates(value: Any, slots: Mapping[str, str]) -> Any:
@@ -2478,8 +2511,13 @@ async def async_evaluate_rule(
                 dict(request_override) or None,
                 evaluation.successful,
                 evaluation.provider_input,
+                evaluation.terminal,
             )
-            if not evaluation.successful or rule_stops_matching(match.rule):
+            if (
+                not evaluation.successful
+                or evaluation.terminal
+                or rule_stops_matching(match.rule)
+            ):
                 return last
     except SentenceMatchLimitError as err:
         if last is None:
@@ -2540,10 +2578,13 @@ async def _async_evaluate_matched_rule(
                 and step["data"].get("result_alias")
                 for step in executable_actions
             )
-            script_actions, fatal_wait_markers = _fatal_wait_probes(
+            script_actions = (
                 _native_result_sequence(executable_actions, match.slots)
                 if captures_results
                 else executable_actions
+            )
+            script_actions, completion_marker, stop_marker = _outcome_probes(
+                script_actions
             )
             schema_actions = cv.SCRIPT_SCHEMA(script_actions)
             validated_actions = await async_validate_actions_config(
@@ -2567,9 +2608,9 @@ async def _async_evaluate_matched_rule(
                     {**match.slots, "request": {"slots": dict(match.slots)}},
                     context,
                 )
-                if run_result is not None and any(
-                    run_result.variables.get(marker) is False
-                    for marker in fatal_wait_markers
+                variables = run_result.variables if run_result is not None else {}
+                if run_result is None or not (
+                    variables.get(completion_marker) or variables.get(stop_marker)
                 ):
                     return RuleEvaluation(
                         match,
@@ -2577,6 +2618,17 @@ async def _async_evaluate_matched_rule(
                         resolve_slot_values(action["failure_response"], match.slots),
                         successful=False,
                     )
+                conversation_response = run_result.conversation_response
+                if (
+                    conversation_response is not UNDEFINED
+                    and conversation_response is not None
+                ):
+                    return RuleEvaluation(
+                        match, True, str(conversation_response), terminal=True
+                    )
+                stopped = not variables.get(completion_marker) and bool(
+                    variables.get(stop_marker)
+                )
             finally:
                 _ACTIVE_RESULT_PATHS.reset(paths_token)
                 _ACTIVE_FUNCTION_RESULTS.reset(result_token)
@@ -2603,7 +2655,7 @@ async def _async_evaluate_matched_rule(
                 resolve_slot_values(action["failure_response"], match.slots),
                 successful=False,
             )
-        if action["continue_to_ai"]:
+        if action["continue_to_ai"] and not stopped:
             return RuleEvaluation(
                 match, False, provider_input=rule_provider_input(match, original_text)
             )
@@ -2618,7 +2670,7 @@ async def _async_evaluate_matched_rule(
                 resolve_slot_values(action["failure_response"], match.slots),
                 successful=False,
             )
-        return RuleEvaluation(match, True, str(response))
+        return RuleEvaluation(match, True, str(response), terminal=stopped)
 
     if action["reset"]:
         if action["scope"] == "conversation":

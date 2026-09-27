@@ -183,6 +183,30 @@ async def test_consumed_request_rule_bypasses_local_intent_and_provider(
     assert payload["handled_locally"] is True
 
 
+@pytest.mark.parametrize("native_response", ["Native response", "Done"])
+async def test_native_terminal_rule_never_calls_provider(monkeypatch, native_response):
+    entity, _, _, _, process = _pipeline_fixture(monkeypatch)
+    entity._request_rules = object()
+    entity._request_rule_runtime = SimpleNamespace(effective_options=MagicMock())
+    evaluation = RuleEvaluation(
+        RuleMatch(
+            {"id": "native", "name": "Native", "action": {"continue_to_ai": True}},
+            "hello",
+            False,
+            100.0,
+        ),
+        consume=True,
+        response=native_response,
+        terminal=True,
+    )
+    monkeypatch.setattr(
+        conversation_module, "async_evaluate_rule", AsyncMock(return_value=evaluation)
+    )
+    result = await process()
+    assert result.response.speech["plain"]["speech"] == native_response
+    entity._async_handle_message_with_ha_tools.assert_not_awaited()
+
+
 async def test_successful_local_rule_continuation_calls_provider_once(monkeypatch):
     entity, user_input, _chat_log, _policy, process = _pipeline_fixture(
         monkeypatch, text="check the battery"

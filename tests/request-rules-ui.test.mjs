@@ -96,6 +96,9 @@ assert.match(requestRulesDialog(panel), /id="rule-action-sequence-host"/);
 assert.match(requestRulesDialog(panel), /id="rule-condition-host"/);
 assert.match(requestRulesDialog(panel), /id="rule-local-continue-to-ai"/);
 assert.match(requestRulesDialog(panel), /id="rule-group"/);
+assert.doesNotMatch(requestRulesDialog(panel), /rule-enabled-edit|<span>Enabled<\/span>/);
+assert.match(requestRulesDialog(panel), /Set conversation response overrides it/);
+assert.match(requestRulesDialog(panel), /unless an action sets a conversation response or stops the script/);
 assert.match(requestRulesDialog(panel), /id="rule-continue-matching"/);
 assert.doesNotMatch(requestRulesDialog(panel), /<ha-selector/);
 assert.match(requestRulesDialog(panel), /Conditions, delays, choose, repeat, parallel/);
@@ -109,6 +112,7 @@ const literalHtml = renderRequestRules({...panel, _result: {...panel._result, ru
 assert.match(literalHtml, /<h2>Home Assistant sentence pattern<\/h2>/);
 assert.match(literalHtml, /<b>Equals<\/b> Home Assistant sentence pattern/);
 assert.match(bindingSource, /Captured values:/);
+assert.match(bindingSource, /enabled:previous\?\.enabled\?\?true/);
 assert.match(bindingSource, /selector = \{action:\{\}\}/);
 assert.match(bindingSource, /selector = \{condition:\{\}\}/);
 assert.doesNotMatch(requestRulesDialog(panel), /<textarea[^>]*id="rule-condition/);

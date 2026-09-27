@@ -6,14 +6,12 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
-from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.extended_openai_conversation_responses import request_rule_packs
 from custom_components.extended_openai_conversation_responses.management_ui import (
     _consume_rule_pack_review,
     _register_rule_pack_review,
 )
-
 from custom_components.extended_openai_conversation_responses.request_rule_match_preview import (
     async_request_rule_match_preview,
 )
@@ -28,6 +26,8 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
     async_evaluate_rule,
     validate_rule,
 )
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.typing import UNDEFINED
 from tests.test_request_rules import FakeServices, MemoryStore, local_rule
 
 
@@ -50,7 +50,7 @@ def test_captured_ai_input_requires_every_variant_and_branch() -> None:
     rule = captured_routing_rule()
     assert validate_rule(rule)["ai_input_capture"] == "question"
     rule["phrases"].append("think carefully")
-    with pytest.raises(ValueError, match="every trigger|same slots"):
+    with pytest.raises(ValueError, match=r"every trigger|same slots"):
         validate_rule(rule)
     rule["phrases"] = ["deep think [{question}]"]
     with pytest.raises(ValueError, match="every match"):
@@ -99,9 +99,19 @@ async def test_local_captured_handoff_only_after_success(hass, monkeypatch) -> N
             self.sequence = sequence
 
         async def async_run(self, _variables, _context=None):
+            variables = dict(_variables)
             for action in self.sequence:
+                if "variables" in action:
+                    values = action["variables"]
+                    variables.update(
+                        values.async_simple_render(variables)
+                        if hasattr(values, "async_simple_render")
+                        else values
+                    )
+                    continue
                 domain, service = action["action"].split(".", 1)
                 await self.hass.services.async_call(domain, service)
+            return SimpleNamespace(variables=variables, conversation_response=UNDEFINED)
 
         async def async_unload(self):
             pass
