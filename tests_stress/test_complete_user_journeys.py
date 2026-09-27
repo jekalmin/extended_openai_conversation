@@ -42,7 +42,13 @@ from tests_real_ha.test_management_backend_acceptance import (
     _fresh_reload,
     _management_call,
 )
-from tests_real_ha.test_provider_wire_e2e import _install_wire, _responses_sse_text
+from tests_real_ha.test_provider_wire_e2e import (
+    _chat_sse_text,
+    _chat_sse_tool_call,
+    _install_wire,
+    _responses_sse_text,
+    _responses_sse_tool_call,
+)
 from tests_stress.conftest import record
 from tests_stress.generated_valid_states import normalized_state
 from tests_stress.generated_valid_transitions import JOURNEYS, _named_paths, fingerprint
@@ -183,51 +189,53 @@ async def test_complete_user_journey(
         )
         if step == 1:
             checkpoint = snapshot
-            if journey in {
+        if (
+            step == 1
+            and journey
+            in {
                 "installation-to-mature",
                 "long-lived-evolution",
                 "extensive-backup-restore",
-                "guest-private-boundary",
-            }:
-                memory = await async_get_memory(
-                    hass, entry.entry_id, subentry.subentry_id
-                )
-                knowledge = await async_get_knowledge(
-                    hass, entry.entry_id, subentry.subentry_id
-                )
-                created = await memory.async_add(
-                    "journey-owner",
-                    f"Private {journey} marker",
-                    "acceptance",
-                    "explicit",
-                )
-                assert created["memory"]["memory_id"]
-                source = await knowledge.async_create(
-                    f"{journey} handbook",
-                    "Journey reference",
-                    f"Knowledge marker for {journey}",
-                )
-                assert source.source_id
-                source_id = source.source_id
+            }
+        ) or (step == 0 and journey == "guest-private-boundary"):
+            memory = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
+            knowledge = await async_get_knowledge(
+                hass, entry.entry_id, subentry.subentry_id
+            )
+            created = await memory.async_add(
+                "journey-owner",
+                f"Private {journey} marker",
+                "acceptance",
+                "explicit",
+            )
+            assert created["memory"]["memory_id"]
+            source = await knowledge.async_create(
+                f"{journey} handbook",
+                "Journey reference",
+                f"Knowledge marker for {journey}",
+            )
+            assert source.source_id
+            source_id = source.source_id
+            if step == 1:
                 checkpoint = await backup.async_collect_backup_snapshot(
                     hass, entry, subentry
                 )
-                if journey == "guest-private-boundary":
-                    owner_request = await _converse(
-                        hass,
-                        entry,
-                        monkeypatch,
-                        api,
-                        intended["chat_model"],
-                        context=Context(user_id="journey-owner"),
-                        text="What is my private journey marker?",
-                    )
-                    assert f"Private {journey} marker" in json.dumps(
-                        owner_request["body"]
-                    )
-                    agent = conversation.async_get_agent(hass, entry.entry_id)
-                    assert agent is not None
-                    await agent._guest_mode.async_update_trusted(indefinite=True)
+            if journey == "guest-private-boundary":
+                owner_request = await _converse(
+                    hass,
+                    entry,
+                    monkeypatch,
+                    api,
+                    intended["chat_model"],
+                    context=Context(user_id="journey-owner"),
+                    text="What is my private journey marker?",
+                )
+                assert f"Private {journey} marker" in json.dumps(owner_request["body"])
+        if step == 1:
+            if journey == "guest-private-boundary":
+                agent = conversation.async_get_agent(hass, entry.entry_id)
+                assert agent is not None
+                await agent._guest_mode.async_update_trusted(indefinite=True)
             if journey == "long-lived-evolution":
                 created_rule = await _management_call(
                     client,
@@ -258,6 +266,49 @@ async def test_complete_user_journey(
                 rule=_local_rule("Updated journey good night"),
             )
             assert changed_rule["rule"]["name"] == "Updated journey good night"
+        if step == 1 and journey == "function-heavy-evolution":
+            template_tool = {
+                "spec": {
+                    "name": "journey_marker",
+                    "description": "Return a deterministic journey marker",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+                "function": {
+                    "type": "template",
+                    "value_template": "Journey tool executed",
+                },
+                "enabled": True,
+            }
+            tool_config = agent_config.normalize_agent_config(
+                intended | {"functions": [template_tool]}
+            )
+            await _save(client, entry, tool_config)
+            await _fresh_reload(hass, entry)
+            await _assert_current(client, entry, tool_config)
+            agent = conversation.async_get_agent(hass, entry.entry_id)
+            assert agent is not None
+            first_reply = (
+                _responses_sse_tool_call(name="journey_marker", tool_arguments={})
+                if api == "responses"
+                else _chat_sse_tool_call(name="journey_marker", arguments={})
+            )
+            last_reply = (
+                _responses_sse_text("Journey tool complete")
+                if api == "responses"
+                else _chat_sse_text("Journey tool complete")
+            )
+            tool_wire = _install_wire(monkeypatch, agent, [first_reply, last_reply])
+            tool_result = await conversation.async_converse(
+                hass=hass,
+                text="Run the journey marker tool",
+                conversation_id=None,
+                context=Context(),
+                language="en",
+                agent_id=entry.entry_id,
+            )
+            assert tool_result.response.error_code is None
+            assert len(tool_wire.requests) == 2
+            assert "Journey tool executed" in json.dumps(tool_wire.requests[1]["body"])
         if step == 2 and journey == "guest-private-boundary":
             guest_request = await _converse(
                 hass,
@@ -275,7 +326,14 @@ async def test_complete_user_journey(
             wire = _install_wire(
                 monkeypatch,
                 agent,
-                [_responses_sse_text("Coverage reply") for _ in range(2)],
+                [
+                    (
+                        _responses_sse_text("Coverage reply")
+                        if api == "responses"
+                        else _chat_sse_text("Coverage reply")
+                    )
+                    for _ in range(2)
+                ],
             )
             results = await asyncio.gather(
                 *(

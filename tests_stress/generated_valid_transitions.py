@@ -18,7 +18,6 @@ JOURNEYS = {
     "guest-private-boundary": "guest-security",
     "extensive-backup-restore": "ui-speech",
     "function-heavy-evolution": "function-loading",
-    "voice-oriented-assistant": "provider-api",
 }
 
 
