@@ -21,7 +21,7 @@ This project began as a fork of [jekalmin/extended_openai_conversation](https://
 - **Conversation continuity & context management** — preserve useful conversational context while keeping long conversations bounded.
 - **Temporary & Persistent Memory** — retain short-lived context with expiry or longer-term useful facts and preferences.
 - **Knowledge Library** — give agents larger local reference material that can be searched on demand.
-- **Request Rules & local handling** — build conditional local shortcuts, chain native Home Assistant actions and Function Tools, route selected AI requests, and safely share reusable rules. Native conversation responses override the rule acknowledgement; Stop and false conditions follow Home Assistant script flow. Continue to AI runs only after normal local completion. New rules start enabled, while imported rules start disabled. See the [Request Rules guide](docs/features/request-rules.md) for response and variable semantics.
+- **Request Rules & local handling** — build conditional local shortcuts, chain native Home Assistant actions and Function Tools, route selected AI requests, and safely share reusable rules. Native conversation responses override the rule acknowledgement; Stop and false conditions follow Home Assistant script flow. Continue to AI runs only after normal local completion. New rules start enabled, while imported rules start disabled. See the [Request Rules guide](https://conorod1992.github.io/extended_openai_conversation/features/request-rules/) for response and variable semantics.
 - **Function Tools & Function Groups** — add custom capabilities and load large tool collections only when needed.
 - **Delayed Function Tools** — persist eligible delayed work and re-check current authorization before it executes.
 - **Voice Identity** — map Assist devices/satellites to Home Assistant users so retained data can follow the person speaking.
@@ -74,7 +74,7 @@ into:
 
 and restart Home Assistant.
 
-See the [installation guide](docs/getting-started/installation.md) for the full walkthrough.
+See the [installation guide](https://conorod1992.github.io/extended_openai_conversation/getting-started/installation/) for the full walkthrough.
 
 ## First setup
 
@@ -95,7 +95,7 @@ After restarting Home Assistant:
 
 Once basic operation works, enable optional features one at a time.
 
-For a fuller walkthrough, see [First setup](docs/getting-started/setup.md).
+For a fuller walkthrough, see [First setup](https://conorod1992.github.io/extended_openai_conversation/getting-started/setup/).
 
 ## Where configuration lives
 
@@ -108,36 +108,36 @@ The management interface is organised around:
 - **Data & Memory** — memories, Knowledge Library and conversation history
 - **Usage & Maintenance** — usage, request debugging, backups, diagnostics and retention
 
-The built-in **Guide** provides concise in-app orientation. The repository documentation under [`docs/`](docs/) is the canonical reference for feature behaviour and edge cases.
+The built-in **Guide** provides concise in-app orientation. The [full documentation](https://conorod1992.github.io/extended_openai_conversation/) is the canonical reference for feature behaviour and edge cases.
 
 ## Start with the right guide
 
 | If you want to… | Read |
 | --- | --- |
-| Understand the main settings | [Configuration](docs/configuration.md) |
-| Use Responses API features or a compatible provider | [Responses API](docs/features/responses-api.md) |
-| Let the model search the web | [Web Search](docs/features/web-search.md) |
-| Manage long conversations | [Conversation continuity](docs/features/conversation-continuity.md) and [Context management](docs/features/context-management.md) |
-| Store durable facts/preferences | [Persistent Memory](docs/features/persistent-memory.md) |
-| Store short-lived facts that expire | [Temporary Memory](docs/features/temporary-memory.md) |
-| Give the agent larger reference material | [Knowledge Library](docs/features/knowledge-library.md) |
-| Keep/search previous conversations | [Conversation Archive](docs/features/conversation-archive.md) |
-| Handle predictable requests specially | [Request Rules](docs/features/request-rules.md) |
-| Add or organise model-callable tools | [Functions](docs/functions/index.md) and [Function Groups](docs/features/function-groups.md) |
-| Delay a configured Function Tool safely | [Delayed Function Tools](docs/features/delayed-function-tools.md) |
-| Understand entity exposure and permissions | [Home Assistant access](docs/features/home-assistant-access.md) |
-| Associate voice requests with individual users | [Voice Identity](docs/features/voice-identity.md) |
-| Keep Assist listening for follow-up speech | [Voice follow-ups](docs/features/voice-followups.md) |
-| Clean spoken output | [Speech processing](docs/features/speech-processing.md) |
-| Reduce satellite volume overnight | [Quiet Hours](docs/features/quiet-hours.md) |
-| Restrict visitor access | [Guest Mode](docs/features/guest-mode.md) |
-| Inspect provider usage | [Usage statistics](docs/features/usage-statistics.md) |
-| Inspect an individual request | [Request debugging](docs/features/request-debugging.md) |
-| Refresh model capability metadata | [Model data](docs/features/model-data.md) |
-| Back up or restore an agent | [Backup & Restore](docs/features/backup-restore.md) |
-| Use AI Task | [AI Task](docs/features/ai-task.md) |
-| Migrate from the original integration | [Migration](docs/migration.md) |
-| Diagnose a problem | [Troubleshooting](docs/troubleshooting.md) |
+| Understand the main settings | [Configuration](https://conorod1992.github.io/extended_openai_conversation/configuration/) |
+| Use Responses API features or a compatible provider | [Responses API](https://conorod1992.github.io/extended_openai_conversation/features/responses-api/) |
+| Let the model search the web | [Web Search](https://conorod1992.github.io/extended_openai_conversation/features/web-search/) |
+| Manage long conversations | [Conversation continuity](https://conorod1992.github.io/extended_openai_conversation/features/conversation-continuity/) and [Context management](https://conorod1992.github.io/extended_openai_conversation/features/context-management/) |
+| Store durable facts/preferences | [Persistent Memory](https://conorod1992.github.io/extended_openai_conversation/features/persistent-memory/) |
+| Store short-lived facts that expire | [Temporary Memory](https://conorod1992.github.io/extended_openai_conversation/features/temporary-memory/) |
+| Give the agent larger reference material | [Knowledge Library](https://conorod1992.github.io/extended_openai_conversation/features/knowledge-library/) |
+| Keep/search previous conversations | [Conversation Archive](https://conorod1992.github.io/extended_openai_conversation/features/conversation-archive/) |
+| Handle predictable requests specially | [Request Rules](https://conorod1992.github.io/extended_openai_conversation/features/request-rules/) |
+| Add or organise model-callable tools | [Functions](https://conorod1992.github.io/extended_openai_conversation/functions/) and [Function Groups](https://conorod1992.github.io/extended_openai_conversation/features/function-groups/) |
+| Delay a configured Function Tool safely | [Delayed Function Tools](https://conorod1992.github.io/extended_openai_conversation/features/delayed-function-tools/) |
+| Understand entity exposure and permissions | [Home Assistant access](https://conorod1992.github.io/extended_openai_conversation/features/home-assistant-access/) |
+| Associate voice requests with individual users | [Voice Identity](https://conorod1992.github.io/extended_openai_conversation/features/voice-identity/) |
+| Keep Assist listening for follow-up speech | [Voice follow-ups](https://conorod1992.github.io/extended_openai_conversation/features/voice-followups/) |
+| Clean spoken output | [Speech processing](https://conorod1992.github.io/extended_openai_conversation/features/speech-processing/) |
+| Reduce satellite volume overnight | [Quiet Hours](https://conorod1992.github.io/extended_openai_conversation/features/quiet-hours/) |
+| Restrict visitor access | [Guest Mode](https://conorod1992.github.io/extended_openai_conversation/features/guest-mode/) |
+| Inspect provider usage | [Usage statistics](https://conorod1992.github.io/extended_openai_conversation/features/usage-statistics/) |
+| Inspect an individual request | [Request debugging](https://conorod1992.github.io/extended_openai_conversation/features/request-debugging/) |
+| Refresh model capability metadata | [Model data](https://conorod1992.github.io/extended_openai_conversation/features/model-data/) |
+| Back up or restore an agent | [Backup & Restore](https://conorod1992.github.io/extended_openai_conversation/features/backup-restore/) |
+| Use AI Task | [AI Task](https://conorod1992.github.io/extended_openai_conversation/features/ai-task/) |
+| Migrate from the original integration | [Migration](https://conorod1992.github.io/extended_openai_conversation/migration/) |
+| Diagnose a problem | [Troubleshooting](https://conorod1992.github.io/extended_openai_conversation/troubleshooting/) |
 
 ## Permissions, privacy and data
 
@@ -157,7 +157,7 @@ The integration supports both **Responses API** and **Chat Completions**. For mo
 
 Some features depend on the selected model, API mode, or provider. For example, hosted Web Search and some multimodal/reasoning capabilities require a compatible Responses implementation. A provider that supports Chat Completions is not automatically compatible with `/v1/responses`.
 
-Model capability metadata can be refreshed independently of an integration release, with bundled metadata retained as the fallback. See [Model data](docs/features/model-data.md).
+Model capability metadata can be refreshed independently of an integration release, with bundled metadata retained as the fallback. See [Model data](https://conorod1992.github.io/extended_openai_conversation/features/model-data/).
 
 ## Reliability and testing
 
@@ -182,13 +182,13 @@ logger:
 
 ## Documentation
 
-The full user documentation is in [`docs/`](docs/). Start with:
+The full user documentation is available on [GitHub Pages](https://conorod1992.github.io/extended_openai_conversation/). Start with:
 
-- [Documentation overview](docs/index.md)
-- [Installation](docs/getting-started/installation.md)
-- [First setup](docs/getting-started/setup.md)
-- [Configuration](docs/configuration.md)
-- [Troubleshooting](docs/troubleshooting.md)
+- [Documentation overview](https://conorod1992.github.io/extended_openai_conversation/)
+- [Installation](https://conorod1992.github.io/extended_openai_conversation/getting-started/installation/)
+- [First setup](https://conorod1992.github.io/extended_openai_conversation/getting-started/setup/)
+- [Configuration](https://conorod1992.github.io/extended_openai_conversation/configuration/)
+- [Troubleshooting](https://conorod1992.github.io/extended_openai_conversation/troubleshooting/)
 
 ## Credits
 
