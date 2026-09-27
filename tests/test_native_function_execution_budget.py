@@ -18,8 +18,8 @@ from custom_components.extended_openai_conversation_responses.const import (
     FUNCTION_GROUP_LOADER_TOOL_NAME,
 )
 from custom_components.extended_openai_conversation_responses.entity import (
-    ExtendedOpenAIBaseLLMEntity,
     MAX_TOOL_ITERATIONS,
+    ExtendedOpenAIBaseLLMEntity,
 )
 from custom_components.extended_openai_conversation_responses.exceptions import (
     FunctionNotFound,
@@ -264,8 +264,7 @@ async def test_serial_over_budget_tool_is_not_called(hass) -> None:
 async def test_budget_above_twenty_allows_more_than_twenty_calls(hass) -> None:
     tool = _tool("do_work", {"type": "service", "service": "light.turn_on"})
     streams = [
-        _function_call_stream([(f"call-{index}", "do_work", {})])
-        for index in range(21)
+        _function_call_stream([(f"call-{index}", "do_work", {})]) for index in range(21)
     ]
     streams.append(_final_stream())
     entity = _entity(hass, streams, limit=25)
@@ -371,7 +370,7 @@ async def test_provider_loop_exhaustion_is_explicit(hass, monkeypatch) -> None:
     assert entity._execute_function_tool.await_count == 2
 
 
-async def test_tool_edit_between_request_and_execution_uses_current_definition(
+async def test_tool_edit_between_request_and_execution_rejects_stale_call(
     hass,
 ) -> None:
     stale = _tool("notify", {"type": "service", "service": "notify.old"})
@@ -393,13 +392,14 @@ async def test_tool_edit_between_request_and_execution_uses_current_definition(
     entity._configured_function_tools_from_data = Mock(return_value=[current])
     entity._execute_function_tool = _executor(entity)
 
-    await entity._async_handle_chat_log(_chat_log(hass), [stale], [])
+    with pytest.raises(FunctionNotFound):
+        await entity._async_handle_chat_log(_chat_log(hass), [stale], [])
 
-    assert entity._execute_function_tool.await_args_list[0].args[0] is current
+    entity._execute_function_tool.assert_not_awaited()
     entity._configured_function_tools_from_data.assert_called_with(latest_data)
 
 
-def test_latest_definition_is_selected_for_execution() -> None:
+def test_edited_definition_is_rejected_before_execution() -> None:
     stale = _tool("notify", {"type": "service", "service": "notify.old"})
     current = _tool("notify", {"type": "service", "service": "notify.current"})
     latest_data = {"revision": 2}
@@ -416,9 +416,8 @@ def test_latest_definition_is_selected_for_execution() -> None:
         _configured_function_tools_from_data=Mock(return_value=[current]),
     )
 
-    result = latest_function_tool_for_execution(agent, stale)
-
-    assert result is current
+    with pytest.raises(FunctionNotFound):
+        latest_function_tool_for_execution(agent, stale)
     agent._configured_function_tools_from_data.assert_called_once_with(latest_data)
 
 

@@ -122,7 +122,9 @@ async def test_disabled_group_fails_closed_before_execution(monkeypatch) -> None
         base_execute,
     )
 
-    with pytest.raises(HomeAssistantError, match="Function Group `notifications` is disabled"):
+    with pytest.raises(
+        HomeAssistantError, match="Function Group `notifications` is disabled"
+    ):
         await ExtendedOpenAIAgentEntity._execute_function_tool(
             agent,
             _tool(),
@@ -134,7 +136,7 @@ async def test_disabled_group_fails_closed_before_execution(monkeypatch) -> None
     base_execute.assert_not_awaited()
 
 
-async def test_latest_current_definition_is_executed(monkeypatch) -> None:
+async def test_edited_current_definition_is_rejected(monkeypatch) -> None:
     current = _tool(service="notify.current")
     agent = _agent([current])
     seen: list[dict] = []
@@ -149,12 +151,13 @@ async def test_latest_current_definition_is_executed(monkeypatch) -> None:
         base_execute,
     )
 
-    await ExtendedOpenAIAgentEntity._execute_function_tool(
-        agent,
-        _tool(service="notify.old"),
-        SimpleNamespace(id="call-1", tool_name="notify", tool_args={}),
-        None,
-        [],
-    )
+    with pytest.raises(FunctionNotFound):
+        await ExtendedOpenAIAgentEntity._execute_function_tool(
+            agent,
+            _tool(service="notify.old"),
+            SimpleNamespace(id="call-1", tool_name="notify", tool_args={}),
+            None,
+            [],
+        )
 
-    assert seen == [current]
+    assert seen == []

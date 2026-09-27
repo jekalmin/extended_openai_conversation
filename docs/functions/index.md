@@ -46,6 +46,8 @@ A minimal template example:
 
 The schema should describe only inputs the model genuinely needs to choose.
 
+If a Function Tool is edited, disabled, deleted, or removed from an available Function Group while a provider request is outstanding, a call from that old request is rejected. EOAI does not bind arguments generated for the old definition to a new implementation with the same name. The next request advertises the current definition. HA-owned tools keep their request-round schema and still pass through Home Assistant's live permission and schema checks before execution.
+
 ## Optional function groups
 
 Large function collections can be organized into **Always available** and **Load when needed** groups from **Capabilities → Functions**. On-demand groups initially send only a compact name and description; the model loads their complete schemas through the existing tool loop when a task needs them. Function YAML remains unchanged, and ungrouped functions keep the previous always-available behaviour.

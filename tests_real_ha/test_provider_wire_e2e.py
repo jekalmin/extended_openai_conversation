@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
@@ -34,7 +35,12 @@ _TOOL_ARGUMENTS = {
 }
 
 
-def _chat_sse_tool_call() -> bytes:
+def _chat_sse_tool_call(
+    call_id: str = _TOOL_CALL_ID,
+    name: str = "execute_services",
+    arguments: dict[str, Any] | None = None,
+) -> bytes:
+    arguments = _TOOL_ARGUMENTS if arguments is None else arguments
     chunk = {
         "id": "chatcmpl-provider-wire-1",
         "object": "chat.completion.chunk",
@@ -48,12 +54,12 @@ def _chat_sse_tool_call() -> bytes:
                     "tool_calls": [
                         {
                             "index": 0,
-                            "id": _TOOL_CALL_ID,
+                            "id": call_id,
                             "type": "function",
                             "function": {
-                                "name": "execute_services",
+                                "name": name,
                                 "arguments": json.dumps(
-                                    _TOOL_ARGUMENTS, separators=(",", ":")
+                                    arguments, separators=(",", ":")
                                 ),
                             },
                         }
@@ -109,13 +115,20 @@ def _response_object(response_id: str, output: list[dict[str, Any]]) -> dict[str
     }
 
 
-def _responses_sse_tool_call() -> bytes:
-    arguments = json.dumps(_TOOL_ARGUMENTS, separators=(",", ":"))
+def _responses_sse_tool_call(
+    call_id: str = _TOOL_CALL_ID,
+    name: str = "execute_services",
+    tool_arguments: dict[str, Any] | None = None,
+) -> bytes:
+    arguments = json.dumps(
+        _TOOL_ARGUMENTS if tool_arguments is None else tool_arguments,
+        separators=(",", ":"),
+    )
     item = {
         "id": "fc-provider-wire",
         "type": "function_call",
-        "call_id": _TOOL_CALL_ID,
-        "name": "execute_services",
+        "call_id": call_id,
+        "name": name,
         "arguments": arguments,
         "status": "completed",
     }
@@ -249,6 +262,184 @@ def _install_wire(monkeypatch: Any, agent: Any, replies: list[Any]) -> _Scripted
     return wire
 
 
+@pytest.mark.parametrize("api_mode", [API_MODE_RESPONSES, API_MODE_CHAT_COMPLETIONS])
+async def test_complex_function_schema_survives_real_sdk_request_wire(
+    hass: HomeAssistant, monkeypatch: Any, api_mode: str
+) -> None:
+    """Only HTTP transport is mocked; the SDK serializes the complete schema."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "targets": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "entity_id": {"type": "string", "description": "Lumière 東京"},
+                        "brightness": {
+                            "type": ["integer", "null"],
+                            "minimum": 0,
+                            "maximum": 255,
+                        },
+                        "mode": {
+                            "type": "string",
+                            "enum": [f"mode_{index}" for index in range(24)],
+                        },
+                    },
+                    "required": ["entity_id"],
+                    "additionalProperties": False,
+                },
+            },
+            "metadata": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+        "required": ["targets"],
+        "additionalProperties": False,
+    }
+    tool = {
+        "spec": {
+            "name": "complex_schema_wire",
+            "description": "Nested actions for Éireann 東京",
+            "parameters": schema,
+        },
+        "function": {"type": "template", "value_template": "ok"},
+        "enabled": True,
+    }
+    entry = _make_entry(
+        "Complex schema wire",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: api_mode,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [tool],
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    wire = _install_wire(
+        monkeypatch,
+        agent,
+        [
+            _responses_sse_text("Schema sent")
+            if api_mode == API_MODE_RESPONSES
+            else _chat_sse_text("Schema sent")
+        ],
+    )
+    result = await _say(hass, agent)
+    assert _speech(result) == "Schema sent"
+    body = wire.requests[0]["body"]
+    emitted = next(
+        item
+        for item in body["tools"]
+        if (
+            item.get("name")
+            if api_mode == API_MODE_RESPONSES
+            else item.get("function", {}).get("name")
+        )
+        == "complex_schema_wire"
+    )
+    assert (
+        emitted["parameters"]
+        if api_mode == API_MODE_RESPONSES
+        else emitted["function"]["parameters"]
+    ) == schema
+
+
+@pytest.mark.parametrize("api_mode", [API_MODE_RESPONSES, API_MODE_CHAT_COMPLETIONS])
+@pytest.mark.parametrize(
+    ("service_data", "expected_brightness"),
+    [
+        ({"entity_id": [_ENTITY_ID], "brightness": 100}, 100),
+        ({"entity_id": [_ENTITY_ID], "brightness": "100"}, 100),
+        ({"entity_id": [_ENTITY_ID], "brightness": None}, None),
+        ({"entity_id": [_ENTITY_ID], "brightness": [100]}, None),
+        ({"entity_id": [_ENTITY_ID], "brightness": 256}, None),
+        ({"entity_id": [_ENTITY_ID], "brightness": 100, "unknown": True}, None),
+        (None, None),
+        ([], None),
+    ],
+)
+async def test_provider_argument_shapes_gate_real_ha_service(
+    hass: HomeAssistant,
+    monkeypatch: Any,
+    api_mode: str,
+    service_data: Any,
+    expected_brightness: int | None,
+) -> None:
+    """The SDK JSON, configured schema, and HA service see one typed boundary."""
+    tool = deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])
+    service_schema = tool["spec"]["parameters"]["properties"]["list"]["items"][
+        "properties"
+    ]["service_data"]
+    service_schema["properties"]["brightness"] = {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255,
+    }
+    service_schema["additionalProperties"] = False
+    entry = _make_entry(
+        "Typed service wire",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: api_mode,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [tool],
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    calls = []
+
+    async def turn_on(call: Any) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_on", turn_on)
+    hass.states.async_set(_ENTITY_ID, "off")
+    async_expose_entity(hass, conversation.DOMAIN, _ENTITY_ID, True)
+    arguments = {
+        "list": [
+            {
+                "domain": "light",
+                "service": "turn_on",
+                "service_data": service_data,
+            }
+        ]
+    }
+    first = (
+        _responses_sse_tool_call(tool_arguments=arguments)
+        if api_mode == API_MODE_RESPONSES
+        else _chat_sse_tool_call(arguments=arguments)
+    )
+    wire = _install_wire(
+        monkeypatch,
+        agent,
+        [
+            first,
+            (
+                _responses_sse_text("Done")
+                if api_mode == API_MODE_RESPONSES
+                else _chat_sse_text("Done")
+            ),
+        ],
+    )
+    await _say(hass, agent)
+    if expected_brightness is None:
+        assert calls == []
+    else:
+        assert len(calls) == 1
+        assert calls[0].data["brightness"] == expected_brightness
+        assert type(calls[0].data["brightness"]) is int
+    assert wire.requests[0]["path"] == (
+        "/v1/responses" if api_mode == API_MODE_RESPONSES else "/v1/chat/completions"
+    )
+
+
 async def _prepare_service(hass: HomeAssistant) -> list[Any]:
     calls: list[Any] = []
 
@@ -287,9 +478,7 @@ def _tool_result_from_chat_request(request: dict[str, Any]) -> dict[str, Any]:
 
 def _tool_result_from_responses_request(request: dict[str, Any]) -> dict[str, Any]:
     tool_item = next(
-        item
-        for item in request["input"]
-        if item.get("type") == "function_call_output"
+        item for item in request["input"] if item.get("type") == "function_call_output"
     )
     assert tool_item["call_id"] == _TOOL_CALL_ID
     return json.loads(tool_item["output"])
@@ -380,9 +569,10 @@ async def test_second_provider_request_failure_does_not_repeat_side_effect(
     result = await _say(hass, agent)
 
     assert result.response.error_code is not None
-    assert "problem talking to OpenAI" in result.response.as_dict()["speech"]["plain"][
-        "speech"
-    ]
+    assert (
+        "problem talking to OpenAI"
+        in result.response.as_dict()["speech"]["plain"]["speech"]
+    )
     assert len(calls) == 1
     assert calls[0].data["entity_id"] == [_ENTITY_ID]
     assert len(wire.requests) == 2

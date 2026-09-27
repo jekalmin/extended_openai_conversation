@@ -194,7 +194,9 @@ async def test_parallel_batch_cancels_pending_sibling_after_ordered_failure() ->
     assert second_cancelled.is_set()
 
 
-async def test_parallel_outcomes_capture_child_exception_without_aborting_batch() -> None:
+async def test_parallel_outcomes_capture_child_exception_without_aborting_batch() -> (
+    None
+):
     """Outcome mode returns ordinary child exceptions in provider order."""
     first = _tool("first", {"type": "knowledge", "operation": "search"})
     second = _tool("second", {"type": "knowledge", "operation": "list"})
@@ -221,7 +223,9 @@ async def test_parallel_outcomes_capture_child_exception_without_aborting_batch(
     [async_execute_parallel_safe_batch, async_execute_parallel_safe_batch_outcomes],
     ids=["ordered", "outcomes"],
 )
-async def test_parallel_helpers_cancel_children_when_parent_is_cancelled(runner: Any) -> None:
+async def test_parallel_helpers_cancel_children_when_parent_is_cancelled(
+    runner: Any,
+) -> None:
     """Cancelling the parent leaves no still-running child tool tasks."""
     first = _tool("first", {"type": "knowledge", "operation": "search"})
     second = _tool("second", {"type": "knowledge", "operation": "list"})

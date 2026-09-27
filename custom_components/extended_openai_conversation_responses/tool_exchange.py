@@ -22,7 +22,10 @@ from .function_tool_recovery import (
     correctable_validation_failure,
     recovery_tool_result,
 )
-from .function_tool_resolution import latest_function_tool_for_execution
+from .function_tool_resolution import (
+    current_configuration_data,
+    latest_function_tool_for_execution,
+)
 from .ha_llm_tools import is_ha_tool
 from .ha_tool_result_compat import is_tool_result_content, make_tool_result_content
 from .parallel_tool_execution import (
@@ -62,6 +65,12 @@ def _reject_duplicate_tool_call_ids(tool_calls: Iterable[llm.ToolInput]) -> None
     """Reject one provider round whose call IDs cannot be paired unambiguously."""
     seen: set[str] = set()
     for tool_call in tool_calls:
+        if (
+            not isinstance(tool_call.id, str)
+            or not 1 <= len(tool_call.id) <= 1024
+            or not tool_call.id.isprintable()
+        ):
+            raise HomeAssistantError("Provider returned an invalid tool call id")
         if tool_call.id in seen:
             raise HomeAssistantError(
                 f"Provider returned duplicate tool call id `{tool_call.id}`"
@@ -173,7 +182,13 @@ def _resolve_current_tool(
         current_candidate = current_effective.get(tool_input.tool_name)
         if current_candidate is None:
             raise FunctionNotFound(tool_input.tool_name)
-        candidate = current_candidate
+        same_ha_reference = request_tool.get("function", {}).get(
+            "type"
+        ) == "ha_llm" and current_candidate.get("function") == request_tool.get(
+            "function"
+        )
+        if current_candidate != request_tool and not same_ha_reference:
+            raise FunctionNotFound(tool_input.tool_name)
 
     return latest_function_tool_for_execution(entity, candidate)
 
@@ -461,11 +476,35 @@ async def async_execute_tool_exchange(
     *,
     function_tools_factory: Callable[[], list[dict[str, Any]]] | None = None,
     recovery_state: ToolRecoveryState | None = None,
+    request_config_data: Any | None = None,
 ) -> None:
     """Execute one provider tool batch while keeping retained history complete."""
     if not pending_tool_calls:
         return
+    if (
+        request_config_data is not None
+        and current_configuration_data(entity) is not request_config_data
+    ):
+        append_unresolved_tool_results(
+            chat_log,
+            entity.entity_id,
+            pending_tool_calls,
+            error=FunctionNotFound(
+                "Function Tool configuration changed during the provider request"
+            ),
+        )
+        raise FunctionNotFound(
+            "Function Tool configuration changed during the provider request"
+        )
     _reject_duplicate_tool_call_ids(pending_tool_calls)
+    prior_results = {
+        call_id
+        for content in getattr(chat_log, "content", ())
+        if is_tool_result_content(content)
+        and isinstance((call_id := getattr(content, "tool_call_id", None)), str)
+    }
+    if any(call.id in prior_results for call in pending_tool_calls):
+        raise HomeAssistantError("Provider repeated a completed tool call id")
     if recovery_state is not None and recovery_state.enabled:
         await _async_execute_with_recovery(
             entity,

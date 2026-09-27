@@ -26,14 +26,14 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
+from tests_real_ha.test_knowledge_provider_wire_e2e import _chat_sse_tool_call
 from tests_real_ha.test_provider_wire_e2e import (
-    _ScriptedWire,
     _chat_sse_text,
     _install_wire,
     _raw_client,
+    _ScriptedWire,
     _speech,
 )
-from tests_real_ha.test_knowledge_provider_wire_e2e import _chat_sse_tool_call
 
 _GROUP_ID = "live-group"
 _TOOL_NAME = "live_status"
@@ -492,11 +492,11 @@ async def test_provider_tool_call_rejects_disabled_then_restored_config(
     await hass.async_block_till_done()
 
 
-async def test_provider_exposed_tool_edit_uses_latest_definition_before_execution(
+async def test_provider_exposed_tool_edit_rejects_stale_call_before_execution(
     hass: HomeAssistant,
     monkeypatch: Any,
 ) -> None:
-    """An old exposed schema resolves to the current implementation at dispatch."""
+    """Arguments for the old advertised schema cannot execute an edited tool."""
     entry = _make_entry(
         "Live tool edit race",
         include_ai_task=False,
@@ -526,7 +526,7 @@ async def test_provider_exposed_tool_edit_uses_latest_definition_before_executio
         agent,
         [
             _chat_sse_tool_call("call-live-edit", _TOOL_NAME, {}),
-            _chat_sse_text("Latest implementation used."),
+            _chat_sse_text("Unexpected continuation."),
         ],
     )
 
@@ -545,6 +545,6 @@ async def test_provider_exposed_tool_edit_uses_latest_definition_before_executio
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert _speech(result) == "Latest implementation used."
-    assert len(executed) == 1
-    assert executed[0]["function"]["value_template"] == "New implementation"
+    assert result.response.error_code is not None
+    assert executed == []
+    assert len(wire.requests) == 1
