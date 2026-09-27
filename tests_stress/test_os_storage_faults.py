@@ -51,6 +51,7 @@ from custom_components.extended_openai_conversation_responses.temporary_memory i
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
+from homeassistant.util import file as ha_file
 from tests_stress.conftest import record
 
 
@@ -251,7 +252,10 @@ async def test_transactional_store_writer_failure_is_observable_and_retryable(
     await store.async_save({"generation": "A"})
     before = Path(store.path).read_bytes()
     with monkeypatch.context() as fault:
-        fault.setattr(atomicwrites, "replace_atomic", _raise_os_error(errno.EACCES))
+        if store._atomic_writes:
+            fault.setattr(atomicwrites, "replace_atomic", _raise_os_error(errno.EACCES))
+        else:
+            fault.setattr(ha_file.os, "replace", _raise_os_error(errno.EACCES))
         with pytest.raises(OSError) as error:
             await store.async_save({"generation": "B"})
     assert error.value.errno == errno.EACCES
@@ -333,7 +337,7 @@ async def test_broadcast_switch_failure_does_not_report_enabled(
     await manager.async_initialize()
     assert manager.enabled is False
     with monkeypatch.context() as fault:
-        fault.setattr(atomicwrites, "replace_atomic", _raise_os_error(errno.EACCES))
+        fault.setattr(ha_file.os, "replace", _raise_os_error(errno.EACCES))
         with pytest.raises(OSError, match="Private storage write failed"):
             await manager.async_set_enabled(True)
     assert manager.enabled is False
