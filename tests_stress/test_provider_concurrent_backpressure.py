@@ -15,10 +15,17 @@ from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_RESPONSES,
 )
 from homeassistant.core import HomeAssistant
+from tests_real_ha.test_management_backend_acceptance import (
+    _admin_client,
+    _management_call,
+)
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
+    _chat_sse_tool_call,
+    _prepare_service,
     _raw_client,
     _responses_sse_text,
+    _responses_sse_tool_call,
     _speech,
 )
 from tests_stress.conftest import record
@@ -59,12 +66,19 @@ async def test_concurrent_429_burst_has_bounded_independent_sdk_retries(
     assert retries == 2, "update the bounded attempt assertion if SDK policy changes"
     markers = tuple(f"Burst-{index}" for index in range(4))
     attempts: Counter[str] = Counter()
+    first_arrivals = 0
+    burst_ready = asyncio.Event()
 
     async def send(request: httpx.Request, *args, **kwargs) -> httpx.Response:
+        nonlocal first_arrivals
         del args, kwargs
         marker = _marker(request, markers)
         attempts[marker] += 1
         if attempts[marker] == 1:
+            first_arrivals += 1
+            if first_arrivals == len(markers):
+                burst_ready.set()
+            await burst_ready.wait()
             return httpx.Response(
                 429,
                 headers={"content-type": "application/json", "retry-after": "0"},
@@ -127,6 +141,7 @@ async def test_slow_provider_saturation_isolates_mixed_failure_and_success(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
+    hass_ws_client,
     mode: str,
 ) -> None:
     """Three gated provider calls cannot globally block a fourth or local HA work."""
@@ -137,7 +152,7 @@ async def test_slow_provider_saturation_isolates_mixed_failure_and_success(
     entered = {marker: asyncio.Event() for marker in markers[:3]}
     release = asyncio.Event()
     attempts: Counter[str] = Counter()
-    state_changed = asyncio.Event()
+    service_calls = await _prepare_service(hass)
 
     async def send(request: httpx.Request, *args, **kwargs) -> httpx.Response:
         del args, kwargs
@@ -153,10 +168,18 @@ async def test_slow_provider_saturation_isolates_mixed_failure_and_success(
                 json={"error": {"message": "rate limit", "type": "rate_limit_error"}},
                 request=request,
             )
+        if marker == "Fast" and attempts[marker] == 1:
+            payload = (
+                _responses_sse_tool_call()
+                if mode == API_MODE_RESPONSES
+                else _chat_sse_tool_call()
+            )
+        else:
+            payload = _reply(mode, marker)
         return httpx.Response(
             200,
             headers={"content-type": "text/event-stream"},
-            content=_reply(mode, marker),
+            content=payload,
             request=request,
         )
 
@@ -172,10 +195,17 @@ async def test_slow_provider_saturation_isolates_mixed_failure_and_success(
         assert all(not task.done() for task in blocked)
         fast = await asyncio.wait_for(_say(hass, agents[1], "Fast"), timeout=10)
         assert _speech(fast) == "Fast"
-        # The HA event loop and state machine remain usable while SDK sends wait.
+        assert len(service_calls) == 1
+        # A genuine management WebSocket read and local HA state work remain live.
+        admin = await _admin_client(hass, hass_ws_client)
+        configuration = await asyncio.wait_for(
+            _management_call(
+                admin, entry=agents[1].entry, section="configuration", action="get"
+            ),
+            timeout=10,
+        )
+        assert configuration["config"]
         hass.states.async_set("sensor.backpressure_probe", "ready")
-        state_changed.set()
-        await asyncio.wait_for(state_changed.wait(), timeout=10)
         assert hass.states.get("sensor.backpressure_probe").state == "ready"
         failure = await asyncio.wait_for(
             _say(hass, agents[1], "RateLimited"), timeout=30
@@ -189,7 +219,9 @@ async def test_slow_provider_saturation_isolates_mixed_failure_and_success(
     assert [_speech(result) for result in settled] == list(markers[:3])
     healthy = await asyncio.wait_for(_say(hass, agents[1], "Healthy"), timeout=10)
     assert _speech(healthy) == "Healthy"
-    assert all(attempts[marker] == 1 for marker in (*markers[:4], "Healthy"))
+    assert all(attempts[marker] == 1 for marker in (*markers[:3], "Healthy"))
+    assert attempts["Fast"] == 2
+    assert len(service_calls) == 1
     assert agents[1]._usage.totals.failed_request_count == 1
     assert agents[0]._usage.totals.failed_request_count == 0
     record(

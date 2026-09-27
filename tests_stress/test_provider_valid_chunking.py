@@ -222,14 +222,9 @@ async def test_valid_sse_chunk_boundaries_preserve_assist_meaning(
     assert all(stream.closed.is_set() for stream in streams)
     assert agent._usage.totals.conversation_count == len(patterns)
     assert agent._usage.totals.failed_request_count == 0
-    assert len(
-        [
-            turn
-            for turns in agent._archive._turns.values()
-            for turn in turns
-            if turn.successful
-        ]
-    ) == len(patterns)
+    archived = [turn for turns in agent._archive._turns.values() for turn in turns]
+    assert len(archived) == len(patterns)
+    assert all(turn.successful and turn.assistant_text == text for turn in archived)
     record(
         stress_trace,
         "valid_sse_chunking",

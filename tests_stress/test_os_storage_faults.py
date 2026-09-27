@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import errno
 from pathlib import Path
 
@@ -41,7 +42,7 @@ def _files(path: str) -> set[str]:
 @pytest.fixture
 def real_store_io(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+) -> Iterator[None]:
     """Undo pytest-HA's in-memory Store shim for these OS-boundary probes."""
     hass.config.config_dir = str(tmp_path)
 
@@ -53,8 +54,12 @@ def real_store_io(
     async def load_from_disk(store: Store):
         return await store._async_load_data()
 
-    monkeypatch.setattr(Store, "_async_write_data", write_to_disk)
-    monkeypatch.setattr(Store, "_async_load", load_from_disk)
+    # Restore the plugin's Store shim before its own fixture tears down. A
+    # function-scoped monkeypatch teardown runs too late for its autospec.
+    with monkeypatch.context() as scoped:
+        scoped.setattr(Store, "_async_write_data", write_to_disk)
+        scoped.setattr(Store, "_async_load", load_from_disk)
+        yield
 
 
 async def test_knowledge_fsync_enospc_rolls_back_and_recovers(
