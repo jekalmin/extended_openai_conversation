@@ -121,6 +121,7 @@ def main() -> None:
         "",
     ]
     totals: Counter[str] = Counter()
+    outcomes: Counter[str] = Counter()
     if not files:
         lines += [
             "Selected Real HA tests report their assertions in the pytest log; no enhanced operation trace was produced.",
@@ -131,11 +132,13 @@ def main() -> None:
         if not data.get("test") and not path.stem.startswith("browser-"):
             continue
         operations = safe(data.get("operations", []))
+        outcome = data.get("outcome", "unreported")
+        outcomes[outcome] += 1
         counts = Counter(item.get("operation", "unknown") for item in operations)
         lines += [
             f"**{data.get('test', path.stem)}**",
             "",
-            f"Evidence layer: **{'browser' if path.stem.startswith('browser-') else layer_for(data.get('test', path.stem), operations)}** · Trace events: {len(operations)}",
+            f"Outcome: **{outcome}** · {'Exercised' if outcome == 'passed' else 'Attempted'} layer: **{'browser' if path.stem.startswith('browser-') else layer_for(data.get('test', path.stem), operations)}** · Trace events: {len(operations)}",
             "",
         ]
         if counts:
@@ -143,7 +146,7 @@ def main() -> None:
             lines += [f"| {name} | {count} |" for name, count in sorted(counts.items())]
             lines.append("")
         for item in operations:
-            if item.get("operation") == "summary":
+            if item.get("operation") == "summary" and outcome == "passed":
                 for key in COUNT_METRICS:
                     value = item.get(key)
                     if isinstance(value, int) and not isinstance(value, bool):
@@ -187,6 +190,10 @@ def main() -> None:
         lines += ["**Measured totals**", "", "| Metric | Count |", "| --- | ---: |"]
         lines += [f"| {key} | {value} |" for key, value in sorted(totals.items())]
         lines.append("")
+    if outcomes:
+        lines += ["**Trace outcomes**", "", "| Outcome | Count |", "| --- | ---: |"]
+        lines += [f"| {name} | {value} |" for name, value in sorted(outcomes.items())]
+        lines.append("")
     summary = "\n".join(lines)
     write_json(
         folder / "certification.json",
@@ -196,6 +203,7 @@ def main() -> None:
                 1 for path in files if path.name != "certification.json"
             ),
             "measured_totals": dict(totals),
+            "trace_outcomes": dict(outcomes),
             "artifact_files": [
                 path.name for path in files if path.name != "certification.json"
             ],

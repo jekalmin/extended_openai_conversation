@@ -3,7 +3,7 @@
   "layers": ["model", "real_ha", "provider_wire", "browser", "browser_real_ha", "process"],
   "features": {
     "initial_setup": {"real_ha": ["tests_real_ha/test_config_flow.py"]},
-    "ai_task": {"real_ha": ["tests_stress/test_ai_task_mixed_campaign.py", "tests_real_ha/test_ai_task_runtime.py", "tests_real_ha/test_ai_task_lifecycle.py"], "provider_wire": ["tests_stress/test_ai_task_mixed_campaign.py"]},
+    "ai_task": {"real_ha": ["tests_stress/test_ai_task_mixed_campaign.py", "tests_real_ha/test_ai_task_runtime.py", "tests_real_ha/test_ai_task_lifecycle.py"]},
     "voice_identity": {"real_ha": ["tests_stress/test_voice_household_campaign.py", "tests_real_ha/test_assist_voice_identity_precedence.py"], "provider_wire": ["tests_stress/test_voice_household_campaign.py"]},
     "intercom": {"real_ha": ["tests_stress/test_intercom_endurance_campaign.py", "tests_real_ha/test_intercom_voice_acceptance.py"]},
     "conversation_archive": {"real_ha": ["tests_stress/test_archive_living_campaign.py", "tests_stress/test_voice_household_campaign.py"]},
@@ -39,7 +39,7 @@
     "store:usage": {"real_ha": ["tests_stress/test_backup_fault_matrix.py"]},
     "store:guest_mode": {"real_ha": ["tests_stress/test_guest_provider_wire.py"], "provider_wire": ["tests_stress/test_guest_provider_wire.py"]},
     "store:request_rules": {"real_ha": ["tests_stress/test_request_rules_provider_wire.py", "tests_stress/test_os_storage_faults.py"], "browser": ["tests_browser/real-ha-multi-tab.stress.mjs"], "browser_real_ha": ["tests_browser/real-ha-backend.spec.mjs"]},
-    "backup": {"real_ha": ["tests_stress/test_backup_fault_matrix.py", "tests_stress/test_os_storage_faults.py"], "provider_wire": ["tests_stress/test_backup_fault_matrix.py"]},
+    "backup": {"real_ha": ["tests_stress/test_backup_fault_matrix.py", "tests_stress/test_os_storage_faults.py"], "provider_wire": ["tests_stress/test_backup_fault_matrix.py"], "process": ["tests_real_ha/test_restore_transaction_process_crash.py"]},
     "backup_transfer": {"real_ha": ["tests_stress/test_backup_transfer.py", "tests_stress/test_backup_transfer_preview_races.py"], "browser": ["tests_browser/management-tools-backup.spec.mjs"], "browser_real_ha": ["tests_browser/real-ha-backend.spec.mjs"]},
     "historical_restore": {"real_ha": ["tests_stress/test_historical_backup.py"]},
     "large_installation": {"real_ha": ["tests_stress/test_large_installation.py"]},

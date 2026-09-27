@@ -234,6 +234,7 @@ jobs:
           }
           process_restart_a = {
               "test_delayed_tool_process_restart.py",
+              "test_restore_transaction_process_crash.py",
           }
           process_restart_b = {
               "test_active_request_shutdown_recovery.py",
@@ -333,6 +334,7 @@ jobs:
 
           PROCESS_RESTART_A=(
             tests_real_ha/test_delayed_tool_process_restart.py
+            tests_real_ha/test_restore_transaction_process_crash.py
           )
           PROCESS_RESTART_B=(
             tests_real_ha/test_active_request_shutdown_recovery.py

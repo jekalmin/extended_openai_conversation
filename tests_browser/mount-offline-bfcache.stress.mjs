@@ -1,7 +1,8 @@
+import {mkdirSync, writeFileSync} from "node:fs";
 import {expect, test} from "@playwright/test";
 import {expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers.mjs";
 
-test("repeated mount cycles plus offline and bfcache restoration keep one healthy panel", async ({page, context}) => {
+test("repeated mount cycles plus offline and browser restoration keep one healthy panel", async ({page, context}, testInfo) => {
   test.setTimeout(120_000);
   const errors = trackPageErrors(page);
   await page.goto(fixtureUrl("data-memory/knowledge"));
@@ -100,4 +101,14 @@ test("repeated mount cycles plus offline and bfcache restoration keep one health
   if (state.bfcache) expect(state.marker).toBe("preserve-or-reload-safely");
 
   await expectHarnessClean(page, errors);
+
+  const artifactDir = process.env.STRESS_ARTIFACT_DIR || "stress-artifacts";
+  mkdirSync(artifactDir, {recursive: true});
+  writeFileSync(`${artifactDir}/browser-mount-recovery.json`, JSON.stringify({
+    test: testInfo.title,
+    outcome: "passed",
+    browserRestoration: state.bfcache ? "bfcache" : "reload",
+    operations: [{operation: state.bfcache ? "bfcache_restored" : "reload_fallback"}],
+  }, null, 2));
+
 });

@@ -227,7 +227,7 @@ async def test_mixed_ai_tasks_remain_request_isolated_after_concurrency_and_relo
     record(
         stress_trace,
         "summary",
-        layer="real-ha + provider-wire",
+        layer="real-ha + fake-sdk-client",
         ai_task_turns=sequential + concurrent + 7,
         ai_task_concurrent=concurrent,
         ai_task_agents=2,
