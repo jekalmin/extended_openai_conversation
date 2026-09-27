@@ -58,6 +58,40 @@ async def test_repair_configuration_patch_rejects_stale_revision_before_write(
     assert subentry.data == before
 
 
+@pytest.mark.asyncio
+async def test_repair_configuration_validate_and_save_preserve_quarantined_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preview changes nothing; a valid unrelated setting commits without discarding raw tools."""
+    entry, subentry = _repairable_agent()
+    before = deepcopy(subentry.data)
+    hass = SimpleNamespace(data={}, config_entries=_FakeConfigEntries())
+    monkeypatch.setattr(
+        management_ui, "entry_and_agent", lambda *_args, **_kwargs: (entry, subentry)
+    )
+    base = {"section": "function_repair", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id}
+    validated = await management_ui.async_management_command(
+        hass, "admin", True, {**base, "action": "configuration_validate", "config": {"max_tokens": 700}}
+    )
+    assert validated["valid"] is True
+    assert subentry.data == before
+    blocked = await management_ui.async_management_command(
+        hass,
+        "admin",
+        True,
+        {**base, "action": "configuration_validate", "config": {CONF_FUNCTION_TOOLS: []}},
+    )
+    assert blocked["valid"] is False
+    assert subentry.data == before
+
+    saved = await management_ui.async_management_command(
+        hass, "admin", True, {**base, "action": "configuration_save", "config": {"max_tokens": 700}}
+    )
+    assert saved["valid"] is True
+    assert subentry.data["max_tokens"] == 700
+    assert subentry.data[CONF_FUNCTION_TOOLS] == before[CONF_FUNCTION_TOOLS]
+
+
 class _States:
     def __init__(self, states: dict[str, Any]) -> None:
         self._states = states

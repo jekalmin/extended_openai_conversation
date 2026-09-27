@@ -21,7 +21,7 @@
         "restore": "admin_only"
       },
       "behavioral_evidence": {
-        "create": "tests/test_management_ui.py::test_guest_backup_and_service_dispatch_edges",
+        "create": "tests_real_ha/test_management_authorization_matrix.py::test_reviewed_admin_sections_reject_non_admin_at_real_websocket",
         "inspect": "tests/test_management_ui.py::test_backup_preview_and_diagnostics_success_routes",
         "restore": "tests_real_ha/test_backup_restore_live_runtime_refresh.py::test_successful_loaded_restore_refreshes_live_subsystem_objects_and_turns"
       }
@@ -191,10 +191,10 @@
       },
       "behavioral_evidence": {
         "configuration_get": "tests/test_function_repair_configuration_contract.py::test_function_repair_configuration_get_defers_live_metadata",
-        "configuration_save": "tests/test_function_repair_configuration_contract.py::test_shared_configuration_response_contract_covers_normal_and_repair_actions",
-        "configuration_validate": "tests/test_management_command_ownership.py::test_configuration_projection_is_inside_maintenance_lease",
+        "configuration_save": "tests/test_function_repair_configuration_contract.py::test_repair_configuration_validate_and_save_preserve_quarantined_tools",
+        "configuration_validate": "tests/test_function_repair_configuration_contract.py::test_repair_configuration_validate_and_save_preserve_quarantined_tools",
         "delete_one": "tests/test_management_loading_performance.py::test_delete_quarantined_tools_immediately_restores_normal_get",
-        "get": "tests/test_management_loading_performance.py::test_valid_native_full_get_keeps_strict_snapshot_path",
+        "get": "tests/test_management_function_repair.py::test_function_repair_get_returns_only_invalid_tool_metadata",
         "save": "tests/test_management_function_repair.py::test_function_repair_save_replaces_invalid_collection",
         "save_one": "tests/test_management_function_repair.py::test_function_repair_save_one_replaces_only_selected_invalid_tool"
       }
@@ -602,7 +602,7 @@
         "summary": "authenticated_read"
       },
       "behavioral_evidence": {
-        "breakdowns": "tests/test_management_permissions.py::test_non_admin_cannot_access_usage_details",
+        "breakdowns": "tests/test_management_history_runtime.py::test_usage_routes_to_bounded_helpers",
         "clear_details": "tests/test_management_ui.py::test_usage_dispatch_covers_all_read_routes",
         "daily": "tests/test_management_history_runtime.py::test_usage_daily_defaults_are_bounded",
         "requests": "tests/test_management_history_runtime.py::test_usage_requests_routes_with_pagination",
