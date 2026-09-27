@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import voluptuous as vol
 
 from custom_components.extended_openai_conversation_responses import ha_actions
 from custom_components.extended_openai_conversation_responses.ha_actions import (
@@ -451,3 +452,96 @@ def test_target_selection_merges_scalar_and_list_values() -> None:
         "area_id": ["kitchen", "hall", "office"],
         "label_id": ["important"],
     }
+
+
+@pytest.mark.asyncio
+async def test_unchecked_action_translates_service_schema_rejection() -> None:
+    services = SimpleNamespace(
+        has_service=lambda _domain, _service: True,
+        async_call=AsyncMock(side_effect=vol.Invalid("invalid service payload")),
+    )
+    hass = SimpleNamespace(services=services)
+
+    with pytest.raises(
+        ha_actions.HomeAssistantError, match="invalid service payload"
+    ) as raised:
+        await ha_actions._async_call_ha_action_unchecked(
+            hass,
+            "light",
+            "turn_on",
+            data={"brightness": "not-a-number"},
+            blocking=True,
+        )
+
+    assert isinstance(raised.value.__cause__, vol.Invalid)
+    services.async_call.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("entity_id", "attributes", "expected"),
+    [
+        (
+            "fan.office",
+            {
+                "percentage": 60,
+                "preset_mode": "sleep",
+                "direction": "forward",
+                "oscillating": True,
+                "friendly_name": "Private",
+            },
+            {
+                "state": "on",
+                "percentage": 60,
+                "preset_mode": "sleep",
+                "direction": "forward",
+                "oscillating": True,
+            },
+        ),
+        (
+            "humidifier.bedroom",
+            {"humidity": 45, "mode": "auto", "current_humidity": 51},
+            {"state": "on", "humidity": 45, "mode": "auto"},
+        ),
+        (
+            "water_heater.tank",
+            {"temperature": 55, "operation_mode": "eco", "away_mode": False},
+            {
+                "state": "eco",
+                "temperature": 55,
+                "operation_mode": "eco",
+                "away_mode": False,
+            },
+        ),
+        (
+            "valve.radiator",
+            {"current_position": 37, "friendly_name": "Radiator"},
+            {"state": "open", "position": 37},
+        ),
+    ],
+)
+def test_additional_reversible_domains_keep_only_control_state(
+    entity_id: str,
+    attributes: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    state = "eco" if entity_id.startswith("water_heater.") else "open" if entity_id.startswith("valve.") else "on"
+    assert serialize_reversible_state(_state(entity_id, state, **attributes)) == expected
+
+
+def test_target_identity_comparison_uses_object_generation() -> None:
+    entry = SimpleNamespace(device_id="device-1")
+    device = object()
+    state = _state("light.kitchen", "on")
+    identity = (("light.kitchen", entry, device, state),)
+
+    assert ha_actions._same_target_identity(identity, identity)
+
+    replacement_state = _state("light.kitchen", "on")
+    changed_state = (("light.kitchen", entry, device, replacement_state),)
+    assert not ha_actions._same_target_identity(changed_state, identity)
+
+    replacement_entry = SimpleNamespace(device_id="device-1")
+    changed_entry = (("light.kitchen", replacement_entry, device, state),)
+    assert not ha_actions._same_target_identity(changed_entry, identity)
+
+    assert not ha_actions._same_target_identity((), identity)
