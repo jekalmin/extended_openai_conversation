@@ -2105,6 +2105,7 @@ async def async_call_active_function(
         }:
             raise HomeAssistantError("Function Tool returned a failure")
         results[result_alias] = _bounded_function_result(payload)
+        return results[result_alias]
     return result
 
 
@@ -2195,6 +2196,52 @@ def resolve_result_values(
     if isinstance(value, list):
         return [resolve_result_values(item, slots, results) for item in value]
     return value
+
+
+def _native_result_sequence(
+    actions: Sequence[Mapping[str, Any]], slots: Mapping[str, str]
+) -> list[dict[str, Any]]:
+    """Keep HA variables and waits in one script while exposing captured results."""
+    aliases = {
+        step["data"]["result_alias"]
+        for step in actions
+        if isinstance(step.get("data"), Mapping) and step["data"].get("result_alias")
+    }
+
+    def native_templates(value: Any) -> Any:
+        if isinstance(value, str):
+            value = RESULT_REFERENCE.sub(
+                lambda match: "{{ " + match.group(1) + match.group(2) + " }}",
+                value,
+            )
+            return SLOT_REFERENCE.sub(
+                lambda match: (
+                    "{{ " + match.group(1) + " }}"
+                    if match.group(1) in aliases or match.group(1) in slots
+                    else match.group(0)
+                ),
+                value,
+            )
+        if isinstance(value, Mapping):
+            return {key: native_templates(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [native_templates(item) for item in value]
+        return value
+
+    sequence: list[dict[str, Any]] = []
+    for step in actions:
+        rendered = native_templates(step)
+        alias = step.get("data", {}).get("result_alias")
+        if alias:
+            response_name = f"__eoai_result_{alias}"
+            rendered["response_variable"] = response_name
+            sequence.append(rendered)
+            sequence.append(
+                {"variables": {alias: "{{ " + response_name + ".result }}"}}
+            )
+        else:
+            sequence.append(rendered)
+    return sequence
 
 
 def _resolve_guest_slot_templates(value: Any, slots: Mapping[str, str]) -> Any:
@@ -2449,58 +2496,33 @@ async def _async_evaluate_matched_rule(
                 and step["data"].get("result_alias")
                 for step in executable_actions
             )
-            script = None
-            if not captures_results:
-                schema_actions = cv.SCRIPT_SCHEMA(executable_actions)
-                validated_actions = await async_validate_actions_config(
-                    hass, schema_actions
-                )
-                script = Script(
-                    hass,
-                    validated_actions,
-                    f"Request Rule {rule['id']}",
-                    DOMAIN,
-                    log_exceptions=False,
-                )
+            schema_actions = cv.SCRIPT_SCHEMA(
+                _native_result_sequence(executable_actions, match.slots)
+                if captures_results
+                else executable_actions
+            )
+            validated_actions = await async_validate_actions_config(
+                hass, schema_actions
+            )
+            script = Script(
+                hass,
+                validated_actions,
+                f"Request Rule {rule['id']}",
+                DOMAIN,
+                log_exceptions=False,
+            )
             token = _ACTIVE_FUNCTION_EXECUTOR.set(function_executor)
             result_values: dict[str, Any] = {}
             result_token = _ACTIVE_FUNCTION_RESULTS.set(result_values)
             try:
-                if captures_results:
-                    for step in executable_actions:
-                        resolved = resolve_result_values(
-                            step, match.slots, result_values
-                        )
-                        one = Script(
-                            hass,
-                            await async_validate_actions_config(
-                                hass, cv.SCRIPT_SCHEMA([resolved])
-                            ),
-                            f"Request Rule {rule['id']}",
-                            DOMAIN,
-                            log_exceptions=False,
-                        )
-                        try:
-                            await one.async_run(
-                                {
-                                    **match.slots,
-                                    "request": {"slots": dict(match.slots)},
-                                },
-                                context,
-                            )
-                        finally:
-                            await one.async_unload()
-                else:
-                    assert script is not None
-                    await script.async_run(
-                        {**match.slots, "request": {"slots": dict(match.slots)}},
-                        context,
-                    )
+                await script.async_run(
+                    {**match.slots, "request": {"slots": dict(match.slots)}},
+                    context,
+                )
             finally:
                 _ACTIVE_FUNCTION_RESULTS.reset(result_token)
                 _ACTIVE_FUNCTION_EXECUTOR.reset(token)
-                if script is not None:
-                    await script.async_unload()
+                await script.async_unload()
         except GuestModeDenied:
             return RuleEvaluation(match, True, GUEST_MODE_UNAVAILABLE, successful=False)
         except Exception:

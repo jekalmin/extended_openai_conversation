@@ -14,7 +14,7 @@
     "model_catalog": {"model": ["tests/test_model_catalog_transitions.py"], "real_ha": ["tests_real_ha/test_model_catalog_live_refresh.py"]},
     "entity_exposure": {"real_ha": ["tests_real_ha/test_entity_attribute_runtime_integrity.py", "tests_real_ha/test_entity_registry_customization.py"]},
     "reauth": {"real_ha": ["tests_real_ha/test_config_flow_lifecycle_contracts.py"]},
-    "request_rule_action:local_action": {"model": ["tests_stress/test_request_rules_matrix.py"], "real_ha": ["tests_stress/test_request_rules_provider_wire.py"], "browser": ["tests_browser/real-ha-multi-tab.stress.mjs"]},
+    "request_rule_action:local_action": {"model": ["tests_stress/test_request_rules_matrix.py"], "real_ha": ["tests_stress/test_request_rules_provider_wire.py", "tests_real_ha/test_request_rules_script_semantics.py"], "browser": ["tests_browser/real-ha-multi-tab.stress.mjs"]},
     "request_rule_action:model_routing": {"model": ["tests_stress/test_request_rules_matrix.py"], "provider_wire": ["tests_stress/test_request_rules_provider_wire.py"]},
     "guest_mode": {"model": ["tests_stress/test_guest_functions_matrix.py"], "real_ha": ["tests_stress/test_guest_provider_wire.py"], "provider_wire": ["tests_stress/test_guest_provider_wire.py"], "browser": ["tests_browser/guest-mode-targeted-refresh.spec.mjs"], "browser_real_ha": ["tests_browser/real-ha-backend.spec.mjs"]},
     "quiet_hours": {"real_ha": ["tests_stress/test_quiet_hours_multi_satellite.py", "tests_stress/test_quiet_hours_ownership_time.py"], "browser": ["tests_browser/management-sections.spec.mjs"], "browser_real_ha": ["tests_browser/real-ha-backend.spec.mjs"]},
