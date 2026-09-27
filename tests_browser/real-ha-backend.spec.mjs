@@ -6,6 +6,72 @@ const backendUrl = process.env.REAL_HA_BACKEND_URL;
 test.skip(!backendUrl, "requires the dedicated genuine Home Assistant backend bridge");
 const realFixtureUrl = (route) => `/tests_browser/real-ha-fixture.html?route=${encodeURIComponent(route)}&backend=${encodeURIComponent(backendUrl)}`;
 
+test("shipped frontend keeps hostile stored text literal across mutation and fresh panels", async ({page}) => {
+  const pageErrors = trackPageErrors(page);
+  const probeRequests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("__eoai_xss_probe__")) probeRequests.push(request.url());
+  });
+  const memoryText = 'Stored memory <img src="/__eoai_xss_probe__" onerror="window.__eoaiXssFired=true">';
+  const updatedText = 'Updated memory <svg onload="window.__eoaiXssFired=true"></svg>';
+  const ruleName = 'Stored rule <img src="/__eoai_xss_probe__" onerror="window.__eoaiXssFired=true">';
+  const url = (route) => `${realFixtureUrl(route)}&bundle=1`;
+  const assertSafe = async (route) => {
+    expect(await page.evaluate(() => window.__eoaiXssFired || false)).toBe(false);
+    expect(await panel.evaluate((element) => [...element.shadowRoot.querySelectorAll("*")]
+      .flatMap((node) => [...node.attributes].filter((attribute) => /^on/i.test(attribute.name))
+        .map((attribute) => `${node.tagName}:${attribute.name}`)))).toEqual([]);
+    expect(probeRequests).toEqual([]);
+    await expect(page).toHaveURL(new RegExp(`/extended-openai/${route}$`));
+  };
+
+  await page.goto(url("data-memory/memories"));
+  let panel = page.locator("extended-openai-management-panel");
+  await panel.locator("#add-memory").click();
+  await panel.locator("#memory-content").fill(memoryText);
+  await panel.locator("#memory-category").fill("browser-security");
+  await panel.locator("#memory-save").click();
+  let card = panel.locator(".list-card").filter({hasText: memoryText});
+  await expect(card).toContainText(memoryText);
+  await assertSafe("data-memory/memories");
+
+  await card.locator(".memory-edit-button").click();
+  await expect(panel.locator("#memory-content")).toHaveValue(memoryText);
+  await panel.locator("#memory-content").fill(updatedText);
+  await panel.locator("#memory-save").click();
+  card = panel.locator(".list-card").filter({hasText: updatedText});
+  await expect(card).toContainText(updatedText);
+  await assertSafe("data-memory/memories");
+  await page.goto(url("data-memory/memories"));
+  panel = page.locator("extended-openai-management-panel");
+  card = panel.locator(".list-card").filter({hasText: updatedText});
+  await expect(card).toContainText(updatedText);
+  await assertSafe("data-memory/memories");
+  await card.locator(".delete-memory").click();
+  await acceptConfirmation(panel);
+
+  await page.goto(url("capabilities/request-rules"));
+  panel = page.locator("extended-openai-management-panel");
+  await panel.getByRole("button", {name: "Create rule", exact: true}).first().click();
+  await panel.locator("#rule-name").fill(ruleName);
+  await panel.locator("#rule-phrases").fill("browser security probe");
+  await panel.locator("#rule-match").selectOption("contains");
+  await panel.locator("#rule-action-type").selectOption("model_routing");
+  await panel.locator("#rule-model").fill("gpt-5-mini");
+  await panel.locator("#rule-save").click();
+  let rule = panel.locator(".request-rule-card").filter({hasText: ruleName});
+  await expect(rule).toContainText(ruleName);
+  await assertSafe("capabilities/request-rules");
+  await page.goto(url("capabilities/request-rules"));
+  panel = page.locator("extended-openai-management-panel");
+  rule = panel.locator(".request-rule-card").filter({hasText: ruleName});
+  await expect(rule).toContainText(ruleName);
+  await assertSafe("capabilities/request-rules");
+  await rule.locator(".rule-delete").click();
+  await acceptConfirmation(panel);
+  await expectHarnessClean(page, pageErrors);
+});
+
 test("real browser saves General Settings through the genuine HA backend", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(realFixtureUrl("assistant/basics"));

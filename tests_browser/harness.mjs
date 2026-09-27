@@ -6,7 +6,7 @@ const route = params.get("route") || "guide";
 const isAdmin = params.get("admin") !== "0";
 const predefine = params.get("predefine") === "1";
 const agentCount = Math.max(1, Math.min(100, Number.parseInt(params.get("agents") || "1", 10) || 1));
-const backend = createStateBackend({partialOverview: params.get("partial") === "1", failConfigurationOnce: params.get("fail_config_once") === "1", seedConversations: params.get("seed_conversations") === "1"});
+const backend = createStateBackend({partialOverview: params.get("partial") === "1", failConfigurationOnce: params.get("fail_config_once") === "1", seedConversations: params.get("seed_conversations") === "1", seedUsageBoundary: params.get("usage_boundary") === "1"});
 const backupTransfer = createBackupTransferBackend(backend);
 const managementType = "extended_openai_conversation_responses/management";
 const backupTransferType = "extended_openai_conversation_responses/management/backup_transfer";

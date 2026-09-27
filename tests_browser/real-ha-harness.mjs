@@ -39,7 +39,14 @@ window.browserHarness = {calls, hass, windowErrors: [], rejections: []};
 window.addEventListener("error", (event) => window.browserHarness.windowErrors.push(String(event.error || event.message)));
 window.addEventListener("unhandledrejection", (event) => window.browserHarness.rejections.push(String(event.reason)));
 
-await import("/custom_components/extended_openai_conversation_responses/frontend/management-panel.js");
+if (params.get("bundle") === "1") {
+  const frontendRoot = "/custom_components/extended_openai_conversation_responses/frontend/";
+  const manifest = await (await fetch(`${frontendRoot}dist/manifest.json`)).json();
+  const entry = Object.values(manifest).find((item) => item.isEntry && item.name === "management");
+  await import(`${frontendRoot}dist/${entry.file}`);
+} else {
+  await import("/custom_components/extended_openai_conversation_responses/frontend/management-panel.js");
+}
 const panel = document.createElement("extended-openai-management-panel");
 document.body.append(panel);
 panel.hass = hass;
