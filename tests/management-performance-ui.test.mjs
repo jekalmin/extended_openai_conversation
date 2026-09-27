@@ -128,6 +128,26 @@ const configResult = (projection, title = "A") => ({
 });
 
 {
+  const panel = panelFor();
+  const baseline = configResult("full");
+  panel._configData = baseline;
+  panel._configDataStale = true;
+  panel._draft = structuredClone(baseline.config);
+  panel._draftTitle = baseline.title;
+  panel._draftAgentId = panel._agentId;
+  let finishRead;
+  panel._call = () => new Promise((resolve) => { finishRead = resolve; });
+  const loading = panel._loadConfigDraft();
+  panel._draftTitle = "Edited while configuration refreshed";
+  panel._setConfigDirty(true);
+  finishRead(configResult("full", "Remote update"));
+  await loading;
+  assert.equal(panel._draftTitle, "Edited while configuration refreshed");
+  assert.equal(panel._configData, baseline, "an in-flight read must not replace a newly dirty baseline");
+  assert.equal(panel._configDirty, true);
+}
+
+{
   const panel = panelFor("assistant", "basics");
   localStorage.setItem(AGENT_KEY, "agent-a");
   localStorage.setItem(ENTRY_KEY, "entry-a");

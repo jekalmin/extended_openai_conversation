@@ -1310,6 +1310,9 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
         }
       }
       if (agentId !== this._agentId || loadToken !== this._loadToken || cacheGeneration !== this._cacheGeneration || view !== this._viewKey()) return;
+      // A user can edit the visible draft while an earlier configuration read
+      // is in flight. The read is no longer allowed to replace that draft.
+      if (this._configDirty && this._draftAgentId === agentId) return;
       const prior = key ? this._cleanConfigSnapshots.get(key)?.result : null;
       if (prior && prior.revision !== configData.revision) this._invalidateCleanConfiguration(agentId);
       this._configData = configData;
