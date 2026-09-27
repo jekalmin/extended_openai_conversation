@@ -140,3 +140,65 @@ syncRequestRuleRoutingControls(root, ["minimal"]);
 assert.equal(select.value, "minimal");
 assert.deepEqual(select.options.map((item) => item.value), ["", "minimal"]);
 assert.equal(select.querySelector('option[value="high"]'), null);
+
+// A completed model-data operation cannot publish into a different agent,
+// model, route generation, or newer operation on the same mounted panel.
+function gatedModelPanel() {
+  const button = {dataset:{modelData:"check"}, disabled:false, addEventListener(_event, handler) { this.click = handler; }};
+  const state = {modelInput:{value:"model-A"}, status:{textContent:"current status"}, refreshes:0};
+  const host = {
+    _agentId:"agent-A", _loadToken:1, _cacheGeneration:1,
+    _draft:{chat_model:"model-A"},
+    _result:{model_capabilities:{marker:"current"}},
+    _modelCatalogData:{marker:"current"},
+    _viewKey:() => "assistant/basics",
+    shadowRoot:{
+      querySelectorAll:() => [button],
+      querySelector:(selector) => ({
+        '[data-config="chat_model"]':state.modelInput,
+        '[data-model-data-status]':state.status,
+      })[selector] || null,
+    },
+  };
+  bindModelDataControls(host, () => { state.refreshes++; });
+  return {host, button, state};
+}
+
+for (const change of ["agent", "model", "route", "load", "generation", "draft"]) {
+  const {host, button, state} = gatedModelPanel();
+  let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  host._hass = {callWS:() => { entered(); return new Promise(resolve => { release = resolve; }); }};
+  const pending = button.click();
+  await started;
+  if (change === "agent") host._agentId = "agent-B";
+  if (change === "model") state.modelInput.value = "model-B";
+  if (change === "route") host._viewKey = () => "data-memory/knowledge";
+  if (change === "load") host._loadToken++;
+  if (change === "generation") host._cacheGeneration++;
+  if (change === "draft") host._draft = {chat_model:"model-A"};
+  release({catalog_version:9, model_capabilities:{marker:"stale"}});
+  await pending;
+  assert.deepEqual(host._modelCatalogData, {marker:"current"}, `${change} must fence old result`);
+  assert.deepEqual(host._result.model_capabilities, {marker:"current"});
+  assert.equal(state.status.textContent, "current status");
+  assert.equal(state.refreshes, 0);
+}
+
+{
+  const {host, button, state} = gatedModelPanel();
+  let releaseOld, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let count = 0;
+  host._hass = {callWS:() => ++count === 1
+    ? (entered(), new Promise(resolve => { releaseOld = resolve; }))
+    : Promise.resolve({catalog_version:3, model_capabilities:{marker:"newer"}})};
+  const old = button.click();
+  await started;
+  await button.click();
+  releaseOld({catalog_version:2, model_capabilities:{marker:"older"}});
+  await old;
+  assert.equal(host._modelCatalogData.catalog_version, 3);
+  assert.deepEqual(host._result.model_capabilities, {marker:"newer"});
+  assert.equal(state.refreshes, 1);
+}

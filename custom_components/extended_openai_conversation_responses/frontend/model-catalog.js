@@ -107,14 +107,27 @@ export function bindModelDataControls(panel, onUpdated = () => {}) {
   buttons.forEach((button) => button.addEventListener("click", async () => {
     buttons.forEach((item) => { item.disabled = true; });
     const status = root.querySelector("[data-model-data-status]");
+    const agentId = panel._agentId;
+    const view = panel._viewKey?.();
+    const loadToken = panel._loadToken;
+    const cacheGeneration = panel._cacheGeneration;
+    const draft = panel._draft;
+    const token = (panel._eocModelDataActionToken || 0) + 1;
+    panel._eocModelDataActionToken = token;
+    const model = root.querySelector('[data-config="chat_model"]')?.value || "";
+    const current = () => panel._eocModelDataActionToken === token
+      && panel._agentId === agentId && panel._viewKey?.() === view
+      && panel._loadToken === loadToken && panel._cacheGeneration === cacheGeneration
+      && panel._draft === draft
+      && (panel.shadowRoot?.querySelector('[data-config="chat_model"]')?.value || "") === model;
     try {
-      const model = root.querySelector('[data-config="chat_model"]')?.value || "";
-      const result = await lookupModelData(panel, model, button.dataset.modelData);
+      const result = await lookupModelData(panel, model, button.dataset.modelData, current);
+      if (!current()) return;
       if (status) status.textContent = modelDataStatusText(result);
       syncModelDataControls(panel, result);
       if (!result.last_error) onUpdated(status?.textContent || "Model data updated.");
     } catch (err) {
-      if (!status) return;
+      if (!current() || !status) return;
       if (button.dataset.modelData === "check") {
         status.textContent = "Unable to check for model data updates. The existing model data is still in use. Check Home Assistant's internet connection and try again.";
       } else if (button.dataset.modelData === "apply") {
@@ -123,10 +136,12 @@ export function bindModelDataControls(panel, onUpdated = () => {}) {
         status.textContent = `Unable to restore bundled model data: ${err.message || String(err)}`;
       }
     } finally {
-      buttons.forEach((item) => {
-        if (item.dataset.modelData === "apply") item.disabled = !panel?._modelCatalogData?.update_available;
-        else item.disabled = false;
-      });
+      if (current()) {
+        buttons.forEach((item) => {
+          if (item.dataset.modelData === "apply") item.disabled = !panel?._modelCatalogData?.update_available;
+          else item.disabled = false;
+        });
+      }
     }
   }));
 }
