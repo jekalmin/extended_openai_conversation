@@ -1107,6 +1107,15 @@ def merge_agent_config(
             "config", "unknown fields: " + ", ".join(sorted(unknown))
         )
     known = {key: value for key, value in current.items() if key in AGENT_CONFIG_FIELDS}
+    if (
+        CONF_CHAT_MODEL in updates
+        and updates[CONF_CHAT_MODEL] != known.get(CONF_CHAT_MODEL)
+        and CONF_REASONING_EFFORT not in updates
+    ):
+        # A model change with no explicit effort should use the new model's
+        # recommended profile. Retaining the prior model's effort can make a
+        # perfectly valid switch to a non-reasoning model unsavable.
+        known.pop(CONF_REASONING_EFFORT, None)
     normalized = normalize_agent_config(
         {**known, **updates}, validated_functions=validated_functions
     )

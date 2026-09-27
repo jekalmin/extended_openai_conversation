@@ -1,503 +1,1099 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "fields": {
     "CONF_ADVANCED_OPTIONS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "advanced_options"
+      }
     },
     "CONF_API_MODE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "api_mode"
+      }
     },
     "CONF_ARCHIVE_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "archive"
+      }
     },
     "CONF_ARCHIVE_MODEL_SEARCH_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_ARCHIVE_RETENTION_DAYS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "retention"
+      }
     },
     "CONF_ARCHIVE_SESSION_TIMEOUT_MINUTES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_CHAT_MODEL": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "chat_model"
+      }
     },
     "CONF_CONTEXT_THRESHOLD": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_CONTEXT_TRUNCATE_STRATEGY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_CONTINUE_CONVERSATION": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_CONVERSATION_CONTINUITY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "conversation_continuity"
+      }
     },
     "CONF_CONVERSATION_TIMEOUT_MINUTES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_CURRENT_DATETIME_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "template_context"
+      }
     },
     "CONF_CURRENT_DATETIME_TEMPLATE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "template_context"
+      }
     },
     "CONF_EXPOSED_ENTITIES_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "exposed_entities_enabled"
+      }
     },
     "CONF_EXPOSED_ENTITIES_TEMPLATE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "template_context"
+      }
     },
     "CONF_EXPOSED_ENTITY_ATTRIBUTES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_FUNCTION_GROUPS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "function_groups"
+      }
     },
     "CONF_FUNCTION_TOOLS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "function_tools"
+      }
     },
     "CONF_FUNCTION_TOOL_ERROR_RECOVERY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "function_tool_error_recovery"
+      }
     },
     "CONF_GUEST_ALLOWED_FUNCTION_NAMES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_ALLOWED_GROUP_IDS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROLLABLE_AREAS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROLLABLE_DOMAINS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROLLABLE_ENTITIES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROLLABLE_LABELS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROL_EXCLUDED_AREAS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROL_EXCLUDED_DOMAINS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROL_EXCLUDED_ENTITIES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_CONTROL_EXCLUDED_LABELS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_EXCLUDED_AREAS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_EXCLUDED_DOMAINS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_EXCLUDED_ENTITIES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_EXCLUDED_LABELS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_FUNCTION_POLICY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "guest_function_policy"
+      }
     },
     "CONF_GUEST_KNOWLEDGE_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_GUEST_KNOWLEDGE_POLICY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "guest_knowledge_policy"
+      }
     },
     "CONF_GUEST_KNOWLEDGE_SOURCE_IDS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_MODE_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "guest_mode_enabled"
+      }
     },
     "CONF_GUEST_POLICY_VERSION": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_GUEST_READABLE_AREAS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_READABLE_DOMAINS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_READABLE_ENTITIES": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_READABLE_LABELS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_GUEST_SEPARATE_CONTROL_RESTRICTIONS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_GUEST_SHARED_MEMORY_POLICY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "guest_shared_memory_policy"
+      }
     },
     "CONF_GUEST_SHARED_MEMORY_READ": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_GUEST_SHARED_MEMORY_WRITE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_GUEST_WEB_SEARCH": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "guest_web_search"
+      }
     },
     "CONF_KNOWLEDGE_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "knowledge_enabled"
+      }
     },
     "CONF_LOCAL_INTENTS_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "local_intents_enabled"
+      }
     },
     "CONF_LOCAL_INTENT_DELAYED_COMMANDS_TO_AI": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "local_intent_delayed_commands_to_ai"
+      }
     },
     "CONF_LOCAL_INTENT_EXCLUSIONS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "local_intent_exclusions"
+      }
     },
     "CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_MAX_TOKENS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_MEMORY_AUTO_CREATE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "derived",
+        "reason": "Normalized by agent_config.normalize_agent_config from memory_mode."
+      }
     },
     "CONF_MEMORY_AUTO_RETRIEVE_LIMIT": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "memory_auto_retrieve_limit"
+      }
     },
     "CONF_MEMORY_EMBEDDING_MODEL": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "covered_separately",
+        "reason": "Boundary/lifecycle evidence: maximal_agent_fixture.py and test_backup_inventory.py."
+      }
     },
     "CONF_MEMORY_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "derived",
+        "reason": "Normalized by agent_config.normalize_agent_config from memory_mode."
+      }
     },
     "CONF_MEMORY_MODE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "memory_mode"
+      }
     },
     "CONF_MEMORY_RETRIEVAL_MODE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "memory_retrieval_mode"
+      }
     },
     "CONF_PROMPT": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "bounded_payload",
+        "reason": "Payload shape and limits: maximal_agent_fixture.py and focused real-HA acceptance tests."
+      }
     },
     "CONF_REASONING_EFFORT": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "reasoning_profile"
+      }
     },
     "CONF_SERVICE_TIER": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "service_tier"
+      }
     },
     "CONF_SHARED_ARCHIVE_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "archive"
+      }
     },
     "CONF_SHARED_MEMORY_MODE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "shared_memory_mode"
+      }
     },
     "CONF_SHORTEN_TOOL_CALL_ID": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "shorten_tool_call_id"
+      }
     },
     "CONF_SKILLS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "intentionally_excluded",
+        "reason": "Requires an installed skill; see test_skill_lifecycle_campaign.py and maximal_agent_fixture.FIXTURE_EXCEPTIONS."
+      }
     },
     "CONF_SPEECH_PROCESSING_ENABLED": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "speech_processing_enabled"
+      }
     },
     "CONF_SPEECH_REGEX_REPLACEMENTS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "speech_behavior"
+      }
     },
     "CONF_SPEECH_STRIP_MARKDOWN": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "speech_behavior"
+      }
     },
     "CONF_SPEECH_STRIP_URLS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "speech_behavior"
+      }
     },
     "CONF_TEMPERATURE": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "sampling"
+      }
     },
     "CONF_TEMPORARY_MEMORY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "temporary_memory"
+      }
     },
     "CONF_TOP_P": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "sampling"
+      }
     },
     "CONF_USAGE_REQUEST_RETENTION_DAYS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "retention"
+      }
     },
     "CONF_USAGE_RUN_RETENTION_DAYS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "retention"
+      }
     },
     "CONF_VOICE_DEFAULT_USER_ID": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "voice_scope_policy"
+      }
     },
     "CONF_VOICE_DEVICE_MAPPINGS": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "voice_device_mappings"
+      }
     },
     "CONF_VOICE_SCOPE_POLICY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "voice_scope_policy"
+      }
     },
     "CONF_VOICE_UNMAPPED_POLICY": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "special"
+      "migration": "special",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "voice_unmapped_policy"
+      }
     },
     "CONF_WEB_SEARCH": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "web_search"
+      }
     },
     "CONF_WEB_SEARCH_CONTEXT": {
       "save_reload": "config_subentry",
       "persistence": "ha_config_entries",
       "backup": "full_and_setup",
-      "migration": "standard"
+      "migration": "standard",
+      "coverage": {
+        "kind": "combinatorial_dimension",
+        "dimension": "web_search_context"
+      }
     }
-  }
+  },
+  "dimension_values": {
+    "chat_model": [
+      "gpt-4-turbo",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4o",
+      "gpt-4o-2024-08-06",
+      "gpt-4o-mini",
+      "gpt-5",
+      "gpt-5-mini",
+      "gpt-5-nano",
+      "gpt-5-pro",
+      "gpt-5.1",
+      "gpt-5.2",
+      "gpt-5.2-pro",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
+      "gpt-5.4-pro",
+      "gpt-5.5",
+      "gpt-5.5-pro",
+      "gpt-5.6",
+      "gpt-5.6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-6-astra",
+      "gpt-6-luna",
+      "gpt-6-sol",
+      "o3",
+      "o3-pro"
+    ],
+    "api_mode": [
+      "auto",
+      "chat_completions",
+      "responses"
+    ],
+    "reasoning_profile": [
+      "recommended",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "none",
+      "minimal"
+    ],
+    "sampling": [
+      "default",
+      "temperature",
+      "top_p"
+    ],
+    "service_tier": [
+      "auto",
+      "default",
+      "flex",
+      "fast",
+      "priority",
+      "ultrafast"
+    ],
+    "web_search": [
+      false,
+      true
+    ],
+    "web_search_context": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "function_tools": [
+      "none",
+      "direct",
+      "disabled"
+    ],
+    "function_groups": [
+      "none",
+      "always",
+      "on_demand"
+    ],
+    "function_tool_error_recovery": [
+      false,
+      true
+    ],
+    "shorten_tool_call_id": [
+      false,
+      true
+    ],
+    "memory_mode": [
+      "off",
+      "manual",
+      "automatic"
+    ],
+    "memory_retrieval_mode": [
+      "lexical",
+      "hybrid"
+    ],
+    "memory_auto_retrieve_limit": [
+      0,
+      3
+    ],
+    "knowledge_enabled": [
+      false,
+      true
+    ],
+    "archive": [
+      "off",
+      "private",
+      "shared"
+    ],
+    "temporary_memory": [
+      "off",
+      "balanced",
+      "eager"
+    ],
+    "guest_mode_enabled": [
+      false,
+      true
+    ],
+    "guest_function_policy": [
+      "off",
+      "custom"
+    ],
+    "guest_knowledge_policy": [
+      "off",
+      "custom"
+    ],
+    "guest_shared_memory_policy": [
+      "off",
+      "read_only",
+      "read_write"
+    ],
+    "guest_web_search": [
+      false,
+      true
+    ],
+    "shared_memory_mode": [
+      "disabled",
+      "explicit"
+    ],
+    "local_intents_enabled": [
+      false,
+      true
+    ],
+    "local_intent_exclusions": [
+      "none",
+      "turn_on"
+    ],
+    "local_intent_delayed_commands_to_ai": [
+      false,
+      true
+    ],
+    "conversation_continuity": [
+      "ha_default",
+      "user",
+      "device"
+    ],
+    "voice_scope_policy": [
+      "unretained",
+      "shared",
+      "default_user",
+      "device_mapping"
+    ],
+    "voice_unmapped_policy": [
+      "unretained",
+      "shared",
+      "default_user",
+      "device_mapping"
+    ],
+    "voice_device_mappings": [
+      "none",
+      "mapped"
+    ],
+    "exposed_entities_enabled": [
+      false,
+      true
+    ],
+    "speech_processing_enabled": [
+      false,
+      true
+    ],
+    "speech_behavior": [
+      "plain",
+      "strip",
+      "regex"
+    ],
+    "retention": [
+      "default",
+      "short"
+    ],
+    "template_context": [
+      "default",
+      "off",
+      "custom"
+    ],
+    "advanced_options": [
+      false,
+      true
+    ]
+  },
+  "reviewed_choice_values": {
+    "SERVICE_TIER_OPTIONS": [
+      "auto",
+      "default",
+      "flex",
+      "fast",
+      "priority",
+      "ultrafast"
+    ],
+    "MEMORY_RETRIEVAL_MODES": [
+      "lexical",
+      "hybrid"
+    ],
+    "SHARED_MEMORY_MODES": [
+      "disabled",
+      "explicit",
+      "automatic"
+    ],
+    "GUEST_ACCESS_POLICIES": [
+      "off",
+      "on",
+      "custom"
+    ],
+    "GUEST_SHARED_MEMORY_POLICIES": [
+      "off",
+      "read_only",
+      "read_write"
+    ],
+    "WEB_SEARCH_CONTEXT_OPTIONS": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "FUNCTION_GROUP_LOADING_MODES": [
+      "always",
+      "on_demand"
+    ],
+    "CONTINUE_CONVERSATION_OPTIONS": [
+      "ha_default",
+      "always",
+      "conditional"
+    ],
+    "ARCHIVE_RETENTION_OPTIONS": [
+      7,
+      30,
+      90,
+      180,
+      365
+    ],
+    "USAGE_RETENTION_OPTIONS": [
+      0,
+      7,
+      30,
+      90,
+      180,
+      365
+    ],
+    "CONVERSATION_TIMEOUT_OPTIONS": [
+      5,
+      15,
+      30,
+      60,
+      240
+    ]
+  },
+  "catalogue_capability_digest": "1e797f47339b0c3ef0ef32126acd459aa5679c0ce9fe556b16498994b0c8074d"
 }
