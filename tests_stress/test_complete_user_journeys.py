@@ -187,7 +187,9 @@ async def test_complete_user_journey(
         assert (
             agent_config.normalize_agent_config(snapshot["agent"]["config"]) == intended
         )
-        if step == 1:
+        if step == 1 and journey != "extensive-backup-restore":
+            checkpoint = snapshot
+        if step == 3 and journey == "extensive-backup-restore":
             checkpoint = snapshot
         if (
             step == 1
@@ -216,7 +218,7 @@ async def test_complete_user_journey(
             )
             assert source.source_id
             source_id = source.source_id
-            if step == 1:
+            if step == 1 and journey != "extensive-backup-restore":
                 checkpoint = await backup.async_collect_backup_snapshot(
                     hass, entry, subentry
                 )
@@ -395,7 +397,7 @@ async def test_complete_user_journey(
         await _fresh_reload(hass, entry)
         recovered = agent_config.normalize_agent_config(checkpoint["agent"]["config"])
         await _assert_current(client, entry, recovered)
-        restored_state = path.states[1]
+        restored_state = path.states[3 if journey == "extensive-backup-restore" else 1]
         _, api = normalized_state(restored_state)
         request = await _converse(
             hass, entry, monkeypatch, api, recovered["chat_model"]

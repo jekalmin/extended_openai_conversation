@@ -16,7 +16,7 @@ JOURNEYS = {
     "model-api-migration": "model-capability",
     "long-lived-evolution": "archive-retention",
     "guest-private-boundary": "guest-security",
-    "extensive-backup-restore": "ui-speech",
+    "extensive-backup-restore": "extensive-configuration",
     "function-heavy-evolution": "function-loading",
 }
 
@@ -103,6 +103,18 @@ def _named_paths() -> list[TransitionPath]:
                     "chat_model": "gpt-4.1",
                     "reasoning_profile": "recommended",
                     "web_search": False,
+                },
+                {
+                    "chat_model": "gpt-5.6",
+                    "reasoning_profile": "none",
+                    "web_search": False,
+                    "api_mode": "chat_completions",
+                },
+                {
+                    "chat_model": "gpt-5.6",
+                    "reasoning_profile": "none",
+                    "web_search": False,
+                    "api_mode": "responses",
                 },
                 {
                     "chat_model": "gpt-5.6",
@@ -209,6 +221,35 @@ def _named_paths() -> list[TransitionPath]:
                 {
                     "exposed_entities_enabled": True,
                     "speech_processing_enabled": True,
+                    "advanced_options": True,
+                },
+                {},
+            ),
+        ),
+        _path(
+            "extensive-configuration",
+            states(
+                {},
+                {"memory_mode": "manual", "knowledge_enabled": True},
+                {
+                    "memory_mode": "automatic",
+                    "knowledge_enabled": True,
+                    "temporary_memory": "balanced",
+                    "archive": "private",
+                    "function_tools": "direct",
+                },
+                {
+                    "memory_mode": "automatic",
+                    "knowledge_enabled": True,
+                    "temporary_memory": "balanced",
+                    "archive": "shared",
+                    "function_tools": "direct",
+                    "function_groups": "always",
+                    "guest_mode_enabled": True,
+                    "local_intents_enabled": True,
+                    "exposed_entities_enabled": True,
+                    "speech_processing_enabled": True,
+                    "retention": "short",
                     "advanced_options": True,
                 },
                 {},
