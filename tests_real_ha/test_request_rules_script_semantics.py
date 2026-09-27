@@ -143,6 +143,25 @@ async def test_function_capture_preserves_ha_variables_and_survives_reload(hass)
     assert _speech(await _say(hass, agent, "run rule")) == "Battery 62"
     assert calls == ["kitchen:62", "kitchen:62"]
     assert _ACTIVE_FUNCTION_RESULTS.get() is None
+    await agent._request_rules.async_create(
+        _local(
+            [
+                {
+                    "action": f"{DOMAIN}.{SERVICE_CALL_FUNCTION}",
+                    "data": {
+                        "function": "rule_battery",
+                        "arguments": {},
+                        "result_alias": "battery",
+                    },
+                },
+                _record_action("{battery.missing}"),
+            ],
+            phrase="missing battery field",
+        )
+    )
+    assert _speech(await _say(hass, agent, "missing battery field")) == "Failed safely"
+    assert calls == ["kitchen:62", "kitchen:62"]
+    assert _ACTIVE_FUNCTION_RESULTS.get() is None
 
 
 async def test_wait_timeout_stops_actions_and_next_request_works(hass):
@@ -174,6 +193,21 @@ async def test_wait_timeout_stops_actions_and_next_request_works(hass):
     assert calls == []
     assert _speech(await _say(hass, agent, "healthy rule")) == "Done"
     assert calls == ["healthy"]
+    await agent._request_rules.async_create(
+        _local(
+            [
+                {
+                    "wait_template": "{{ is_state('sensor.rule_gate', 'open') }}",
+                    "timeout": {"milliseconds": 10},
+                    "continue_on_timeout": True,
+                },
+                _record_action("after nonfatal timeout"),
+            ],
+            phrase="nonfatal timeout rule",
+        )
+    )
+    assert _speech(await _say(hass, agent, "nonfatal timeout rule")) == "Done"
+    assert calls == ["healthy", "after nonfatal timeout"]
 
 
 async def test_failing_ha_action_stops_without_replaying_previous_steps(hass):

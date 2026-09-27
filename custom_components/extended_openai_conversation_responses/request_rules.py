@@ -122,6 +122,9 @@ _ACTIVE_FUNCTION_EXECUTOR: ContextVar[RequestRuleFunctionExecutor | None] = Cont
 _ACTIVE_FUNCTION_RESULTS: ContextVar[dict[str, Any] | None] = ContextVar(
     "request_rule_function_results", default=None
 )
+_ACTIVE_RESULT_PATHS: ContextVar[dict[str, set[str]] | None] = ContextVar(
+    "request_rule_result_paths", default=None
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1847,6 +1850,25 @@ def _result_references(value: Any) -> set[str]:
     return set()
 
 
+def _result_paths_by_alias(value: Any) -> dict[str, set[str]]:
+    """Collect paths whose absence must stop later HA actions."""
+    paths: dict[str, set[str]] = {}
+
+    def visit(item: Any) -> None:
+        if isinstance(item, str):
+            for match in RESULT_REFERENCE.finditer(item):
+                paths.setdefault(match.group(1), set()).add(match.group(0))
+        elif isinstance(item, Mapping):
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return paths
+
+
 def _validate_result_dependencies(action: Mapping[str, Any], slots: set[str]) -> None:
     produced: set[str] = set()
     step_ids: set[str] = set()
@@ -2105,6 +2127,8 @@ async def async_call_active_function(
         }:
             raise HomeAssistantError("Function Tool returned a failure")
         results[result_alias] = _bounded_function_result(payload)
+        for reference in (_ACTIVE_RESULT_PATHS.get() or {}).get(result_alias, set()):
+            resolve_result_values(reference, {}, results)
         return results[result_alias]
     return result
 
@@ -2242,6 +2266,26 @@ def _native_result_sequence(
         else:
             sequence.append(rendered)
     return sequence
+
+
+def _fatal_wait_probes(
+    actions: Sequence[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Detect HA waits that abort a script without raising to its caller."""
+    sequence: list[dict[str, Any]] = []
+    markers: list[str] = []
+    for action in actions:
+        fatal_wait = (
+            "wait_template" in action or "wait_for_trigger" in action
+        ) and action.get("continue_on_timeout") is False
+        if fatal_wait:
+            marker = f"__eoai_wait_completed_{uuid4().hex}"
+            markers.append(marker)
+            sequence.append({"variables": {marker: False}})
+        sequence.append(dict(action))
+        if fatal_wait:
+            sequence.append({"variables": {marker: True}})
+    return sequence, markers
 
 
 def _resolve_guest_slot_templates(value: Any, slots: Mapping[str, str]) -> Any:
@@ -2496,11 +2540,12 @@ async def _async_evaluate_matched_rule(
                 and step["data"].get("result_alias")
                 for step in executable_actions
             )
-            schema_actions = cv.SCRIPT_SCHEMA(
+            script_actions, fatal_wait_markers = _fatal_wait_probes(
                 _native_result_sequence(executable_actions, match.slots)
                 if captures_results
                 else executable_actions
             )
+            schema_actions = cv.SCRIPT_SCHEMA(script_actions)
             validated_actions = await async_validate_actions_config(
                 hass, schema_actions
             )
@@ -2514,12 +2559,26 @@ async def _async_evaluate_matched_rule(
             token = _ACTIVE_FUNCTION_EXECUTOR.set(function_executor)
             result_values: dict[str, Any] = {}
             result_token = _ACTIVE_FUNCTION_RESULTS.set(result_values)
+            paths_token = _ACTIVE_RESULT_PATHS.set(
+                _result_paths_by_alias(executable_actions)
+            )
             try:
-                await script.async_run(
+                run_result = await script.async_run(
                     {**match.slots, "request": {"slots": dict(match.slots)}},
                     context,
                 )
+                if run_result is not None and any(
+                    run_result.variables.get(marker) is False
+                    for marker in fatal_wait_markers
+                ):
+                    return RuleEvaluation(
+                        match,
+                        True,
+                        resolve_slot_values(action["failure_response"], match.slots),
+                        successful=False,
+                    )
             finally:
+                _ACTIVE_RESULT_PATHS.reset(paths_token)
                 _ACTIVE_FUNCTION_RESULTS.reset(result_token)
                 _ACTIVE_FUNCTION_EXECUTOR.reset(token)
                 await script.async_unload()
