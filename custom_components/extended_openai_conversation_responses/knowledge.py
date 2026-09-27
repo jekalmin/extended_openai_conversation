@@ -12,11 +12,11 @@ from typing import Any, Protocol, cast
 from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .persistence_hardening import _async_settle_transactional_save
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class KnowledgeStorage(Protocol):
         """Persist stored knowledge data."""
 
 
-class KnowledgeStore(Store[dict[str, Any]]):
+class KnowledgeStore(PropagatingWriteStore):
     """Versioned Home Assistant Store backend."""
 
     async def _async_migrate_func(

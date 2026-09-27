@@ -29,7 +29,6 @@ from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import condition as ha_condition, config_validation as cv
 from homeassistant.helpers.script import Script, async_validate_actions_config
-from homeassistant.helpers.storage import Store
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -63,6 +62,7 @@ from .request_rule_patterns import (
     sentence_capture_names,
     validate_match_input,
 )
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -287,7 +287,7 @@ class _MatchCursor:
         return result
 
 
-class RequestRuleStore(Store[dict[str, Any]]):
+class RequestRuleStore(PropagatingWriteStore):
     """Versioned private Home Assistant storage."""
 
     def __init__(self, hass: HomeAssistant, version: int, key: str) -> None:

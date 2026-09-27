@@ -65,6 +65,8 @@ from homeassistant.helpers import llm
 
 class Echo(llm.Tool):
     name = "echo"
+    # HA dev now requires the providing integration to identify its tools.
+    integration = "extended_openai_conversation_responses"
     description = "Echo the supplied value"
     parameters = vol.Schema({vol.Required("value"): str})
 
