@@ -1,0 +1,53 @@
+name: OpenAI SDK Compatibility
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 2"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  sdk-contract:
+    name: SDK wire contract / ${{ matrix.sdk }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [pinned, latest-2x-early-warning]
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/extended-openai-ci-stable:ha-stable
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout live develop
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: develop
+          persist-credentials: false
+      - name: Select SDK version for early warning
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.sdk }}" = "pinned" ]; then
+            SPEC="$(python -c 'import json; p=json.load(open("custom_components/extended_openai_conversation_responses/manifest.json")); print(next(x for x in p["requirements"] if x.startswith("openai==")))')"
+          else
+            # An experimental compatibility signal; it does not widen manifest support.
+            SPEC='openai>=2.45.0,<3'
+          fi
+          python -m pip install --upgrade "$SPEC"
+          python -m pip check
+          python -c 'import openai; print("OpenAI SDK under test:", openai.__version__)'
+      - name: Run focused real SDK wire contract
+        run: |
+          python -m pytest -q \
+            tests/test_openai_sdk_wire.py \
+            tests/test_openai_sdk_malformed_wire.py \
+            tests/test_openai_sdk_error_matrix.py \
+            tests/test_openai_sdk_catalog_matrix.py \
+            tests/test_openai_sdk_multicall_wire.py
