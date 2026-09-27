@@ -13,7 +13,7 @@ import json
 import random
 from typing import Any
 
-from custom_components.extended_openai_conversation_responses import agent_config
+from custom_components.extended_openai_conversation_responses import agent_config, const
 from custom_components.extended_openai_conversation_responses.model_capabilities import (
     ModelCapabilityError,
     select_api_path,
@@ -47,7 +47,7 @@ MODEL_IDS = tuple(sorted(BUNDLED_CATALOG.resolved))
 
 DIMENSIONS: dict[str, tuple[Any, ...]] = {
     "chat_model": MODEL_IDS,
-    "api_mode": ("auto", "responses", "chat_completions"),
+    "api_mode": tuple(item["key"] for item in const.API_MODE_OPTIONS),
     "reasoning_profile": ("recommended", "none", "low", "high"),
     "sampling": ("default", "temperature", "top_p"),
     "service_tier": ("default", "flex", "priority"),

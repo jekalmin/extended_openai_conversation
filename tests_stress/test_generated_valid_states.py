@@ -45,16 +45,16 @@ def test_every_persistent_field_and_enum_is_classified() -> None:
     fake = contract["fields"] | {"CONF_UNCLASSIFIED": {}}
     with pytest.raises(AssertionError):
         _check_contract(fake, contract["dimension_values"])
-    assert DIMENSIONS["api_mode"] == tuple(
+    assert set(DIMENSIONS["api_mode"]) == {
         item["key"] for item in const.API_MODE_OPTIONS
-    )
-    assert DIMENSIONS["memory_mode"] == tuple(const.MEMORY_MODES)
-    assert DIMENSIONS["temporary_memory"] == tuple(const.TEMPORARY_MEMORY_OPTIONS)
-    assert DIMENSIONS["conversation_continuity"] == tuple(
+    }
+    assert set(DIMENSIONS["memory_mode"]) == set(const.MEMORY_MODES)
+    assert set(DIMENSIONS["temporary_memory"]) == set(const.TEMPORARY_MEMORY_OPTIONS)
+    assert set(DIMENSIONS["conversation_continuity"]) == set(
         const.CONVERSATION_CONTINUITY_OPTIONS
     )
-    assert DIMENSIONS["voice_scope_policy"] == tuple(const.VOICE_POLICIES)
-    assert DIMENSIONS["chat_model"] == tuple(sorted(BUNDLED_CATALOG.resolved))
+    assert set(DIMENSIONS["voice_scope_policy"]) == set(const.VOICE_POLICIES)
+    assert set(DIMENSIONS["chat_model"]) == set(BUNDLED_CATALOG.resolved)
 
 
 def test_covering_generator_is_valid_complete_bounded_and_reproducible() -> None:

@@ -865,8 +865,8 @@
     ],
     "api_mode": [
       "auto",
-      "responses",
-      "chat_completions"
+      "chat_completions",
+      "responses"
     ],
     "reasoning_profile": [
       "recommended",
