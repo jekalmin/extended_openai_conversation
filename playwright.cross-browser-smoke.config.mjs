@@ -5,8 +5,8 @@ const python = process.platform === "win32" ? "python" : "python3";
 
 export default defineConfig({
   testDir: "./tests_browser",
-  testMatch: ["management-panel.spec.mjs", "management-crud.spec.mjs"],
-  grep: /renders the shipped Guide and responds to real browser interactions|general configuration survives a fresh panel load and a rejected save can be retried|persistent memories support create, reload, edit, and delete/,
+  testMatch: ["management-panel.spec.mjs", "management-crud.spec.mjs", "timezone-locale-boundaries.spec.mjs"],
+  grep: /renders the shipped Guide and responds to real browser interactions|general configuration survives a fresh panel load and a rejected save can be retried|persistent memories support create, reload, edit, and delete|Usage sends HA-local dates and renders the same instant in HA time|Quiet Hours saves a wall-clock time without browser timezone conversion/,
   fullyParallel: false,
   workers: 1,
   timeout: 30_000,

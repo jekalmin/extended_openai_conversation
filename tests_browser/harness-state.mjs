@@ -15,6 +15,7 @@ function freshState() {
       title: "Jarvis", revision: "fixture-7",
       config: {
         chat_model: "gpt-5-mini", api_mode: "responses", max_tokens: 1200, temporary_memory: "off",
+        web_search_context: "medium",
         max_function_calls_per_conversation: 8, function_tool_error_recovery: true,
         continue_conversation: "never",
         usage_request_retention_days: 30, usage_run_retention_days: 30,
@@ -25,6 +26,7 @@ function freshState() {
         api_mode: [{value: "responses", label: "Responses"}, {value: "chat_completions", label: "Chat Completions"}],
         continue_conversation: [{value: "never", label: "Never"}, {value: "always", label: "Always"}],
         reasoning_effort: [{value: "low", label: "Low"}, {value: "medium", label: "Medium"}, {value: "high", label: "High"}],
+        web_search_context: [{value: "low", label: "Low"}, {value: "medium", label: "Medium"}, {value: "high", label: "High"}],
         memory_retrieval_mode: [{value: "lexical", label: "Lightweight lexical"}, {value: "hybrid", label: "Hybrid semantic"}],
         usage_request_retention_days: [{value: 7, label: "7 days"}, {value: 30, label: "30 days"}],
         usage_run_retention_days: [{value: 7, label: "7 days"}, {value: 30, label: "30 days"}],
@@ -50,7 +52,7 @@ function load() {
   const state = freshState(); localStorage.setItem(KEY, JSON.stringify(state)); return state;
 }
 
-export function createStateBackend({partialOverview = false, failConfigurationOnce = false, seedConversations = false} = {}) {
+export function createStateBackend({partialOverview = false, failConfigurationOnce = false, seedConversations = false, seedUsageBoundary = false} = {}) {
   let state = load();
   const pendingToolYamls = new Map();
   const save = () => localStorage.setItem(KEY, JSON.stringify(state));
@@ -146,7 +148,9 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       }
       throw new Error(`Unsupported EOAI management overview detail kind: ${JSON.stringify(message.kind)}`);
     }
-    if (key === "usage/summary") return {today: {total_tokens: 1234}, month: {total_tokens: 5678}, lifetime: {total_tokens: 9999}};
+    if (key === "usage/summary") return seedUsageBoundary
+      ? {today: {date: "2026-03-30", total_tokens: 42}, month: {total_tokens: 42}, lifetime: {total_tokens: 42}}
+      : {today: {total_tokens: 1234}, month: {total_tokens: 5678}, lifetime: {total_tokens: 9999}};
     if (key === "diagnostics/test_agent") return {status: "passed", checks: [{name: "Model access", status: "passed", message: "Selected model is available"}]};
     if (key === "conversations/settings") return {archive_enabled: true, archive_retention_days: 30, archive_model_search_enabled: false};
     if (key === "knowledge/list") {
@@ -389,6 +393,13 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       state.conversations.active = remaining; save();
       return {ended: true};
     }
+    if (seedUsageBoundary && key === "usage/daily") {
+      const date = "2026-03-30";
+      return {days: message.start_date <= date && message.end_date >= date
+        ? [{date, total_tokens: 42, input_tokens: 30, output_tokens: 12, run_count: 1, api_request_count: 1}]
+        : []};
+    }
+    if (seedUsageBoundary && key === "usage/runs") return {runs: [{completed_at: "2026-03-29T23:30:00Z", total_tokens: 42, cached_input_tokens: 0, request_count: 1, duration_ms: 100, successful: true}]};
     const staticResponses = {"usage/daily": {days: []}, "usage/runs": {runs: []}, "usage/retention": {}};
     if (Object.hasOwn(staticResponses, key)) return clone(staticResponses[key]);
     throw new Error(`Unsupported EOAI management fixture request ${key}: ${JSON.stringify(message)}`);
