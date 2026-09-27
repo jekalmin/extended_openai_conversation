@@ -1,5 +1,5 @@
 import {expect, test} from "@playwright/test";
-import {acceptConfirmation, expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers.mjs";
+import {expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers.mjs";
 
 async function beforeUnloadIsBlocked(page) {
   return page.evaluate(() => {
@@ -47,7 +47,7 @@ test("dirty navigation survives subsection changes and clears when the draft ret
   await expectHarnessClean(page, pageErrors);
 });
 
-test("leaving dirty configuration can be cancelled without losing the draft or discarded without persisting it", async ({page}) => {
+test("internal navigation preserves a dirty configuration without a refetch", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(fixtureUrl("assistant/basics"));
 
@@ -60,28 +60,18 @@ test("leaving dirty configuration can be cancelled without losing the draft or d
   await expect(panel.getByText("Unsaved changes", {exact: true})).toBeVisible();
 
   await panel.locator('.top-nav button[data-page="overview"]').click();
-  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", true);
-  await expect(panel.locator("#confirm-title")).toHaveText("Discard unsaved changes?");
-  await panel.locator("#confirm-cancel").click();
-
-  await expect(page).toHaveURL(/\/extended-openai\/assistant\/basics$/);
-  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Unsaved navigation title");
-  await expect(panel.getByText("Unsaved changes", {exact: true})).toBeVisible();
-  expect(await page.evaluate(() => window.browserHarness.getState().configuration.title)).toBe("Jarvis");
-
-  await panel.locator('.top-nav button[data-page="overview"]').click();
-  await acceptConfirmation(panel);
   await expect(page).toHaveURL(/\/extended-openai\/overview$/);
+  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", false);
   expect(await page.evaluate(() => window.browserHarness.getState().configuration.title)).toBe("Jarvis");
 
   await panel.locator('.top-nav button[data-page="assistant"]').click();
   await expect(page).toHaveURL(/\/extended-openai\/assistant\/basics$/);
-  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Jarvis");
-  await expect(panel.getByText("Unsaved changes", {exact: true})).toHaveCount(0);
+  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Unsaved navigation title");
+  await expect(panel.getByText("Unsaved changes", {exact: true})).toBeVisible();
   expect(await page.evaluate(() => browserHarness.calls.filter(
     (call) => call.section === "configuration" && call.action === "get",
   ).length)).toBe(initialReads);
-  await expect(panel.locator('.top-nav button[data-page="assistant"]')).not.toHaveClass(/eoc-has-unsaved/);
+  await expect(panel.locator('.top-nav button[data-page="assistant"]')).toHaveClass(/eoc-has-unsaved/);
 
   await expectHarnessClean(page, pageErrors);
 });
@@ -89,6 +79,7 @@ test("leaving dirty configuration can be cancelled without losing the draft or d
 test("a clean Assistant snapshot is reusable after visiting Usage", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(fixtureUrl("assistant/basics"));
+  console.log(pageErrors);
   const panel = page.locator("extended-openai-management-panel");
   await expect(panel.locator('[data-config="__title"]')).toHaveValue("Jarvis");
   const initialReads = await page.evaluate(() => browserHarness.calls.filter(

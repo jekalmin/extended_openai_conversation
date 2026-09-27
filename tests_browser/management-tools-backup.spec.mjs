@@ -149,3 +149,36 @@ test("full backup and restore round-trips settings, memories, rules, tools, and 
 
   await expectHarnessClean(page, pageErrors);
 });
+
+test("restore warns about replacing an active configuration draft only when applying", async ({page}) => {
+  const errors = trackPageErrors(page);
+  await page.goto(fixtureUrl("usage-maintenance/backup-restore"));
+  const panel = page.locator("extended-openai-management-panel");
+  await panel.locator("#transfer-export-mode").selectOption("full");
+  const downloadPromise = page.waitForEvent("download");
+  await panel.locator("#create-backup-transfer").click();
+  const backupPath = await (await downloadPromise).path();
+  await panel.locator('.top-nav button[data-page="assistant"]').click();
+  await panel.locator('[data-config="__title"]').fill("Unsaved restore draft");
+  await panel.locator('.top-nav button[data-page="usage-maintenance"]').click();
+  await panel.locator("#local-section").selectOption("backup-restore", {force: true});
+  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", false);
+  await expect(panel.locator("#transfer-export-mode")).toBeEnabled();
+  await expect(panel.getByText("Exports use saved configuration.", {exact: false})).toBeVisible();
+  await panel.locator("#backup-file-transfer").setInputFiles(backupPath);
+  await expect(panel.locator("#restore-dialog")).toHaveJSProperty("open", true);
+  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", false);
+  await expect(panel.locator("#restore-transfer-apply")).toBeEnabled();
+  await panel.locator("#restore-transfer-apply").click();
+  await expect(panel.locator("#confirm-message")).toContainText("unsaved configuration changes will be replaced and lost");
+  await panel.locator("#confirm-cancel").click();
+  await expect(panel.locator("#restore-dialog")).toHaveJSProperty("open", true);
+  expect(await page.evaluate(() => browserHarness.calls.filter((call) => call.action === "import_restore").length)).toBe(0);
+  await panel.locator("#restore-transfer-apply").click();
+  await acceptConfirmation(panel);
+  await expect(panel.locator("#restore-dialog")).toHaveJSProperty("open", false);
+  await panel.locator('.top-nav button[data-page="assistant"]').click();
+  await expect(panel.locator('[data-config="__title"]')).toHaveValue("Jarvis");
+  await expect(panel.locator("#dirty-state")).toHaveCount(0);
+  await expectHarnessClean(page, errors);
+});

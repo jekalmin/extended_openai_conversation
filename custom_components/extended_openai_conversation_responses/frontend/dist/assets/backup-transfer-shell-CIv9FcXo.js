@@ -1,26 +1,13 @@
-export const TRANSFER_SECTIONS = Object.freeze([
-  ["configuration", "Agent configuration and Function Tools"],
-  ["request_rules", "Request Rules"],
-  ["persistent_memory", "Persistent memories"],
-  ["temporary_memory", "Active temporary memories"],
-  ["knowledge", "Knowledge sources"],
-  ["conversation_archive", "Conversation archive"],
-  ["usage", "Usage history"],
-  ["guest_mode", "Guest Mode schedule"],
-]);
-
-export function renderBackupTransferPanel(hasDraft = false) {
-  return `<section class="content-card backup-surface"><div class="card-heading"><div><h2>Export, Backup, Import & Restore</h2><p>Move reusable setup or durable agent data safely between agents and installations.</p></div></div>
+var e=Object.freeze([[`configuration`,`Agent configuration and Function Tools`],[`request_rules`,`Request Rules`],[`persistent_memory`,`Persistent memories`],[`temporary_memory`,`Active temporary memories`],[`knowledge`,`Knowledge sources`],[`conversation_archive`,`Conversation archive`],[`usage`,`Usage history`],[`guest_mode`,`Guest Mode schedule`]]);function t(t=!1){return`<section class="content-card backup-surface"><div class="card-heading"><div><h2>Export, Backup, Import & Restore</h2><p>Move reusable setup or durable agent data safely between agents and installations.</p></div></div>
     <div class="backup-panel transfer-panel" data-setting data-search="export backup import restore share setup custom memories knowledge usage archive request rules">
     <div class="subheading"><h3>Export / Backup</h3><p>Choose a shareable setup, a complete disaster-recovery backup, or only the sections you need.</p></div>
     <label class="setting"><span class="setting-copy"><strong>Export type</strong><small><strong>Shareable Setup</strong> includes reusable configuration, Function Tools and Request Rules but excludes private histories and real secret values. <strong>Full Backup</strong> includes all durable agent data. <strong>Custom</strong> lets you choose sections.</small></span><select id="transfer-export-mode"><option value="setup">Shareable Setup</option><option value="full">Full Backup</option><option value="custom">Custom</option></select></label>
-    <div id="transfer-custom-options" class="setting-group" hidden><div class="subheading"><h3>Custom backup sections</h3><p>Selected sections are self-contained replacement sections when imported later.</p></div><div class="group-function-choices">${TRANSFER_SECTIONS.map(([key, label]) => `<label class="group-function-choice"><input type="checkbox" class="transfer-custom-section" value="${key}" checked><span><strong>${label}</strong></span></label>`).join("")}</div></div>
+    <div id="transfer-custom-options" class="setting-group" hidden><div class="subheading"><h3>Custom backup sections</h3><p>Selected sections are self-contained replacement sections when imported later.</p></div><div class="group-function-choices">${e.map(([e,t])=>`<label class="group-function-choice"><input type="checkbox" class="transfer-custom-section" value="${e}" checked><span><strong>${t}</strong></span></label>`).join(``)}</div></div>
     <p class="privacy-warning"><strong>Privacy:</strong> Full and custom backups can contain private memories, Knowledge content, archived conversations and usage metadata. Secret-looking values in configuration and Request Rules are replaced by placeholders; review files before sharing them.</p>
     <div class="backup-actions"><button type="button" id="create-backup-transfer">Create export</button></div>
-    ${hasDraft ? "<small>Exports use saved configuration. Your unsaved changes are not included.</small>" : ""}
+    ${t?`<small>Exports use saved configuration. Your unsaved changes are not included.</small>`:``}
     <hr>
     <div class="subheading"><h3>Import / Restore</h3><p>Select any current or legacy Extended OpenAI setup export, custom backup or full backup. The file is validated before anything changes.</p></div>
     <div class="backup-actions"><button type="button" class="secondary" id="restore-backup-transfer">Choose file</button><input id="backup-file-transfer" type="file" accept="application/zip,.zip,application/json,.json" hidden></div>
     <small>For backups with multiple sections, you can restore everything or choose individual sections. Selected sections replace the destination section; they are never silently merged.</small>
-  </div></section>`;
-}
+  </div></section>`}export{t as n,e as t};

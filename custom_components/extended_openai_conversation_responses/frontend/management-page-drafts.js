@@ -1,6 +1,7 @@
 import {saveConfiguration} from "./management-actions.js";
 import {enhancementChanged} from "./management-enhancement-state.js";
 import {UnsavedState, clone, same, draftScope, saveBarMarkup} from "./unsaved-state.js";
+import {NAVIGATION} from "./frontend-navigation.js";
 
 const GUEST = "capabilities/guest-mode";
 const QUIET = "capabilities/quiet-hours";
@@ -15,9 +16,15 @@ export function pageCoordinator(panel) {
     get pending() { return Boolean(panel._configurationSaving); },
     save: () => saveConfiguration(panel, panel.shadowRoot?.querySelector("#save-config")),
     destinations: () => [...(panel._configurationDirtyDestinations?.() || [])],
-    owns: (destination) => Boolean(destination && panel._isDraftView?.(...destination.split("/"))
-      && !(panel._configData?.projection === "retention" && destination !== "usage-maintenance/retention")
-      && !panel._configDataStale),
+    // The selected agent owns this draft. A view change within the management
+    // frontend does not change that owner; null represents leaving the frontend
+    // or switching agents and must still pass the discard guard.
+    owns: (destination) => {
+      const [page, section] = destination?.split("/") || [];
+      const route = NAVIGATION.find((item) => item.id === page);
+      return Boolean(route && (!section || route.sections.some((item) => item.id === section))
+        && panel._draftAgentId === panel._agentId);
+    },
     discard: () => {
       if (panel._configData) {
         panel._draft = clone(panel._configData.config);

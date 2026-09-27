@@ -18,14 +18,16 @@ test("Backup paints before transfer code or configuration data loads", async ({p
   await expectHarnessClean(page, errors);
 });
 
-test("Backup keeps an existing unsaved configuration draft protected", async ({page}) => {
+test("Backup keeps an existing unsaved configuration draft while exporting saved data", async ({page}) => {
   const errors = trackPageErrors(page);
   await page.goto(fixtureUrl("assistant/basics"));
   const panel = page.locator("extended-openai-management-panel");
   await expect(panel.locator('[data-config="__title"]')).toBeVisible();
   await panel.locator('[data-config="__title"]').fill("Draft agent name");
   await panel.evaluate(host => host._navigate("usage-maintenance", "backup-restore"));
-  await expect(panel.locator("#create-backup-transfer")).toBeDisabled();
+  await expect(panel.locator("#create-backup-transfer")).toBeEnabled();
+  await expect(panel.getByText("Exports use saved configuration.", {exact: false})).toBeVisible();
+  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", false);
   await panel.evaluate(host => host._navigate("assistant", "basics"));
   await expect(panel.locator('[data-config="__title"]')).toHaveValue("Draft agent name");
   await expectHarnessClean(page, errors);
