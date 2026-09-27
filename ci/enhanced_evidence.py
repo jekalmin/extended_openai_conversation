@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 import hashlib
+from importlib.metadata import PackageNotFoundError, version
 import json
 import os
 from pathlib import Path
@@ -26,6 +26,26 @@ CANARIES = (
     "PRIVATE-KNOWLEDGE-CANARY-8274",
     "SENSITIVE-PROMPT-CANARY-8274",
 )
+
+
+def final_pytest_outcome(reports: dict[str, Any]) -> str:
+    """Classify a test only after pytest has reported its teardown phase."""
+    if not {"setup", "teardown"} <= reports.keys():
+        return "incomplete"
+    if any(report.failed for report in reports.values()):
+        return "failed"
+    if any(
+        report.skipped and hasattr(report, "wasxfail") for report in reports.values()
+    ):
+        return "xfailed"
+    if any(report.skipped for report in reports.values()):
+        return "skipped"
+    call = reports.get("call")
+    if call is None:
+        return "incomplete"
+    if hasattr(call, "wasxfail"):
+        return "xpassed"
+    return "passed" if call.passed else "incomplete"
 
 
 def evidence_filename(nodeid: str) -> str:
@@ -71,7 +91,7 @@ def envelope(**specific: Any) -> dict[str, Any]:
         sha = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
         ).strip()
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         sha = os.environ.get("GITHUB_SHA", "unknown")
     manifest = Path(
         "custom_components/extended_openai_conversation_responses/manifest.json"

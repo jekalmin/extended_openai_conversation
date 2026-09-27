@@ -14,7 +14,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ci.enhanced_evidence import envelope, evidence_filename, safe, write_json  # noqa: E402
+from ci.enhanced_evidence import (  # noqa: E402
+    envelope,
+    evidence_filename,
+    final_pytest_outcome,
+    safe,
+    write_json,
+)
 from tests_real_ha.conftest import real_ha_prerequisites  # noqa: F401,E402
 
 
@@ -22,8 +28,30 @@ from tests_real_ha.conftest import real_ha_prerequisites  # noqa: F401,E402
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     outcome = yield
     report = outcome.get_result()
-    if report.when == "call":
-        item._enhanced_call_report = report
+    if "stress_trace" not in item.fixturenames:
+        return
+    reports = getattr(item, "_enhanced_reports", {})
+    reports[report.when] = report
+    item._enhanced_reports = reports
+    if report.when != "teardown":
+        return
+    report_dir = Path(os.environ.get("STRESS_ARTIFACT_DIR", "stress-artifacts"))
+    failure = next((part for part in reports.values() if part.failed), None)
+    write_json(
+        report_dir / evidence_filename(item.nodeid),
+        {
+            **envelope(seed=getattr(item, "_enhanced_seed", None)),
+            "test": item.nodeid,
+            "outcome": final_pytest_outcome(reports),
+            "phase_outcomes": {phase: part.outcome for phase, part in reports.items()},
+            "duration_seconds": round(
+                monotonic() - getattr(item, "_enhanced_started", monotonic()), 3
+            ),
+            "failure": str(failure.longrepr).splitlines()[-1] if failure else None,
+            "health": getattr(item, "_enhanced_health", None),
+            "operations": getattr(item, "_enhanced_trace", []),
+        },
+    )
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -54,15 +82,13 @@ def stress_scale(pytestconfig: pytest.Config) -> int:
 @pytest.fixture
 def stress_trace(request: pytest.FixtureRequest, stress_seed: int) -> list[dict]:
     trace: list[dict] = []
-    started = monotonic()
+    request.node._enhanced_trace = trace
+    request.node._enhanced_seed = stress_seed
+    request.node._enhanced_started = monotonic()
     yield trace
-    report_dir = Path(os.environ.get("STRESS_ARTIFACT_DIR", "stress-artifacts"))
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report = getattr(request.node, "_enhanced_call_report", None)
     hass = request.node.funcargs.get("hass")
-    health = None
     if hass is not None:
-        health = {
+        request.node._enhanced_health = {
             "ha_state_count": len(hass.states.async_all()),
             "eoai_manager_counts": {
                 str(key): len(value)
@@ -72,20 +98,6 @@ def stress_trace(request: pytest.FixtureRequest, stress_seed: int) -> list[dict]
                 and isinstance(value, dict)
             },
         }
-    write_json(
-        report_dir / evidence_filename(request.node.nodeid),
-        {
-            **envelope(seed=stress_seed),
-            "test": request.node.nodeid,
-            "outcome": "failed" if report and report.failed else "passed",
-            "duration_seconds": round(monotonic() - started, 3),
-            "failure": str(report.longrepr).splitlines()[-1]
-            if report and report.failed
-            else None,
-            "health": health,
-            "operations": trace,
-        },
-    )
     print(
         f"STRESS TRACE seed={stress_seed} test={request.node.nodeid} operations={len(trace)}",
         flush=True,
