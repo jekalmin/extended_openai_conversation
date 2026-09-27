@@ -160,6 +160,7 @@ test("rule testing distinguishes safe preview from confirmed live execution", as
   await page.goto(fixtureUrl("capabilities/request-rules"));
   const panel = page.locator("extended-openai-management-panel");
   await expect(panel.getByRole("heading", {name: "Test rules"})).toBeVisible();
+  await expect(panel.locator("#rules-title")).toHaveText("Rules (1)");
   await expect(panel.locator("#rule-match-tester .notice")).toHaveCount(0);
   await expect(panel.locator("#rule-match-test-text")).toHaveAttribute("maxlength", "2048");
   await panel.locator("#rule-match-test-text").fill("baseline route");
@@ -171,6 +172,7 @@ test("rule testing distinguishes safe preview from confirmed live execution", as
   await live.locator("summary").click();
   await expect(live.locator(".eoc-live-label")).toHaveText("Live · real effects possible");
   await live.locator("#eoc-rule-live-text").fill("baseline route");
+  await expect(live.locator("#eoc-rule-live-text")).toHaveValue("baseline route");
   await live.locator("#eoc-rule-live-run").click();
   await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", true);
   await panel.locator("#confirm-cancel").click();
