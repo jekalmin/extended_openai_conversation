@@ -146,7 +146,8 @@ async def _run_one(client: AsyncOpenAI, case: Canary) -> None:
     options: dict[str, Any] = {
         "chat_model": case.model,
         "api_mode": case.api,
-        "max_tokens": 128,
+        # Reasoning tokens share this ceiling with visible text and tool output.
+        "max_tokens": 512 if case.name in {"responses_stream", "web_search"} else 128,
     }
     if case.effort is not None:
         options["reasoning_effort"] = case.effort
