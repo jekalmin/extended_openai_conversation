@@ -174,6 +174,10 @@ async def test_every_current_model_emits_only_catalogue_allowed_sdk_fields(
     """A bounded complete model set covers explicit, Auto, tools, and sampling."""
     metadata = BUNDLED_CATALOG.resolved[model]
     projection = frontend_capabilities(model)
+    assert projection["reasoning_effort_options"] == metadata["reasoning"]["efforts"]
+    assert projection["temperature"] == metadata["temperature"]
+    assert projection["top_p"] == metadata["top_p"]
+    assert projection["service_tier_options"] == metadata["service_tiers"]
     for case in _cases(metadata):
         label = (model, case)
         expected_api = _ui_path(projection, case)

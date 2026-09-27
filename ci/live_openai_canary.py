@@ -120,18 +120,21 @@ def _failure_class(error: BaseException) -> str:
     status = getattr(error, "status_code", None)
     if status in {400, 422}:
         return "contract_drift"
-    if status in {401, 403, 404}:
-        return "account_or_model_access"
+    if status in {401, 403}:
+        return "account_access"
+    if status == 404:
+        return "model_access_or_catalog_drift"
     if status in {408, 409, 429} or (isinstance(status, int) and status >= 500):
         return "provider_or_rate_limit"
     return "transport_or_provider"
 
 
-def _safe_failure(name: str, error: BaseException) -> dict[str, Any]:
+def _safe_failure(name: str, model: str, error: BaseException) -> dict[str, Any]:
     """Store no provider body, prompt, response text, URL, or credential."""
     status = getattr(error, "status_code", None)
     return {
         "name": name,
+        "model": model,
         "outcome": "failed",
         "failure_class": _failure_class(error),
         "error_type": type(error).__name__,
@@ -236,9 +239,11 @@ async def run(
             try:
                 await _run_one(client, case)
             except Exception as error:
-                results.append(_safe_failure(case.name, error))
+                results.append(_safe_failure(case.name, case.model, error))
             else:
-                results.append({"name": case.name, "outcome": "passed"})
+                results.append(
+                    {"name": case.name, "model": case.model, "outcome": "passed"}
+                )
     classifications = {item.get("failure_class") for item in results}
     return results, (
         1
