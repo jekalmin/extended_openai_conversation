@@ -104,7 +104,7 @@ async def test_replayed_management_mutations_do_not_double_apply(
         action="update",
         **config_payload,
     )
-    assert first["valid"] is True
+    assert first["title"] == "Replay winner"
     replay = await _management_response(
         client,
         entry=entry,

@@ -198,15 +198,10 @@ async def test_function_repair_save_one_replaces_only_selected_invalid_tool(
     )
     assert saved["revision"] != before["revision"]
     assert config_entries.updates == 1
-    after = await async_function_repair(
-        hass,
-        "admin",
-        True,
-        {"action": "get", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id},
-    )
-    assert after["tools"][0] == valid_tool
-    assert after["tools"][1]["spec"]["name"] == "repaired_tool"
-    assert after["invalid_tools"] == []
+    persisted_tools, issue = function_tools_issue(dict(subentry.data))
+    assert issue is None
+    assert persisted_tools[0] == valid_tool
+    assert persisted_tools[1]["spec"]["name"] == "repaired_tool"
 
 
 @pytest.mark.asyncio
