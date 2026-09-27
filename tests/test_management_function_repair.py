@@ -9,8 +9,6 @@ from typing import Any
 import pytest
 import yaml
 
-from homeassistant.exceptions import HomeAssistantError
-
 from custom_components.extended_openai_conversation_responses import management_ui
 from custom_components.extended_openai_conversation_responses.agent_config import (
     agent_config_defaults,
@@ -24,6 +22,7 @@ from custom_components.extended_openai_conversation_responses.management_functio
     function_tools_issue,
     isolated_function_tools,
 )
+from homeassistant.exceptions import HomeAssistantError
 
 
 class _FakeConfigEntries:
@@ -161,6 +160,89 @@ async def test_function_repair_get_returns_only_invalid_tool_metadata(
     assert len(repair["invalid_tools"]) == 1
     assert repair["invalid_tools"][0]["index"] == 1
     assert repair["invalid_tools"][0]["tool"] == mixed[1]
+
+
+@pytest.mark.asyncio
+async def test_function_repair_save_one_replaces_only_selected_invalid_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A one-tool repair persists while the valid sibling stays intact."""
+    data, _mixed, valid_tool = _mixed_legacy_tool_data()
+    entry, subentry = _entry_and_subentry(data)
+    config_entries = _FakeConfigEntries()
+    hass = SimpleNamespace(data={}, config_entries=config_entries)
+    monkeypatch.setattr(
+        management_ui, "entry_and_agent", lambda *_args, **_kwargs: (entry, subentry)
+    )
+    before = await async_function_repair(
+        hass,
+        "admin",
+        True,
+        {"action": "get", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id},
+    )
+    replacement = deepcopy(valid_tool)
+    replacement["spec"]["name"] = "repaired_tool"
+
+    saved = await async_function_repair(
+        hass,
+        "admin",
+        True,
+        {
+            "action": "save_one",
+            "entry_id": entry.entry_id,
+            "subentry_id": subentry.subentry_id,
+            "revision": before["revision"],
+            "index": 1,
+            "tool": replacement,
+        },
+    )
+    assert saved["revision"] != before["revision"]
+    assert config_entries.updates == 1
+    after = await async_function_repair(
+        hass,
+        "admin",
+        True,
+        {"action": "get", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id},
+    )
+    assert after["tools"][0] == valid_tool
+    assert after["tools"][1]["spec"]["name"] == "repaired_tool"
+    assert after["invalid_tools"] == []
+
+
+@pytest.mark.asyncio
+async def test_function_repair_save_replaces_invalid_collection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole-field repair publishes a valid replacement and new revision."""
+    data, _mixed, valid_tool = _mixed_legacy_tool_data()
+    entry, subentry = _entry_and_subentry(data)
+    config_entries = _FakeConfigEntries()
+    hass = SimpleNamespace(data={}, config_entries=config_entries)
+    monkeypatch.setattr(
+        management_ui, "entry_and_agent", lambda *_args, **_kwargs: (entry, subentry)
+    )
+    before = await async_function_repair(
+        hass,
+        "admin",
+        True,
+        {"action": "get", "entry_id": entry.entry_id, "subentry_id": subentry.subentry_id},
+    )
+    saved = await async_function_repair(
+        hass,
+        "admin",
+        True,
+        {
+            "action": "save",
+            "entry_id": entry.entry_id,
+            "subentry_id": subentry.subentry_id,
+            "revision": before["revision"],
+            "tools": [valid_tool],
+        },
+    )
+    assert saved["valid"] is True
+    assert saved["revision"] != before["revision"]
+    assert config_entries.updates == 1
+    assert function_tools_issue(dict(subentry.data))[1] is None
 
 
 @pytest.mark.asyncio
