@@ -482,7 +482,7 @@ jobs:
           STRESS_ARTIFACT_DIR: stress-artifacts
         run: |
           set +e
-          pytest tests_stress/test_lifecycle_matrix.py \
+          pytest tests_stress/test_lifecycle_matrix.py tests_real_ha/test_public_version_journeys.py \
             -v -s --asyncio-mode=auto --timeout=600 \
             --stress-seed="$STRESS_SEED" --stress-intensity=normal \
             --show-capture=no --tb=short > enhanced-raw.log 2>&1
