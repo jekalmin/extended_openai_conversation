@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -20,10 +21,10 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout develop
+      - name: Checkout exact release source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: develop
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -47,9 +48,11 @@ jobs:
               raise SystemExit(f"Release version must use X.Y.Z format, got {target!r}")
           if not pattern.fullmatch(current):
               raise SystemExit(f"Current tracked version is not X.Y.Z: {current!r}")
-          if tuple(map(int, target.split("."))) < tuple(map(int, current.split("."))):
+          if target != current:
               raise SystemExit(
-                  f"Release version {target} cannot be older than tracked version {current}"
+                  f"Release version {target} must match tracked source version "
+                  f"{current}. Commit the version bump to develop and "
+                  "certify that exact commit before publishing."
               )
           PY
           echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
@@ -97,13 +100,18 @@ jobs:
 
       - name: Capture checked-out source commit
         id: source
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Stage target version
         run: |
-          python scripts/set_release_version.py "${{ steps.version.outputs.version }}"
-          python scripts/set_release_version.py --check
-          git diff --check
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          test "$SOURCE_SHA" = "${{ github.sha }}"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact-source certification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          python ci/release_certification.py \
+            --repository "${{ github.repository }}" --sha "$SOURCE_SHA"
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -276,31 +284,11 @@ jobs:
             exit 1
           fi
 
-      - name: Commit release version if needed
-        id: release_commit
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            custom_components/extended_openai_conversation_responses/manifest.json \
-            custom_components/extended_openai_conversation_responses/frontend_version.py
-          if git diff --cached --quiet; then
-            echo "Version $VERSION is already staged in tracked release metadata; releasing the checked-out commit."
-            echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-          else
-            git commit -m "chore: bump version to $VERSION"
-            git push origin HEAD:develop
-            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          RELEASE_SHA: ${{ steps.release_commit.outputs.sha }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           gh release create "$VERSION" \
             --target "$RELEASE_SHA" \

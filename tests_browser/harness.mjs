@@ -5,6 +5,7 @@ const params = new URLSearchParams(location.search);
 const route = params.get("route") || "guide";
 const isAdmin = params.get("admin") !== "0";
 const predefine = params.get("predefine") === "1";
+const agentCount = Math.max(1, Math.min(100, Number.parseInt(params.get("agents") || "1", 10) || 1));
 const backend = createStateBackend({partialOverview: params.get("partial") === "1", failConfigurationOnce: params.get("fail_config_once") === "1"});
 const backupTransfer = createBackupTransferBackend(backend);
 const managementType = "extended_openai_conversation_responses/management";
@@ -17,7 +18,12 @@ const hass = {
   config: {time_zone: "Europe/Dublin"},
   callWS: async (message) => {
     calls.push(structuredClone(message));
-    if (message.type === managementType && message.action === "agents" && !message.section) return {is_admin: isAdmin, agents: [backend.agent()], scopes: backend.scopes()};
+    if (message.type === managementType && message.action === "agents" && !message.section) {
+      const primary = backend.agent();
+      return {is_admin: isAdmin, agents: Array.from({length:agentCount}, (_, index) => index === 0 ? primary : {
+        ...primary, entry_id:`scale-entry-${index}`, subentry_id:`scale-agent-${index}`, title:`Scale agent ${index}`,
+      }), scopes: backend.scopes()};
+    }
     if (message.type === backupTransferType) return backupTransfer(message);
     if (message.type === broadcastType && message.action === "snapshot") return {enabled: false, can_manage: isAdmin, catalog: {satellites: [], areas: []}, history: []};
     if (message.type !== managementType) return {};

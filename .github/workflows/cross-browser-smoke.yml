@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "41 3 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - develop
   pull_request:
     paths:
       - "playwright.cross-browser-smoke.config.mjs"
