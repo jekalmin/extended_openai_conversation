@@ -6,6 +6,8 @@ import asyncio
 from copy import deepcopy
 from typing import Any
 
+import pytest
+
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     CONF_API_MODE,
@@ -548,3 +550,58 @@ async def test_provider_exposed_tool_edit_rejects_stale_call_before_execution(
     assert result.response.error_code is not None
     assert executed == []
     assert len(wire.requests) == 1
+
+
+@pytest.mark.parametrize("mutation", ["detached", "loading_mode", "delete_recreate"])
+async def test_provider_tool_call_rejects_changed_group_binding(
+    hass: HomeAssistant, monkeypatch: Any, mutation: str
+) -> None:
+    """An advertised group tool cannot bind to a later group generation."""
+    original_group = {**_group([_TOOL_NAME]), "loading_mode": "always"}
+    entry = _make_entry(
+        f"Group binding {mutation}",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [_tool(_TOOL_NAME, "Stable implementation")],
+            CONF_FUNCTION_GROUPS: [original_group],
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    executed: list[dict[str, Any]] = []
+    original_execute = agent._execute_function_tool
+
+    async def record_execute(function_tool, *args):
+        executed.append(deepcopy(function_tool))
+        return await original_execute(function_tool, *args)
+
+    monkeypatch.setattr(agent, "_execute_function_tool", record_execute)
+    _agent, wire, task = await _run_gated_tool_turn(
+        hass,
+        monkeypatch,
+        agent,
+        [_chat_sse_tool_call(f"call-group-{mutation}", _TOOL_NAME, {})],
+    )
+    original = deepcopy(dict(agent.subentry.data))
+    if mutation == "detached":
+        changed = {**original, CONF_FUNCTION_GROUPS: []}
+        hass.config_entries.async_update_subentry(entry, agent.subentry, data=changed)
+    elif mutation == "loading_mode":
+        group = {**original_group, "loading_mode": "on_demand"}
+        changed = {**original, CONF_FUNCTION_GROUPS: [group]}
+        hass.config_entries.async_update_subentry(entry, agent.subentry, data=changed)
+    else:
+        changed = {**original, CONF_FUNCTION_GROUPS: []}
+        hass.config_entries.async_update_subentry(entry, agent.subentry, data=changed)
+        hass.config_entries.async_update_subentry(entry, agent.subentry, data=original)
+        assert dict(agent.subentry.data) == original
+    wire.release_reply.set()
+    result = await task
+    assert result.response.error_code is not None
+    assert executed == []
+    assert len(wire.requests) == 1
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_unload(entry.entry_id)
