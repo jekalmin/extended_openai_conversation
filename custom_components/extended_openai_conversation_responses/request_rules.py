@@ -2581,7 +2581,13 @@ async def _async_evaluate_matched_rule(
                 _ACTIVE_RESULT_PATHS.reset(paths_token)
                 _ACTIVE_FUNCTION_RESULTS.reset(result_token)
                 _ACTIVE_FUNCTION_EXECUTOR.reset(token)
-                await script.async_unload()
+                # Script.async_unload was added after our minimum supported HA.
+                # Older Script releases expose async_stop for the same final
+                # run cleanup; keep using async_unload where it is available.
+                if unload := getattr(script, "async_unload", None):
+                    await unload()
+                else:
+                    await script.async_stop()
         except GuestModeDenied:
             return RuleEvaluation(match, True, GUEST_MODE_UNAVAILABLE, successful=False)
         except Exception:

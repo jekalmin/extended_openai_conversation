@@ -117,6 +117,58 @@ jobs:
           echo "Home Assistant Core dev commit: $HA_CORE_SHA"
           echo "Home Assistant Python version: $PYTHON_VERSION"
 
+  public-journeys:
+    name: Public journeys (HA ${{ matrix.ha-version }})
+    runs-on: ubuntu-latest
+    needs: [classify, prepare]
+    if: needs.classify.outputs.backend == 'true'
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        ha-version: [oldest, stable, dev]
+    steps:
+      - name: Checkout exact EOAI PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Set up Python required by selected HA
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.ha-version == 'dev' && needs.prepare.outputs.python-version || '3.14' }}
+          allow-prereleases: true
+      - name: Install selected Home Assistant and test dependencies
+        env:
+          HA_POINT: ${{ matrix.ha-version }}
+          HA_DEV_SHA: ${{ needs.prepare.outputs.ha-core-sha }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements_test.txt
+          if [[ "$HA_POINT" == oldest ]]; then
+            MINIMUM="$(python -c 'import json; print(json.load(open("hacs.json"))["homeassistant"])')"
+            python -m pip install 'pytest-homeassistant-custom-component==0.13.317'
+            python -m pip install --pre "homeassistant==$MINIMUM"
+          elif [[ "$HA_POINT" == stable ]]; then
+            python -m pip install --upgrade homeassistant
+          else
+            python -m pip install "git+https://github.com/home-assistant/core.git@$HA_DEV_SHA"
+          fi
+          python ci/install_ha_dependencies.py --manifest custom_components/extended_openai_conversation_responses/manifest.json
+          # The HA fixture package pins the current stable Core and SQLAlchemy.
+          # The oldest and dev points intentionally replace those pins, as in
+          # Enhanced nightly's existing HA lifecycle matrix.
+          if [[ "$HA_POINT" == stable ]]; then python -m pip check; fi
+      - name: Report exact compatibility points
+        env:
+          HA_POINT: ${{ matrix.ha-version }}
+        run: |
+          echo "EOAI_SHA=$(git rev-parse HEAD)"
+          python -c 'from importlib.metadata import version; print("HA_POINT=" + __import__("os").environ["HA_POINT"] + " HA_VERSION=" + version("homeassistant"))'
+      - name: Run compact public journey contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest tests_real_ha/test_public_version_journeys.py -v --asyncio-mode=auto --timeout=600 --tb=short
+
   stable:
     name: Genuine Home Assistant lifecycle (stable / ${{ matrix.shard }})
     runs-on: ubuntu-latest
