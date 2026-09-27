@@ -34,7 +34,7 @@ test("Web search and retention use contextual page introductions without repeati
   await expect(panel.locator("#config-capabilities .config-section-heading")).toHaveCount(0);
   await page.goto(fixtureUrl("usage-maintenance/retention"));
   await expect(panel.locator("[data-eoc-main] > .page-intro").getByRole("heading", {name:"Usage data retention"})).toBeVisible();
-  await expect(panel.locator("#config-retention .config-section-heading").getByRole("heading", {name:"Retention periods"})).toBeVisible();
+  await expect(panel.locator("#config-retention .card-heading").getByRole("heading", {name:"Retention periods"})).toBeVisible();
   await expectHarnessClean(page, errors);
 });
 

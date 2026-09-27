@@ -15,6 +15,7 @@ import {bindSingleRequestSave, bindFrontendCorrectness, normalizeGuestModeTimest
 import {loadAgentsWithOverviewPrefetch, loadRoute, bindRequestRuleSearch, applyRequestRuleSearch, warmRouteAsset, prefetchIntentRead, consumeIntentRead, consumeStoredConfigurationPrefetch, discardStoredConfigurationPrefetch, markConfigurationRead, measureConfigurationRead} from "./management-route.js";
 import {getConfigurationEditor, getConfigurationTools, getRouteFeature, routeAssetKind, routeFeaturesReady, isRestrictedManagementView, nonAdminOverviewKnowledgeSnapshot} from "./management-route.js";
 import {NAVIGATION, pageMetadata, routeFromPath, routePath} from "./frontend-navigation.js";
+import {clone, same} from "./unsaved-state.js";
 import {bindGuide, renderGuide} from "./guide-page.js";
 import {bindOverview, renderOverview, enhanceOverviewHealthClarity} from "./overview-page.js";
 import {formatUsageNumber} from "./usage-format.js";
@@ -520,9 +521,6 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     if (!await confirmStateSafeNavigation(this, destination)) {
       history.pushState({}, "", routePath(this._page, this._subsection));
       return;
-    }
-    if (this._isDraftView() && !this._isDraftView(route.page, route.section)) {
-      this._clearConfigDraft();
     }
     this._page = route.page;
     this._subsection = route.section;
@@ -1312,16 +1310,25 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       if (agentId !== this._agentId || loadToken !== this._loadToken || cacheGeneration !== this._cacheGeneration || view !== this._viewKey()) return;
       // A user can edit the visible draft while an earlier configuration read
       // is in flight. The read is no longer allowed to replace that draft.
-      if (this._configDirty && this._draftAgentId === agentId) return;
+      const retainedRetentionDraft = this._configDirty && this._draftAgentId === agentId
+        && this._configData?.projection === "retention" && projection === "full"
+        ? {draft: this._draft, baseline: this._configData.config} : null;
+      if (this._configDirty && this._draftAgentId === agentId && !retainedRetentionDraft) return;
       const prior = key ? this._cleanConfigSnapshots.get(key)?.result : null;
       if (prior && prior.revision !== configData.revision) this._invalidateCleanConfiguration(agentId);
       this._configData = configData;
       this._configDataStale = false;
       if (!cached) this._rememberCleanConfiguration(configData, agentId);
       this._draft = JSON.parse(JSON.stringify(configData.config));
+      if (retainedRetentionDraft) {
+        for (const [field, value] of Object.entries(retainedRetentionDraft.draft)) {
+          if (!same(value, retainedRetentionDraft.baseline[field])) this._draft[field] = clone(value);
+        }
+      }
       this._draftTitle = configData.title;
       this._draftAgentId = agentId;
       this._setConfigDirty(false);
+      if (retainedRetentionDraft) this._syncConfigDirty();
     } else {
       diagnostics.draft = {source: "active-config", action: this._viewKey() === "usage-maintenance/retention" ? "retention_get" : "get", sentAction: null};
       markConfigurationRead("draft-source", {view: this._viewKey(), action: diagnostics.draft.action, source: "active-config"});
@@ -1342,9 +1349,6 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     return trackAsync(this, NAVIGATION_MARK_PREFIX, async () => {
       const metadata = pageMetadata(page);
       const resolvedSubsection = subsection || this._visibleSubsections(page)[0]?.id || metadata.sections[0]?.id || null;
-      if (this._isDraftView() && !this._isDraftView(page, resolvedSubsection)) {
-        this._clearConfigDraft();
-      }
       this._page = page;
       this._subsection = resolvedSubsection;
       this._query = "";

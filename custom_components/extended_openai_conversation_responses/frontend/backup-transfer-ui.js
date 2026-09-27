@@ -329,7 +329,6 @@ export function bindBackupTransfer(panel, summaryFormatter = () => []) {
   syncExportMode();
 
   root.querySelector(`#${CREATE_ID}`)?.addEventListener("click", async () => {
-    if (panel._configDirty) return;
     const button = root.querySelector(`#${CREATE_ID}`);
     const mode = exportMode?.value || "setup";
     const sections = selectedValues(root, ".transfer-custom-section");
@@ -404,9 +403,10 @@ export function bindBackupTransfer(panel, summaryFormatter = () => []) {
     const serverPreviewToken = panel._backupTransferPreviewToken;
     if (!serverPreviewToken) return;
     if (typeof panel._confirm === "function") {
+      const losesDraft = panel._configDirty && panel._draftAgentId === panel._agentId && sections.includes("configuration");
       const confirmed = await panel._confirm(
         "Restore selected sections?",
-        `This will replace, not merge, the following sections on the current agent: ${labels}.`,
+        `This will replace, not merge, the following sections on the current agent: ${labels}.${losesDraft ? " Your unsaved configuration changes will be replaced and lost." : ""}`,
         "Restore",
       );
       if (!confirmed) return;
@@ -421,7 +421,7 @@ export function bindBackupTransfer(panel, summaryFormatter = () => []) {
       panel._backupTransferPreview = null;
       panel._backupTransferPreviewToken = null;
       root.querySelector("#restore-dialog").close();
-      panel._clearConfigDraft();
+      if (sections.includes("configuration")) panel._clearConfigDraft();
       await panel._loadAgents(panel._agentId);
       panel._toast("Selected sections restored");
     } catch (err) {
