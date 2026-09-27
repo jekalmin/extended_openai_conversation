@@ -253,8 +253,8 @@ class CoveringSuite:
 def generate(seed: int, *, heavy: bool, budget: int | None = None) -> CoveringSuite:
     """Construct one valid witness per feasible obligation, then greedily cover.
 
-    Feasibility is decided by EOAI normalization and API selection.  For each
-    partial assignment, seeded and default-biased completions find a witness;
+    Feasibility is decided by EOAI normalization and request construction. The
+    capability-interaction core is exhausted for every pair/triple obligation;
     infeasible partials are counted by production error, never a mirrored rule.
     """
     rng = random.Random(seed)
@@ -267,11 +267,15 @@ def generate(seed: int, *, heavy: bool, budget: int | None = None) -> CoveringSu
     # Every remaining field has an independent normalized representation, so this
     # supplies a witness for each feasible pair/triple without heuristic retries.
     capability_states = []
+    capability_rejected = []
     for values in product(*(DIMENSIONS[key] for key in CAPABILITY_KEYS)):
         cap = dict(zip(CAPABILITY_KEYS, values, strict=True))
         state = default | cap
-        if _valid(state)[0]:
+        valid, reason = _valid(state)
+        if valid:
             capability_states.append(cap)
+        else:
+            capability_rejected.append((cap, reason))
     rng.shuffle(capability_states)
     for keys in keys_to_cover:
         for values in product(*(DIMENSIONS[key] for key in keys)):
@@ -280,18 +284,30 @@ def generate(seed: int, *, heavy: bool, budget: int | None = None) -> CoveringSu
                 continue
             fixed = dict(obligation)
             witness = None
+            rejected_reason = None
             for cap in capability_states:
                 if any(fixed[key] != cap[key] for key in keys if key in cap):
                     continue
                 state = default | cap | fixed
-                if _valid(state)[0]:
+                valid, reason = _valid(state)
+                if valid:
                     witness = state
                     break
+                rejected_reason = reason
             if witness is not None:
                 required.add(obligation)
                 candidates[json.dumps(witness, sort_keys=True)] = witness
             else:
-                reason = "no production-valid capability completion"
+                if rejected_reason is None:
+                    rejected_reason = next(
+                        (
+                            reason
+                            for cap, reason in capability_rejected
+                            if all(fixed[key] == cap[key] for key in keys if key in cap)
+                        ),
+                        "no production-valid capability completion",
+                    )
+                reason = rejected_reason
                 excluded[reason] = excluded.get(reason, 0) + 1
             # An obligation with no capability witness is genuinely excluded by
             # production config/request validation (within these dimensions).

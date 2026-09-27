@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from time import monotonic
+
+import httpx
 
 from custom_components.extended_openai_conversation_responses import (
     agent_config,
@@ -29,6 +32,7 @@ from tests_real_ha.test_management_backend_acceptance import (
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
     _install_wire,
+    _raw_client,
     _responses_sse_text,
 )
 from tests_stress.conftest import record
@@ -87,6 +91,33 @@ async def _converse(hass: HomeAssistant, entry, monkeypatch, api: str, model: st
     else:
         scripted = (200, _completed_payload(api, model))
     wire = _install_wire(monkeypatch, agent, [scripted])
+    conversation_send = wire.send
+
+    async def send(request: httpx.Request, *args, **kwargs):
+        if request.url.path == "/v1/embeddings":
+            body = json.loads(request.content)
+            inputs = body["input"]
+            if isinstance(inputs, str):
+                inputs = [inputs]
+            return httpx.Response(
+                200,
+                json={
+                    "object": "list",
+                    "model": body["model"],
+                    "data": [
+                        {"object": "embedding", "index": index, "embedding": [0.5] * 8}
+                        for index, _ in enumerate(inputs)
+                    ],
+                    "usage": {
+                        "prompt_tokens": len(inputs),
+                        "total_tokens": len(inputs),
+                    },
+                },
+                request=request,
+            )
+        return await conversation_send(request, *args, **kwargs)
+
+    monkeypatch.setattr(_raw_client(agent)._client, "send", send)
     result = await conversation.async_converse(
         hass=hass,
         text="Generated coverage prompt",
@@ -95,7 +126,10 @@ async def _converse(hass: HomeAssistant, entry, monkeypatch, api: str, model: st
         language="en",
         agent_id=entry.entry_id,
     )
-    assert result.response.error_code is None, result.response
+    assert result.response.error_code is None, (
+        result.response.error_code,
+        [request["path"] for request in wire.requests],
+    )
     assert result.response.as_dict()["speech"]["plain"]["speech"] == "Coverage reply"
     assert len(wire.requests) == 1
     return wire.requests[0]
