@@ -729,15 +729,22 @@ async def test_function_result_capture_feeds_later_step_and_response(
             self.sequence = sequence
 
         async def async_run(self, _variables, _context=None):
-            step = self.sequence[0]
-            if step["action"] == f"{DOMAIN}.{SERVICE_CALL_FUNCTION}":
-                await async_call_active_function(
-                    step["data"]["function"],
-                    step["data"]["arguments"],
-                    step["data"].get("result_alias"),
-                )
-            else:
-                calls.append(step["data"]["message"])
+            variables = dict(_variables)
+            for step in self.sequence:
+                if step.get("action") == f"{DOMAIN}.{SERVICE_CALL_FUNCTION}":
+                    await async_call_active_function(
+                        step["data"]["function"],
+                        step["data"]["arguments"],
+                        step["data"].get("result_alias"),
+                    )
+                    variables.update(module._ACTIVE_FUNCTION_RESULTS.get())
+                elif "data" in step and "message" in step["data"]:
+                    message = step["data"]["message"]
+                    calls.append(
+                        message.async_render(variables, parse_result=False)
+                        if hasattr(message, "async_render")
+                        else message
+                    )
 
         async def async_unload(self):
             pass

@@ -194,7 +194,14 @@ test("server-rejected general configuration save remains dirty and retries witho
 
   let panel = page.locator("extended-openai-management-panel");
   const title = panel.locator('[data-config="__title"]');
+  await expect.poll(() => page.evaluate(() => {
+    const current = document.querySelector("extended-openai-management-panel");
+    return Boolean(current?._configData?.config && current?._draft
+      && current?._draftAgentId === current?._agentId && !current?._busy);
+  })).toBe(true);
+  await expect(title).toHaveValue("Jarvis");
   await title.fill("Retry-safe agent title");
+  await expect(title).toHaveValue("Retry-safe agent title");
   await expect(panel.getByText("Unsaved changes", {exact: true})).toBeVisible();
   await panel.getByRole("button", {name: "Save changes", exact: true}).click();
 
