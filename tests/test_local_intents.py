@@ -589,3 +589,52 @@ async def test_resolved_targeted_broadcast_short_circuits_ha_intent_engine(
     assert result.intent_name == "ExtendedBroadcast"
     assert result.response is response
     assert handle_calls == 0
+
+
+def test_conversation_entity_resolution_returns_none_when_no_agent_matches(
+    hass, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = object()
+    monkeypatch.setattr(local_intents.er, "async_get", lambda _hass: registry)
+    monkeypatch.setattr(
+        local_intents.er,
+        "async_entries_for_config_entry",
+        lambda _registry, _entry_id: [
+            SimpleNamespace(
+                config_subentry_id="other",
+                domain="conversation",
+                entity_id="conversation.other",
+            ),
+            SimpleNamespace(
+                config_subentry_id="agent",
+                domain="sensor",
+                entity_id="sensor.agent",
+            ),
+        ],
+    )
+
+    assert local_intents._conversation_entity_id(hass, "entry", "agent") is None
+
+
+def test_local_handling_snapshot_tolerates_lightweight_hass_standin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken_catalog(_hass, _configured):
+        raise TypeError("not a real HomeAssistant registry key")
+
+    monkeypatch.setattr(local_intents, "registered_intent_catalog", broken_catalog)
+
+    snapshot = local_intents.local_handling_snapshot(
+        SimpleNamespace(),
+        "entry",
+        "agent",
+        ["HassTurnOn", "", "HassFutureIntent"],
+    )
+
+    assert snapshot["pipeline_conflicts"] == []
+    assert [item["intent"] for item in snapshot["intents"]] == [
+        "HassFutureIntent",
+        "HassTurnOn",
+    ]
+    assert all(item["available"] is False for item in snapshot["intents"])
+    assert isinstance(snapshot["supported"], bool)

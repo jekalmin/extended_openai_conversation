@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from openai import OpenAIError
+import httpx
 
 import pytest
 
@@ -298,3 +299,78 @@ async def test_archive_wrapper_maps_value_error_without_mislabeling_as_unavailab
     )
 
     assert result == {"status": "error", "error": "bad archive arguments"}
+
+
+def test_httpx_request_error_uses_provider_transport_path_without_usage_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finished: list[tuple[str, str | None]] = []
+    entity = SimpleNamespace(
+        hass=SimpleNamespace(),
+        entry=SimpleNamespace(),
+        _fire_conversation_finished=lambda _input, _log, *, status, error_type=None: finished.append(
+            (status, error_type)
+        ),
+    )
+    user_input = SimpleNamespace(language="en", conversation_id="conversation-httpx")
+    error = httpx.ConnectError(
+        "offline",
+        request=httpx.Request("POST", "https://api.openai.invalid/v1/responses"),
+    )
+    reauth = Mock()
+    record = Mock()
+    log = Mock()
+    monkeypatch.setattr(hardening, "request_reauthentication", reauth)
+    monkeypatch.setattr(hardening, "record_current_provider_failure", record)
+    monkeypatch.setattr(hardening, "log_provider_failure", log)
+    monkeypatch.setattr(hardening, "provider_user_message", lambda _err: "temporarily unavailable")
+
+    result = hardening._conversation_error_result(
+        entity,
+        user_input,
+        SimpleNamespace(),
+        error,
+        provider_log_message="provider stream failed",
+    )
+
+    assert result.conversation_id == "conversation-httpx"
+    assert finished == [("error", "ProviderTransportError")]
+    converted = reauth.call_args.args[2]
+    assert isinstance(converted, hardening.ProviderTransportError)
+    assert isinstance(converted.__cause__, httpx.ConnectError)
+    record.assert_called_once_with(converted)
+    log.assert_called_once_with(
+        hardening._LOGGER,
+        "provider stream failed",
+        converted,
+    )
+
+
+def test_home_assistant_error_uses_generic_path_without_provider_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entity = _ConversationEntity()
+    error = HomeAssistantError("local configuration invalid")
+    logger = Mock()
+    reauth = Mock()
+    record = Mock()
+    provider_log = Mock()
+    monkeypatch.setattr(hardening, "request_reauthentication", reauth)
+    monkeypatch.setattr(hardening, "record_current_provider_failure", record)
+    monkeypatch.setattr(hardening, "log_provider_failure", provider_log)
+
+    result = hardening._conversation_error_result(
+        entity,
+        SimpleNamespace(language="en", conversation_id="local-id"),
+        SimpleNamespace(),
+        error,
+        logger=logger,
+    )
+
+    assert result.conversation_id == "local-id"
+    assert entity._usage.failed == ["HomeAssistantError"]
+    assert entity.finished == [("error", "HomeAssistantError")]
+    reauth.assert_not_called()
+    record.assert_not_called()
+    provider_log.assert_not_called()
+    logger.error.assert_called_once()

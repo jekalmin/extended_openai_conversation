@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.extended_openai_conversation_responses import request_rule_packs
 from custom_components.extended_openai_conversation_responses.management_ui import (
     _consume_rule_pack_review,
     _register_rule_pack_review,
@@ -252,3 +253,113 @@ def test_import_requires_one_review_of_the_exact_pack_and_revision() -> None:
     _consume_rule_pack_review(manager, token, pack, "revision-1")
     with pytest.raises(HomeAssistantError, match="Review this exact"):
         _consume_rule_pack_review(manager, token, pack, "revision-1")
+
+
+@pytest.mark.asyncio
+async def test_pack_validation_rejects_structural_and_reference_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = RequestRules(MemoryStore({"rules": [local_rule("Portable")]}))
+    await source.async_initialize()
+    valid = export_rule_pack(source, "all")
+
+    malformed = deepcopy(valid)
+    malformed.pop("groups")
+    with pytest.raises(ValueError, match="missing or unknown fields"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["unexpected"] = True
+    with pytest.raises(ValueError, match="missing or unknown fields"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"] = []
+    with pytest.raises(ValueError, match="1 to 500 rules"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"] = "not-a-list"
+    with pytest.raises(ValueError, match="1 to 500 rules"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"][0]["order"] = 3
+    with pytest.raises(ValueError, match="priorities must be contiguous"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"][0]["group_id"] = "missing-group"
+    with pytest.raises(ValueError, match="unknown group"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"][0]["matching_behavior"] = "defaults"
+    with pytest.raises(ValueError, match="effective matching settings"):
+        validate_rule_pack(malformed)
+
+    malformed = deepcopy(valid)
+    malformed["rules"][0]["action"].pop("continue_to_ai", None)
+    with pytest.raises(ValueError, match="Continue to AI"):
+        validate_rule_pack(malformed)
+
+    with pytest.raises(ValueError, match="must be an object"):
+        validate_rule_pack([])
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        validate_rule_pack("{")
+
+    monkeypatch.setattr(request_rule_packs, "MAX_PACK_BYTES", 32)
+    with pytest.raises(ValueError, match="2 MB safety limit"):
+        validate_rule_pack('{"payload":"' + ("x" * 64) + '"}')
+
+
+@pytest.mark.asyncio
+async def test_pack_export_rejects_empty_unknown_and_duplicate_selections() -> None:
+    source = RequestRules(MemoryStore({"rules": [local_rule("Only")]}))
+    await source.async_initialize()
+
+    with pytest.raises(ValueError, match="Choose at least one"):
+        export_rule_pack(source, "selected", rule_ids=[])
+    with pytest.raises(ValueError, match="Unknown or duplicate"):
+        export_rule_pack(source, "selected", rule_ids=["only", "only"])
+    with pytest.raises(ValueError, match="Unknown or duplicate"):
+        export_rule_pack(source, "selected", rule_ids=["missing"])
+    with pytest.raises(ValueError, match="Unknown group"):
+        export_rule_pack(source, "group", group_id="missing")
+    with pytest.raises(ValueError, match="Choose All rules"):
+        export_rule_pack(source, "unexpected")
+
+
+@pytest.mark.asyncio
+async def test_pack_append_rolls_back_live_state_when_durable_save_fails() -> None:
+    class FailingSaveStore(MemoryStore):
+        fail = False
+
+        async def async_save(self, data):
+            if self.fail:
+                raise OSError("simulated durable write failure")
+            await super().async_save(data)
+
+    source = RequestRules(MemoryStore({"rules": [local_rule("Imported")]}))
+    await source.async_initialize()
+    prepared = validate_rule_pack(export_rule_pack(source, "all"))
+
+    store = FailingSaveStore({"rules": [local_rule("Existing")]})
+    target = RequestRules(store)
+    await target.async_initialize()
+    before = target.snapshot()
+    revision = target.revision()
+    durable_before = deepcopy(store.data)
+    store.fail = True
+
+    with pytest.raises(OSError, match="durable write failure"):
+        await async_append_rule_pack(
+            target,
+            prepared,
+            expected_revision=revision,
+        )
+
+    assert target.snapshot() == before
+    assert target.revision() == revision
+    assert store.data == durable_before
