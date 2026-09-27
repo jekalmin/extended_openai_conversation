@@ -323,21 +323,25 @@ const configResult = (projection, title = "A") => ({
   panel._setConfigDirty(true);
   panel._confirm = async () => false;
   await panel._navigate("overview");
-  assert.equal(panel._viewKey(), "assistant/basics", "cancelled unsaved navigation stays on Assistant");
+  assert.equal(panel._viewKey(), "overview", "internal navigation keeps the assistant draft active");
   assert.equal(panel._draft.chat_model, "unsaved");
+  await panel._navigate("assistant", "basics");
+  assert.equal(panel._draft.chat_model, "unsaved", "returning does not replace the active draft");
 }
 
 {
   const panel = panelFor("usage-maintenance", "retention");
   panel._rememberCleanConfiguration(configResult("retention"));
+  panel._rememberCleanConfiguration(configResult("full"));
   await panel._loadConfigDraft();
   panel._draft.usage_request_retention_days = 7;
   panel._setConfigDirty(true);
   panel._confirm = async () => false;
   await panel._navigate("assistant", "basics");
-  assert.equal(panel._viewKey(), "usage-maintenance/retention",
-    "an unsaved Retention draft cannot be replaced by an Assistant projection");
+  assert.equal(panel._viewKey(), "assistant/basics",
+    "an unsaved Retention draft remains with its assistant after loading the full projection");
   assert.equal(panel._draft.usage_request_retention_days, 7);
+  assert.equal(panel._draft.chat_model, "gpt-4o");
 }
 
 {
