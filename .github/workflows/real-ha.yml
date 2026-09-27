@@ -154,7 +154,10 @@ jobs:
             python -m pip install "git+https://github.com/home-assistant/core.git@$HA_DEV_SHA"
           fi
           python ci/install_ha_dependencies.py --manifest custom_components/extended_openai_conversation_responses/manifest.json
-          python -m pip check
+          # The HA fixture package pins the current stable Core and SQLAlchemy.
+          # The oldest and dev points intentionally replace those pins, as in
+          # Enhanced nightly's existing HA lifecycle matrix.
+          if [[ "$HA_POINT" == stable ]]; then python -m pip check; fi
       - name: Report exact compatibility points
         env:
           HA_POINT: ${{ matrix.ha-version }}

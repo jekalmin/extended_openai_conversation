@@ -82,6 +82,9 @@ async def test_config_flow_basic_assist_and_healthy_reload(hass, monkeypatch):
         )
     assert created["type"] is FlowResultType.CREATE_ENTRY
     entry = created["result"]
+    # A successful HA config flow schedules entry setup itself.
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
     subentry = next(
         item
         for item in entry.subentries.values()
@@ -97,7 +100,6 @@ async def test_config_flow_basic_assist_and_healthy_reload(hass, monkeypatch):
             CONF_REASONING_EFFORT: "none",
         },
     )
-    assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
 
@@ -292,6 +294,9 @@ async def test_backup_restore_privacy_boundary_and_assist(
         },
     )
     assert restored["success"] and restored["result"]["status"] == "restored"
+    # Updating the restored subentry schedules HA's config-entry reload.
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
     current = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
     assert [
         (item.memory_id, item.content) for item in await current.async_list(owner)
