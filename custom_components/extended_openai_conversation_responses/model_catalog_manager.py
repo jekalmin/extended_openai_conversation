@@ -36,6 +36,7 @@ from .model_catalog import (
     validate_or_migrate_catalog,
 )
 from .request_rules import SLOT_REFERENCE, async_get_request_rules
+from .strict_store import PropagatingWriteStore
 
 CATALOG_URL = (
     "https://raw.githubusercontent.com/conorod1992/extended_openai_conversation/"
@@ -56,7 +57,9 @@ class ModelCatalogManager:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self.store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.model_catalog")
+        self.store: Store[dict[str, Any]] = PropagatingWriteStore(
+            hass, 1, f"{DOMAIN}.model_catalog"
+        )
         self.catalog: dict[str, Any] | None = None
         self.available_catalog: dict[str, Any] | None = None
         self.etag: str | None = None

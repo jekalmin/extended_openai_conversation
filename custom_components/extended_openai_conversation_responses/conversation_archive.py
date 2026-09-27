@@ -17,6 +17,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .scope import ResolvedDataScope
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -107,7 +108,7 @@ class HomeAssistantArchiveStorage:
         prefix = f"{STORAGE_KEY_PREFIX}.{entry_id}.{subentry_id}"
         self._hass = hass
         self._prefix = prefix
-        self._metadata = Store[dict[str, Any]](
+        self._metadata = PropagatingWriteStore(
             hass,
             STORAGE_VERSION,
             f"{prefix}.metadata",
@@ -116,7 +117,7 @@ class HomeAssistantArchiveStorage:
         )
 
     def _partition_store(self, partition: str) -> Store[dict[str, Any]]:
-        return Store(
+        return PropagatingWriteStore(
             self._hass,
             STORAGE_VERSION,
             f"{self._prefix}.turns.{partition}",

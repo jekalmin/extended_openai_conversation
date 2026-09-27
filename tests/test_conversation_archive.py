@@ -1093,7 +1093,7 @@ async def test_home_assistant_storage_delegates_to_private_atomic_stores(monkeyp
         async def async_save(self, data):
             self.saved.append(data)
 
-    monkeypatch.setattr(archive_module, "Store", FakeStore)
+    monkeypatch.setattr(archive_module, "PropagatingWriteStore", FakeStore)
     hass = object()
     storage = HomeAssistantArchiveStorage(hass, "entry", "agent")
 

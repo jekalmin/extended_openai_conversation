@@ -23,6 +23,8 @@ from homeassistant.helpers import (
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
+from .strict_store import PropagatingWriteStore
+
 DOMAIN = "extended_openai_conversation_responses"
 DATA_KEY = f"{DOMAIN}.intercom"
 STORAGE_KEY = f"{DOMAIN}.broadcast"
@@ -104,7 +106,9 @@ class IntercomManager:
         self._draining: set[str] = set()
         self._tracked_entities: set[str] = set()
         self._unsub_state: Any = None
-        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._store: Store[dict[str, Any]] = PropagatingWriteStore(
+            hass, STORAGE_VERSION, STORAGE_KEY
+        )
         self._enabled = False
         self._loaded = False
         self._state_lock = asyncio.Lock()

@@ -18,7 +18,6 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT
 from homeassistant.core import Context, CoreState, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, entity_registry as er, llm
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .agent_config import configured_function_tools_from_data, function_tool_enabled
@@ -28,6 +27,7 @@ from .function_tool_resolution import latest_function_tool_for_execution
 from .ha_permissions import bind_active_ha_context
 from .helpers import get_exposed_entities
 from .persistence_hardening import _async_repair_private_store_mode
+from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class DelayedToolManager:
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the scheduler."""
         self.hass = hass
-        self._store = Store[dict[str, Any]](
+        self._store = PropagatingWriteStore(
             hass,
             DELAYED_TOOL_STORAGE_VERSION,
             DELAYED_TOOL_STORAGE_KEY,

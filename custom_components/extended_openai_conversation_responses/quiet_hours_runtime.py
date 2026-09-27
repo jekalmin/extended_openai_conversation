@@ -25,6 +25,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .strict_store import PropagatingWriteStore
 
 _STORAGE_VERSION = 2
 _STORAGE_KEY = f"{DOMAIN}.quiet_hours"
@@ -416,7 +417,9 @@ class QuietHoursManager:
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self._store: Store[dict[str, Any]] = Store(hass, _STORAGE_VERSION, _STORAGE_KEY)
+        self._store: Store[dict[str, Any]] = PropagatingWriteStore(
+            hass, _STORAGE_VERSION, _STORAGE_KEY
+        )
         self._config = QuietHoursConfig()
         self._active: dict[str, Any] | None = None
         self._lock = asyncio.Lock()
