@@ -20,6 +20,7 @@ from custom_components.extended_openai_conversation_responses.model_capabilities
 )
 from custom_components.extended_openai_conversation_responses.model_catalog import (
     BUNDLED_CATALOG,
+    all_reasoning_efforts,
 )
 from custom_components.extended_openai_conversation_responses.request import (
     build_provider_request_snapshot,
@@ -52,10 +53,11 @@ MODEL_IDS = tuple(sorted(BUNDLED_CATALOG.resolved))
 DIMENSIONS: dict[str, tuple[Any, ...]] = {
     "chat_model": MODEL_IDS,
     "api_mode": tuple(item["key"] for item in const.API_MODE_OPTIONS),
-    "reasoning_profile": ("recommended", "none", "low", "high"),
+    "reasoning_profile": ("recommended", *all_reasoning_efforts()),
     "sampling": ("default", "temperature", "top_p"),
-    "service_tier": ("default", "flex", "priority"),
+    "service_tier": tuple(const.SERVICE_TIER_OPTIONS),
     "web_search": (False, True),
+    "web_search_context": tuple(const.WEB_SEARCH_CONTEXT_OPTIONS),
     "function_tools": ("none", "direct", "disabled"),
     "function_groups": ("none", "always", "on_demand"),
     "function_tool_error_recovery": (False, True),
@@ -69,18 +71,21 @@ DIMENSIONS: dict[str, tuple[Any, ...]] = {
     "guest_mode_enabled": (False, True),
     "guest_function_policy": ("off", "custom"),
     "guest_knowledge_policy": ("off", "custom"),
+    "guest_shared_memory_policy": tuple(const.GUEST_SHARED_MEMORY_POLICIES),
+    "guest_web_search": (False, True),
     "shared_memory_mode": ("disabled", "explicit"),
     "local_intents_enabled": (False, True),
     "local_intent_exclusions": ("none", "turn_on"),
     "local_intent_delayed_commands_to_ai": (False, True),
     "conversation_continuity": ("ha_default", "user", "device"),
     "voice_scope_policy": ("unretained", "shared", "default_user", "device_mapping"),
+    "voice_unmapped_policy": tuple(const.VOICE_POLICIES),
     "voice_device_mappings": ("none", "mapped"),
     "exposed_entities_enabled": (False, True),
     "speech_processing_enabled": (False, True),
     "speech_behavior": ("plain", "strip", "regex"),
     "retention": ("default", "short"),
-    "template_context": ("default", "custom"),
+    "template_context": ("default", "off", "custom"),
     "advanced_options": (False, True),
 }
 
@@ -154,7 +159,9 @@ def _config(state: dict[str, Any]) -> dict[str, Any]:
     )
     if state["voice_scope_policy"] == "default_user":
         config["voice_default_user_id"] = "coverage-owner"
-    if state["speech_behavior"] == "strip":
+    if state["speech_behavior"] == "plain":
+        config.update(speech_strip_markdown=False, speech_strip_urls=False)
+    elif state["speech_behavior"] == "strip":
         config.update(speech_strip_markdown=True, speech_strip_urls=True)
     elif state["speech_behavior"] == "regex":
         config["speech_regex_replacements"] = [
@@ -166,7 +173,9 @@ def _config(state: dict[str, Any]) -> dict[str, Any]:
             usage_request_retention_days=7,
             usage_run_retention_days=7,
         )
-    if state["template_context"] == "custom":
+    if state["template_context"] == "off":
+        config["current_datetime_enabled"] = False
+    elif state["template_context"] == "custom":
         config.update(
             current_datetime_enabled=True,
             current_datetime_template="Coverage date: {{ now().year }}",

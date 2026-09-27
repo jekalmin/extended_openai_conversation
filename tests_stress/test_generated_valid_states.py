@@ -71,6 +71,26 @@ def _check_contract(fields: dict, dimension_values: dict) -> None:
             assert coverage["dimension"] in DIMENSIONS, name
         else:
             assert coverage.get("reason"), name
+    by_value = {getattr(agent_config, name): name for name in fields}
+    for dimension in DIMENSIONS:
+        if dimension in agent_config.AGENT_CONFIG_FIELDS:
+            coverage = fields[by_value[dimension]]["coverage"]
+            assert coverage == {
+                "kind": "combinatorial_dimension",
+                "dimension": dimension,
+            }
+    for field, dimension in {
+        "reasoning_effort": "reasoning_profile",
+        "functions": "function_tools",
+        "temperature": "sampling",
+        "top_p": "sampling",
+        "archive_enabled": "archive",
+        "shared_archive_enabled": "archive",
+    }.items():
+        assert fields[by_value[field]]["coverage"] == {
+            "kind": "combinatorial_dimension",
+            "dimension": dimension,
+        }
 
 
 def test_every_persistent_field_and_enum_is_classified() -> None:
@@ -103,12 +123,23 @@ def test_covering_generator_is_valid_complete_bounded_and_reproducible() -> None
     assert len(first.cases) < 500
     assert first.exploratory_count <= 15
     actual = set()
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    participating = {
+        getattr(agent_config, name): set()
+        for name, item in contract["fields"].items()
+        if item["coverage"]["kind"] == "combinatorial_dimension"
+    }
     for case in first.cases:
         normalized, api = normalized_state(case)
         assert normalized["chat_model"] == case["chat_model"]
         assert api in {"responses", "chat_completions"}
         actual.update(obligations(case))
+        for field, seen in participating.items():
+            seen.add(json.dumps(normalized.get(field), sort_keys=True))
     assert first.obligations <= actual
+    assert all(len(seen) > 1 for seen in participating.values()), {
+        field: len(seen) for field, seen in participating.items() if len(seen) <= 1
+    }
     assert all(len(item) == 2 for item in first.obligations if len(item) == 2)
     assert {
         tuple(key for key, _ in item) for item in first.obligations if len(item) == 3
