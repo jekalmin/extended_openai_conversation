@@ -426,6 +426,9 @@ jobs:
                 --cov-branch
                 --cov-report=term-missing
                 --cov-report=xml:real-ha-config-flow-coverage.xml
+                # This shard measures config_flow alone (84.36% baseline). The
+                # pyproject 95% floor applies to the complete ordinary unit suite.
+                --cov-fail-under=84
               )
               ;;
             *)

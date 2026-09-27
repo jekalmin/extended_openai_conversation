@@ -305,6 +305,30 @@ async def _fresh_reload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
 
 
 @pytest.mark.asyncio
+async def test_prompt_preview_actions_reach_real_websocket_without_mutating_config(
+    hass: HomeAssistant, hass_ws_client: Any
+) -> None:
+    """Both preview aliases return assembled data without saving a draft."""
+    entry = _entry("Management prompt preview")
+    await _setup_entry(hass, entry)
+    client = await _admin_client(hass, hass_ws_client)
+    before = await _management_call(
+        client, entry=entry, section="configuration", action="get"
+    )
+    for action in ("prompt_preview", "request_preview"):
+        preview = await _management_call(
+            client, entry=entry, section="configuration", action=action, config={}
+        )
+        assert isinstance(preview["prompt"], str) and preview["prompt"]
+        assert isinstance(preview["notes"], list)
+    after = await _management_call(
+        client, entry=entry, section="configuration", action="get"
+    )
+    assert after["revision"] == before["revision"]
+    assert after["config"] == before["config"]
+
+
+@pytest.mark.asyncio
 async def test_configuration_round_trip_through_management_websocket(
     hass: HomeAssistant,
     hass_ws_client: Any,

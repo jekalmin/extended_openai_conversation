@@ -19,13 +19,20 @@ from custom_components.extended_openai_conversation_responses.conversation_archi
 from custom_components.extended_openai_conversation_responses.memory import (
     async_get_memory,
 )
-from custom_components.extended_openai_conversation_responses.usage import async_get_usage
+from custom_components.extended_openai_conversation_responses.usage import (
+    async_get_usage,
+)
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from tests_real_ha.test_acceptance_lifecycle import (
     _conversation_subentry,
     _make_entry,
     _setup_entry,
+)
+from tests_real_ha.test_management_backend_acceptance import (
+    _admin_client,
+    _fresh_reload,
+    _management_call,
 )
 from tests_stress.conftest import record
 
@@ -135,4 +142,83 @@ async def test_restore_waits_for_active_turn_then_becomes_authoritative(
         overlapping_live_restores=1,
         public_turns=1,
         restore_waited_for_active_turn=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_drains_paused_management_memory_commit(
+    hass: HomeAssistant,
+    hass_ws_client,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A pre-restore Management write must finish before B becomes authoritative."""
+    entry = _make_entry(
+        "Restore management overlap",
+        include_ai_task=False,
+        conversation_options={CONF_MEMORY_MODE: MEMORY_MODE_MANUAL},
+    )
+    await _setup_entry(hass, entry)
+    subentry = _conversation_subentry(entry)
+    client = await _admin_client(
+        hass, hass_ws_client, user_id="restore-mutation-admin", name="Restore Mutation Admin"
+    )
+    memory = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
+    owner = "restore-mutation-admin"
+    target_record = await memory.async_add(
+        owner, "RESTORED-GENERATION-B", "acceptance", "explicit"
+    )
+    target = await backup.async_collect_backup_snapshot(hass, entry, subentry)
+    assert await memory.async_delete(owner, [target_record["memory"]["memory_id"]]) == 1
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    save = memory._storage.async_save
+
+    async def paused_save(data):
+        entered.set()
+        await release.wait()
+        await save(data)
+
+    monkeypatch.setattr(memory._storage, "async_save", paused_save)
+    mutation = asyncio.create_task(
+        _management_call(
+            client,
+            entry=entry,
+            section="memories",
+            action="add",
+            content="STALE-GENERATION-A",
+            category="acceptance",
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=10)
+    restore = asyncio.create_task(
+        backup.async_restore_backup(hass, entry, subentry, target)
+    )
+    await asyncio.sleep(0)
+    assert not restore.done(), "restore crossed a paused durable Management commit"
+
+    release.set()
+    assert (await asyncio.wait_for(mutation, timeout=15))["status"] == "created"
+    assert (await asyncio.wait_for(restore, timeout=15))["status"] == "restored"
+    assert [item.content for item in await memory.async_list(owner)] == [
+        "RESTORED-GENERATION-B"
+    ]
+    assert (await backup.async_collect_backup_snapshot(hass, entry, subentry))[
+        "memories"
+    ] == target["memories"]
+
+    await _fresh_reload(hass, entry)
+    reloaded = await _management_call(
+        client, entry=entry, section="memories", action="list"
+    )
+    assert [item["content"] for item in reloaded["memories"]] == [
+        "RESTORED-GENERATION-B"
+    ]
+    record(
+        stress_trace,
+        "summary",
+        layer="Real HA Management + backup restore",
+        paused_durable_mutations=1,
+        restore_waited_for_commit=1,
     )
