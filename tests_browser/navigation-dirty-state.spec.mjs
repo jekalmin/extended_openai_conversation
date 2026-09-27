@@ -79,7 +79,6 @@ test("internal navigation preserves a dirty configuration without a refetch", as
 test("a clean Assistant snapshot is reusable after visiting Usage", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(fixtureUrl("assistant/basics"));
-  console.log(pageErrors);
   const panel = page.locator("extended-openai-management-panel");
   await expect(panel.locator('[data-config="__title"]')).toHaveValue("Jarvis");
   const initialReads = await page.evaluate(() => browserHarness.calls.filter(
