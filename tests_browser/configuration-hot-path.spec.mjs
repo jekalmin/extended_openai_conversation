@@ -110,6 +110,39 @@ test("model selection has one lookup/validation path and retains reasoning defau
   expect(result).toEqual({lookups:1, model:"gpt-4.1", requested:"gpt-4.1", dirty:true, reasoning:"high"});
 });
 
+test("a late model catalog response does not redirect typing from the title into the model", async ({page}) => {
+  await page.goto(fixtureUrl("assistant/basics"));
+  const panel = page.locator("extended-openai-management-panel");
+  const title = panel.locator('[data-config="__title"]');
+  const model = panel.locator('[data-config="chat_model"]');
+  await expect(title).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean(window.browserHarness.panel._modelCatalogData))).toBe(true);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const originalModel = await model.inputValue();
+  await page.evaluate(() => {
+    const {panel} = window.browserHarness;
+    const call = panel._hass.callWS.bind(panel._hass);
+    panel._hass.callWS = (message) => message.type.endsWith("/model_catalog")
+      ? new Promise((resolve, reject) => { window.resolveLateCatalog = () => call(message).then(resolve, reject); })
+      : call(message);
+    panel._modelCatalogData = null;
+    panel._render();
+  });
+  await expect.poll(() => page.evaluate(() => typeof window.resolveLateCatalog)).toBe("function");
+  await title.fill("Late catalog title");
+  await expect.poll(() => page.evaluate(() => window.browserHarness.panel.shadowRoot.activeElement?.dataset.config)).toBe("__title");
+  await page.evaluate(() => window.resolveLateCatalog());
+  await page.keyboard.insertText("!");
+  const typedTitle = await title.inputValue();
+  expect(typedTitle).toMatch(/^(?:!Late catalog title|Late catalog title!)$/);
+  await expect(model).toHaveValue(originalModel);
+  await expect.poll(() => page.evaluate(() => window.browserHarness.panel.shadowRoot.activeElement?.dataset.config)).toBe("__title");
+  await title.press("Tab");
+  await expect.poll(() => page.evaluate(() => window.browserHarness.panel._modelCatalogData?.requested_model)).toBe(originalModel);
+  await expect(title).toHaveValue(typedTitle);
+  await expect(model).toHaveValue(originalModel);
+});
+
 test("a Web Search toggle refreshes capability controls", async ({page}) => {
   await page.goto(fixtureUrl("capabilities/web-skills"));
   const web = page.locator('extended-openai-management-panel [data-config="web_search"]');
