@@ -1,0 +1,72 @@
+[
+  {
+    "resource": "agent_config",
+    "semantics": "reject_on_change",
+    "boundary": "HA tool discovery and provider request in flight",
+    "reason": "One request must not mix configuration mappings; an ABA replacement changes the generation even when content returns to A.",
+    "evidence": ["tests/test_mutable_generation_contract.py::test_ha_tool_discovery_rejects_configuration_generation_change", "tests_real_ha/test_live_config_mutation_semantics.py::test_provider_tool_call_rejects_disabled_then_restored_config"]
+  },
+  {
+    "resource": "effective_model",
+    "semantics": "snapshot",
+    "boundary": "provider request in flight and configuration reload",
+    "reason": "An admitted provider turn uses its resolved model; a later turn uses the replacement agent.",
+    "evidence": ["tests_real_ha/test_config_update_inflight_request.py::test_config_update_reload_isolates_inflight_request_and_uses_new_model"]
+  },
+  {
+    "resource": "function_tool",
+    "semantics": "reject_on_change",
+    "boundary": "provider reply before Function Tool dispatch",
+    "reason": "Provider arguments were generated against the advertised schema and cannot execute a replacement definition.",
+    "evidence": ["tests_real_ha/test_live_config_mutation_semantics.py::test_provider_exposed_tool_edit_rejects_stale_call_before_execution", "tests_real_ha/test_live_config_mutation_semantics.py::test_provider_exposed_tool_deleted_before_call_fails_closed"]
+  },
+  {
+    "resource": "function_group",
+    "semantics": "reject_on_change",
+    "boundary": "provider reply before grouped Function Tool dispatch",
+    "reason": "Membership and loading mode determine which tool was offered; a changed binding cannot accept an old response.",
+    "evidence": ["tests_real_ha/test_live_config_mutation_semantics.py::test_provider_tool_call_rejects_changed_group_binding"]
+  },
+  {
+    "resource": "request_rules",
+    "semantics": "snapshot",
+    "boundary": "matched rule execution across HA script awaits",
+    "reason": "The selected execution owns one compiled rule generation; management writers separately reject stale revisions and ABA.",
+    "evidence": ["tests_real_ha/test_request_rules_script_semantics.py::test_wait_template_blocks_then_resumes_once_with_variables", "tests/test_request_rules_management.py::test_revision_guard_rejects_aba_after_committed_changes"]
+  },
+  {
+    "resource": "guest_policy",
+    "semantics": "reresolve",
+    "boundary": "provider request in flight before protected action",
+    "reason": "The admitted policy is request-local, but a later restriction tightens authorization before side effects.",
+    "evidence": ["tests_stress/test_guest_provider_wire.py::test_blocked_provider_request_keeps_guest_authorization_snapshot"]
+  },
+  {
+    "resource": "ha_target",
+    "semantics": "reject_on_change",
+    "boundary": "target resolution and permission await before service dispatch",
+    "reason": "A target or registry identity replacement invalidates the authorized object, including same entity ID reuse.",
+    "evidence": ["tests_real_ha/test_target_registry_mutation_race.py::test_registry_reassignment_between_resolution_and_dispatch_fails_closed", "tests_real_ha/test_target_registry_mutation_race.py::test_recreated_entity_with_same_id_cannot_inherit_authorization"]
+  },
+  {
+    "resource": "ha_service",
+    "semantics": "reject_on_change",
+    "boundary": "permission await before service dispatch",
+    "reason": "A replacement handler with the same service name is a different side-effect identity.",
+    "evidence": ["tests_real_ha/test_target_registry_mutation_race.py::test_service_reload_does_not_dispatch_stale_request"]
+  },
+  {
+    "resource": "provider_client",
+    "semantics": "snapshot",
+    "boundary": "reauthentication while provider traffic is active",
+    "reason": "An admitted request completes on its original client; subsequent requests use the replacement client.",
+    "evidence": ["tests_stress/test_reauth_active_traffic.py::test_reauth_replaces_provider_client_without_crossing_active_traffic"]
+  },
+  {
+    "resource": "model_catalogue",
+    "semantics": "snapshot",
+    "boundary": "catalogue refresh during active provider turn",
+    "reason": "Resolved request parameters stay together for the active turn; future turns may use the activated catalogue.",
+    "evidence": ["tests_real_ha/test_model_catalog_live_refresh.py::test_catalog_refresh_publishes_live_while_existing_agent_turn_is_active"]
+  }
+]

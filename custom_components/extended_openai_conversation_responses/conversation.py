@@ -134,6 +134,7 @@ from .function_tool_quarantine import (
 )
 from .function_tool_resolution import (
     configured_function_tool_for_execution,
+    current_configuration_data,
     latest_function_tool_for_execution,
 )
 from .functions.security import (
@@ -966,7 +967,12 @@ class ExtendedOpenAIAgentEntity(
     ) -> ConversationResult:
         """Resolve HA references and cache one validated config revision per request."""
         llm_context = _request_llm_context(user_input)
-        configured = self._configured_function_tools_from_data(self.subentry.data)
+        config_data = self.subentry.data
+        configured = self._configured_function_tools_from_data(config_data)
+        groups = validate_function_groups(
+            config_data.get(CONF_FUNCTION_GROUPS, list(DEFAULT_FUNCTION_GROUPS)),
+            configured,
+        )
         references = [
             tool["function"]
             for tool in configured
@@ -975,9 +981,13 @@ class ExtendedOpenAIAgentEntity(
         snapshot = ToolSnapshot()
         if references and not self._effective_guest_policy().guest_active:
             snapshot = await async_discover(self.hass, llm_context, references)
+        if self.subentry.data is not config_data:
+            raise HomeAssistantError(
+                "Agent configuration changed during this request; please retry"
+            )
         with tool_snapshot_scope(snapshot):
             function_config_token = _ACTIVE_FUNCTION_CONFIG.set(
-                (snapshot.project(configured), None)
+                (snapshot.project(configured), groups)
             )
             try:
                 return await self._async_handle_message(
@@ -1785,6 +1795,29 @@ class ExtendedOpenAIAgentEntity(
         }:
             tool_name = function_tool.get("spec", {}).get("name")
             try:
+                request_config = _ACTIVE_FUNCTION_CONFIG.get()
+                if request_config is not None and request_config[1] is not None:
+                    live_data = current_configuration_data(self)
+                    live_tools = self._configured_function_tools_from_data(live_data)
+                    live_groups = validate_function_groups(
+                        live_data.get(
+                            CONF_FUNCTION_GROUPS, list(DEFAULT_FUNCTION_GROUPS)
+                        ),
+                        live_tools,
+                    )
+
+                    def owning_group(groups: list[dict[str, Any]]) -> Any:
+                        return next(
+                            (
+                                group
+                                for group in groups
+                                if tool_name in group["functions"]
+                            ),
+                            None,
+                        )
+
+                    if owning_group(request_config[1]) != owning_group(live_groups):
+                        raise FunctionNotFound(str(tool_name))
                 resolved_tool = latest_function_tool_for_execution(self, function_tool)
             except FunctionNotFound:
                 if policy.guest_active:
