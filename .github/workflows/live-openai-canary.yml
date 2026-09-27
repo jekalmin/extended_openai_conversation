@@ -6,7 +6,7 @@ on:
       plan_only:
         description: "Select cases without calling OpenAI"
         type: boolean
-        default: false
+        default: true
   schedule:
     - cron: "43 4 * * 3"
 
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   canary:
-    name: Six catalogue-guided live probes
+    name: Six catalogue-guided probes
     if: github.event_name == 'schedule' || github.actor == 'conorod1992'
     runs-on: ubuntu-latest
     container:
@@ -51,11 +51,11 @@ jobs:
             python ci/install_ha_dependencies.py --manifest custom_components/extended_openai_conversation_responses/manifest.json
           fi
           pip check
-      - name: Run bounded live canaries
+      - name: Plan or run bounded canaries
         run: |
           set -euo pipefail
           args=(--report live-openai-canary-report.json)
-          if [ "${{ inputs.plan_only }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.plan_only }}" = "true" ]; then
             args+=(--plan-only)
           fi
           python -m ci.live_openai_canary "${args[@]}"
