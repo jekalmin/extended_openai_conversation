@@ -50,16 +50,25 @@ function load() {
   const state = freshState(); localStorage.setItem(KEY, JSON.stringify(state)); return state;
 }
 
-export function createStateBackend({partialOverview = false, failConfigurationOnce = false} = {}) {
+export function createStateBackend({partialOverview = false, failConfigurationOnce = false, seedConversations = false} = {}) {
   let state = load();
   const pendingToolYamls = new Map();
   const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+  if (seedConversations && !state.conversations) {
+    state.conversations = {
+      sessions: [{session_id: "session-1", scope_id: "user:test-user", title: "Kitchen project", last_message_at: "2026-09-01T12:00:00Z", turn_count: 1, scope_source: "Test User", turns: [{user_text: "What is the plan?", assistant_text: "Review the kitchen plan.", timestamp: "2026-09-01T12:00:00Z"}]}],
+      active: [{key: "active-1", label: "Kitchen speaker", last_active: "2026-09-01T12:00:00Z", expires_at: "2026-10-01T12:00:00Z"}],
+    };
+    state.scopes[0].conversation_count = 1;
+    save();
+  }
   const counts = () => {
     state.agent.function_count = state.configuration.config.functions?.length || 0;
     state.agent.function_group_count = state.configuration.config.function_groups?.length || 0;
     state.agent.memory_count = state.memories.length;
     state.agent.knowledge_source_count = state.knowledgeSources?.length || 0;
     state.scopes[0].memory_count = state.memories.filter((m) => m.scope_id === state.scopes[0].scope_id).length;
+    if (state.conversations) state.scopes[0].conversation_count = state.conversations.sessions.filter((s) => s.scope_id === state.scopes[0].scope_id).length;
   };
   const tools = () => ({functions: clone(state.configuration.config.functions || []), function_groups: clone(state.configuration.config.function_groups || []), references: {}, revision: state.configuration.revision});
   const normalizeRules = () => state.requestRules.rules.forEach((r, i) => { r.order = i; });
@@ -343,7 +352,44 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
     if (key === "backup/inspect") return inspect(message.document);
     if (key === "backup/restore") { const doc = JSON.parse(message.document); if (!doc?.state?.configuration) throw new Error("Invalid browser fixture backup"); state = clone(doc.state); pendingToolYamls.clear(); counts(); save(); return {restored: true}; }
 
-    const staticResponses = {"conversations/list": {sessions: []}, "conversations/active": {active: []}, "usage/daily": {days: []}, "usage/runs": {runs: []}, "usage/retention": {}};
+    if (key === "conversations/list" || key === "conversations/search") {
+      requireFields([["scope_id", "string"]]);
+      if (key === "conversations/search") requireFields([["query", "string"]]);
+      const offset = Math.max(0, Number(message.offset) || 0);
+      const limit = Math.max(1, Number(message.limit) || 50);
+      const sessions = (state.conversations?.sessions || []).filter((item) => item.scope_id === message.scope_id);
+      if (key === "conversations/search") {
+        const results = sessions.flatMap((item) => item.turns.filter((turn) => `${turn.user_text} ${turn.assistant_text}`.toLowerCase().includes(message.query.toLowerCase())).map((turn) => ({...item, timestamp: turn.timestamp})));
+        return {results: clone(results.slice(offset, offset + limit)), offset, limit, total: results.length, returned: results.slice(offset, offset + limit).length, has_more: offset + limit < results.length};
+      }
+      return {sessions: clone(sessions.slice(offset, offset + limit)), offset, limit, total: sessions.length, returned: sessions.slice(offset, offset + limit).length, has_more: offset + limit < sessions.length};
+    }
+    if (key === "conversations/active") return {active: clone(state.conversations?.active || [])};
+    if (key === "conversations/get") {
+      requireFields([["scope_id", "string"], ["session_id", "string"]]);
+      const session = state.conversations?.sessions.find((item) => item.scope_id === message.scope_id && item.session_id === message.session_id);
+      if (!session) throw new Error(`Unknown EOAI fixture conversation: ${message.session_id}`);
+      const offset = Math.max(0, Number(message.start_turn) || 0);
+      const limit = Math.max(1, Number(message.limit) || 20);
+      return {session: {title: session.title}, turns: clone(session.turns.slice(offset, offset + limit)), offset, limit, total: session.turns.length, returned: session.turns.slice(offset, offset + limit).length, has_more: offset + limit < session.turns.length};
+    }
+    if (key === "conversations/delete") {
+      requireFields([["scope_id", "string"], ["session_id", "string"]]);
+      const sessions = state.conversations?.sessions || [];
+      const remaining = sessions.filter((item) => item.scope_id !== message.scope_id || item.session_id !== message.session_id);
+      if (remaining.length === sessions.length) throw new Error(`Unknown EOAI fixture conversation: ${message.session_id}`);
+      state.conversations.sessions = remaining; counts(); save();
+      return {deleted_sessions: 1};
+    }
+    if (key === "conversations/end_active") {
+      requireFields([["continuity_key", "string"]]);
+      const active = state.conversations?.active || [];
+      const remaining = active.filter((item) => item.key !== message.continuity_key);
+      if (remaining.length === active.length) throw new Error(`Unknown EOAI fixture active conversation: ${message.continuity_key}`);
+      state.conversations.active = remaining; save();
+      return {ended: true};
+    }
+    const staticResponses = {"usage/daily": {days: []}, "usage/runs": {runs: []}, "usage/retention": {}};
     if (Object.hasOwn(staticResponses, key)) return clone(staticResponses[key]);
     throw new Error(`Unsupported EOAI management fixture request ${key}: ${JSON.stringify(message)}`);
   }
