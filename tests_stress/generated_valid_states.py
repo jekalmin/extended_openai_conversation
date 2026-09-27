@@ -21,6 +21,10 @@ from custom_components.extended_openai_conversation_responses.model_capabilities
 from custom_components.extended_openai_conversation_responses.model_catalog import (
     BUNDLED_CATALOG,
 )
+from custom_components.extended_openai_conversation_responses.request import (
+    build_provider_request_snapshot,
+)
+from homeassistant.exceptions import HomeAssistantError
 
 TOOL = {
     "spec": {
@@ -174,17 +178,8 @@ def _config(state: dict[str, Any]) -> dict[str, Any]:
 def normalized_state(state: dict[str, Any]) -> tuple[dict[str, Any], str]:
     """Use production normalization and request-path selection as the oracle."""
     normalized = agent_config.normalize_agent_config(_config(state))
-    enabled_tools = (
-        state["function_tools"] == "direct" or state["function_groups"] != "none"
-    )
-    api = select_api_path(
-        normalized["chat_model"],
-        normalized["api_mode"],
-        enabled_tools,
-        normalized.get("reasoning_effort"),
-        normalized["web_search"],
-    )
-    return normalized, api
+    request = build_provider_request_snapshot(normalized, {})
+    return normalized, request.api_mode
 
 
 def _valid(state: dict[str, Any]) -> tuple[bool, str]:
@@ -201,12 +196,21 @@ def _valid(state: dict[str, Any]) -> tuple[bool, str]:
         select_api_path(
             model,
             state["api_mode"],
-            state["function_tools"] == "direct" or state["function_groups"] != "none",
+            state["function_tools"] == "direct"
+            or state["function_groups"] != "none"
+            or state["memory_mode"] != "off"
+            or state["knowledge_enabled"]
+            or state["archive"] != "off"
+            or state["guest_mode_enabled"],
             effort,
             state["web_search"],
         )
         normalized_state(state)
-    except (agent_config.AgentConfigError, ModelCapabilityError) as error:
+    except (
+        agent_config.AgentConfigError,
+        ModelCapabilityError,
+        HomeAssistantError,
+    ) as error:
         return False, f"{type(error).__name__}:{str(error).split(':', 1)[0][:80]}"
     return True, ""
 

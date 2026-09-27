@@ -1,6 +1,7 @@
 """Tests for the shared conversation-agent configuration contract."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -45,6 +46,18 @@ def _native_tool(name: str = "test_tool") -> dict:
         },
         "function": {"type": "native", "name": "execute_service"},
     }
+
+
+def test_model_change_without_effort_uses_new_models_recommended_profile() -> None:
+    current = normalize_agent_config(
+        {"chat_model": "gpt-6-luna", "reasoning_effort": "low", "functions": []}
+    )
+    changed = merge_agent_config(current, {"chat_model": "gpt-4.1", "functions": []})
+    assert changed["chat_model"] == "gpt-4.1"
+    assert "reasoning_effort" not in changed
+    assert changed["functions"] == current["functions"]
+    restored = merge_agent_config(changed, {"chat_model": "gpt-6-luna"})
+    assert restored["reasoning_effort"] == "low"
 
 
 def test_defaults_are_isolated_and_snapshot_parses_tools(hass) -> None:
@@ -344,7 +357,9 @@ def test_function_tool_validation_wraps_schema_and_function_errors(monkeypatch) 
     tool = _coverage_native_tool()
 
     def reject_schema(_schema):
-        raise agent_config.HomeAssistantError("Function input schema is invalid: broken")
+        raise agent_config.HomeAssistantError(
+            "Function input schema is invalid: broken"
+        )
 
     monkeypatch.setattr(agent_config, "validate_function_schema", reject_schema)
     with pytest.raises(AgentConfigError, match=r"parameters.*broken"):
@@ -358,7 +373,9 @@ def test_function_tool_validation_wraps_schema_and_function_errors(monkeypatch) 
             raise ValueError("bad implementation config")
 
     monkeypatch.setattr(agent_config, "get_function", lambda _name: BrokenFunction())
-    with pytest.raises(AgentConfigError, match=r"configuration is invalid.*bad implementation"):
+    with pytest.raises(
+        AgentConfigError, match=r"configuration is invalid.*bad implementation"
+    ):
         validate_function_tools([tool])
 
 
@@ -398,13 +415,25 @@ def test_function_groups_normalize_and_preserve_guest_allowed() -> None:
         (["bad"], r"group.*object"),
         ([{**_coverage_group(), "unknown": True}], "unknown fields"),
         ([{**_coverage_group(), "id": "Bad ID"}], r"id.*lowercase"),
-        ([_coverage_group("same"), _coverage_group("same", name="Other")], "duplicate group ID"),
-        ([_coverage_group("one", name="Same"), _coverage_group("two", name=" same ")], "duplicate group name"),
+        (
+            [_coverage_group("same"), _coverage_group("same", name="Other")],
+            "duplicate group ID",
+        ),
+        (
+            [
+                _coverage_group("one", name="Same"),
+                _coverage_group("two", name=" same "),
+            ],
+            "duplicate group name",
+        ),
         ([{**_coverage_group(), "name": " "}], r"name.*required"),
         ([{**_coverage_group(), "name": "x" * 101}], r"name.*100"),
         ([{**_coverage_group(), "description": " "}], r"description.*required"),
         ([{**_coverage_group(), "description": "x" * 501}], r"description.*500"),
-        ([{**_coverage_group(), "loading_mode": "not-valid"}], r"loading_mode.*unsupported"),
+        (
+            [{**_coverage_group(), "loading_mode": "not-valid"}],
+            r"loading_mode.*unsupported",
+        ),
         ([{**_coverage_group(), "enabled": "yes"}], r"enabled.*boolean"),
         ([{**_coverage_group(), "guest_allowed": "yes"}], r"guest_allowed.*boolean"),
         ([{**_coverage_group(), "functions": "demo"}], r"functions.*list of names"),
@@ -420,7 +449,8 @@ def test_function_group_validation_rejects_bad_shapes(groups, match) -> None:
 def test_function_groups_reject_duplicate_assignment_and_excess_groups() -> None:
     with pytest.raises(AgentConfigError, match="already assigned"):
         validate_function_groups(
-            [_coverage_group("one"), _coverage_group("two", name="Two")], [_coverage_native_tool()]
+            [_coverage_group("one"), _coverage_group("two", name="Two")],
+            [_coverage_native_tool()],
         )
 
     groups = [
@@ -439,11 +469,22 @@ def test_speech_regex_validation_residual_matrix() -> None:
         ([{"pattern": "", "replacement": ""}], r"pattern.*required"),
         ([{"pattern": "x", "replacement": 1}], r"replacement.*string"),
         (
-            [{"pattern": "x" * (agent_config.MAX_SPEECH_REGEX_PATTERN_LENGTH + 1), "replacement": ""}],
+            [
+                {
+                    "pattern": "x" * (agent_config.MAX_SPEECH_REGEX_PATTERN_LENGTH + 1),
+                    "replacement": "",
+                }
+            ],
             r"pattern.*too long",
         ),
         (
-            [{"pattern": "x", "replacement": "y" * (agent_config.MAX_SPEECH_REGEX_REPLACEMENT_LENGTH + 1)}],
+            [
+                {
+                    "pattern": "x",
+                    "replacement": "y"
+                    * (agent_config.MAX_SPEECH_REGEX_REPLACEMENT_LENGTH + 1),
+                }
+            ],
             r"replacement.*too long",
         ),
     ]
@@ -458,7 +499,9 @@ def test_speech_regex_validation_residual_matrix() -> None:
         )
 
 
-def test_legacy_number_coercion_handles_signed_decimal_and_invalid_float_strings() -> None:
+def test_legacy_number_coercion_handles_signed_decimal_and_invalid_float_strings() -> (
+    None
+):
     config = {
         agent_config.CONF_MAX_TOKENS: "+42.0",
         agent_config.CONF_CONTEXT_THRESHOLD: 8.0,
@@ -478,21 +521,36 @@ def test_legacy_number_coercion_handles_signed_decimal_and_invalid_float_strings
         ({agent_config.CONF_PROMPT: 1}, r"prompt.*str"),
         ({agent_config.CONF_TOP_P: "bad"}, r"top_p.*int or float"),
         ({agent_config.CONF_API_MODE: "invalid"}, r"api_mode.*unsupported"),
-        ({agent_config.CONF_ARCHIVE_RETENTION_DAYS: 123}, r"unsupported archive retention"),
+        (
+            {agent_config.CONF_ARCHIVE_RETENTION_DAYS: 123},
+            r"unsupported archive retention",
+        ),
         ({agent_config.CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: -1}, r"at least 0"),
         ({agent_config.CONF_CONTEXT_THRESHOLD: 0}, r"context_threshold.*at least 1"),
         ({agent_config.CONF_ARCHIVE_SESSION_TIMEOUT_MINUTES: 0}, r"must be 1 to 1440"),
         (
-            {agent_config.CONF_MEMORY_AUTO_RETRIEVE_LIMIT: agent_config.MAX_MEMORY_AUTO_RETRIEVE_LIMIT + 1},
+            {
+                agent_config.CONF_MEMORY_AUTO_RETRIEVE_LIMIT: agent_config.MAX_MEMORY_AUTO_RETRIEVE_LIMIT
+                + 1
+            },
             r"memory_auto_retrieve_limit.*must be 0 to",
         ),
         ({agent_config.CONF_TOP_P: 1.1}, r"top_p.*0 to 1"),
         ({agent_config.CONF_TEMPERATURE: 2.1}, r"temperature.*0 to 2"),
-        ({agent_config.CONF_VOICE_DEVICE_MAPPINGS: []}, r"voice_device_mappings.*must map"),
-        ({agent_config.CONF_VOICE_DEVICE_MAPPINGS: {1: "user:x"}}, r"voice_device_mappings.*must map"),
+        (
+            {agent_config.CONF_VOICE_DEVICE_MAPPINGS: []},
+            r"voice_device_mappings.*must map",
+        ),
+        (
+            {agent_config.CONF_VOICE_DEVICE_MAPPINGS: {1: "user:x"}},
+            r"voice_device_mappings.*must map",
+        ),
         ({agent_config.CONF_SKILLS: "skill"}, r"skills.*list of names"),
         ({agent_config.CONF_SKILLS: [1]}, r"skills.*list of names"),
-        ({agent_config.CONF_GUEST_ALLOWED_GROUP_IDS: [""]}, r"list of non-empty strings"),
+        (
+            {agent_config.CONF_GUEST_ALLOWED_GROUP_IDS: [""]},
+            r"list of non-empty strings",
+        ),
     ],
 )
 def test_normalize_agent_config_rejects_residual_invalid_values(config, match) -> None:
@@ -548,7 +606,9 @@ def test_skills_fail_when_loader_status_reports_unavailable(monkeypatch) -> None
 
 
 def test_function_tools_supplied_in_config_are_serialized_canonically() -> None:
-    result = normalize_agent_config({agent_config.CONF_FUNCTION_TOOLS: [_coverage_native_tool()]})
+    result = normalize_agent_config(
+        {agent_config.CONF_FUNCTION_TOOLS: [_coverage_native_tool()]}
+    )
     assert isinstance(result[agent_config.CONF_FUNCTION_TOOLS], str)
     assert "name: demo" in result[agent_config.CONF_FUNCTION_TOOLS]
 
@@ -584,7 +644,6 @@ def test_validate_function_tools_normalizes_reference_errors(
         )
 
 
-
 def test_validate_function_groups_reserves_loader_for_on_demand_groups() -> None:
     """Prevent a configured tool from colliding with the on-demand loader tool."""
     tools = [{"spec": {"name": agent_config.FUNCTION_GROUP_LOADER_TOOL_NAME}}]
@@ -614,7 +673,9 @@ def test_coerce_legacy_numbers_leaves_non_integral_float_unchanged() -> None:
 
 def test_normalize_agent_config_rejects_non_object() -> None:
     """Reject non-object persisted agent configuration payloads."""
-    with pytest.raises(agent_config.AgentConfigError, match="config: must be an object"):
+    with pytest.raises(
+        agent_config.AgentConfigError, match="config: must be an object"
+    ):
         agent_config.normalize_agent_config([])  # type: ignore[arg-type]
 
 
