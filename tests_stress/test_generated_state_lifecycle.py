@@ -78,7 +78,16 @@ def _completed_payload(api: str, model: str) -> dict:
     }
 
 
-async def _converse(hass: HomeAssistant, entry, monkeypatch, api: str, model: str):
+async def _converse(
+    hass: HomeAssistant,
+    entry,
+    monkeypatch,
+    api: str,
+    model: str,
+    *,
+    context: Context | None = None,
+    text: str = "Generated coverage prompt",
+):
     agent = conversation.async_get_agent(hass, entry.entry_id)
     assert agent is not None
     if model_metadata(model)["streaming"]:
@@ -120,9 +129,9 @@ async def _converse(hass: HomeAssistant, entry, monkeypatch, api: str, model: st
     monkeypatch.setattr(_raw_client(agent)._client, "send", send)
     result = await conversation.async_converse(
         hass=hass,
-        text="Generated coverage prompt",
+        text=text,
         conversation_id=None,
-        context=Context(),
+        context=context or Context(),
         language="en",
         agent_id=entry.entry_id,
     )

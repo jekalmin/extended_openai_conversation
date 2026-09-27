@@ -1,5 +1,14 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
+  "feature_evidence": {
+    "provider": {"dimensions": ["chat_model", "api_mode", "reasoning_profile", "sampling", "service_tier", "web_search", "web_search_context"], "transition": "generated_valid_transitions", "journey": "model-api-migration"},
+    "functions": {"dimensions": ["function_tools", "function_groups", "function_tool_error_recovery", "shorten_tool_call_id"], "transition": "generated_valid_transitions", "journey": "function-heavy-evolution"},
+    "memory_knowledge": {"dimensions": ["memory_mode", "memory_retrieval_mode", "memory_auto_retrieve_limit", "knowledge_enabled", "temporary_memory", "shared_memory_mode"], "transition": "generated_valid_transitions", "journey": "installation-to-mature"},
+    "archive_retention": {"dimensions": ["archive", "retention"], "transition": "generated_valid_transitions", "journey": "long-lived-evolution"},
+    "guest": {"dimensions": ["guest_mode_enabled", "guest_function_policy", "guest_knowledge_policy", "guest_shared_memory_policy", "guest_web_search"], "transition": "generated_valid_transitions", "journey": "guest-private-boundary"},
+    "local_voice": {"dimensions": ["local_intents_enabled", "local_intent_exclusions", "local_intent_delayed_commands_to_ai", "conversation_continuity", "voice_scope_policy", "voice_unmapped_policy", "voice_device_mappings"], "transition": "generated_valid_transitions", "journey": "advanced-household"},
+    "presentation": {"dimensions": ["exposed_entities_enabled", "speech_processing_enabled", "speech_behavior", "template_context", "advanced_options"], "transition": "generated_valid_transitions", "journey": "extensive-backup-restore"}
+  },
   "fields": {
     "CONF_ADVANCED_OPTIONS": {
       "save_reload": "config_subentry",
