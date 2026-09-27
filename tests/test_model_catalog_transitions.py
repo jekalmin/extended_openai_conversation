@@ -451,6 +451,62 @@ async def test_irrelevant_subentries_do_not_load_request_rules(
     get_rules.assert_not_awaited()
 
 
+async def test_catalog_check_rejects_invalid_saved_rule_then_recovers(
+    manager, monkeypatch
+) -> None:
+    """A catalogue must not be staged while a persisted routing choice cannot build a request."""
+    candidate = _downloaded_candidate()
+    _transport(monkeypatch, json.dumps(candidate).encode())
+    manager.hass.config_entries.async_entries.return_value = [_entry(_subentry())]
+    rules = [
+        {"action_type": "other", "action": {}},
+        {"action_type": "model_routing", "action": {"reset": True}},
+        {"action_type": "model_routing", "action": {"model": "{model}"}},
+        {
+            "action_type": "model_routing",
+            "action": {"model": "gpt-5.6", "reasoning_effort": "not-an-effort"},
+        },
+    ]
+    get_rules = AsyncMock(
+        return_value=SimpleNamespace(snapshot=lambda: {"rules": rules})
+    )
+    monkeypatch.setattr(runtime, "async_get_request_rules", get_rules)
+
+    rejected = await manager.async_check(force=True)
+    assert rejected["source"] == "bundled"
+    assert rejected["update_available"] is False
+    assert (
+        rejected["last_error"]
+        == "Model data check failed; the current catalogue was kept."
+    )
+    assert manager.store.saved["available_catalog"] is None
+    get_rules.assert_awaited_once_with(manager.hass, "entry", "agent")
+
+    rules[-1]["action"]["reasoning_effort"] = "medium"
+    accepted = await manager.async_check(force=True)
+    assert accepted["update_available"] is True
+    assert accepted["available_catalog_version"] == candidate["catalog_version"]
+    assert manager.store.saved["available_catalog"] == candidate
+    assert manager.catalog is None
+    assert get_rules.await_count == 2
+
+
+async def test_candidate_rejects_invalid_saved_agent_before_loading_rules(
+    manager, monkeypatch
+) -> None:
+    manager.hass.config_entries.async_entries.return_value = [
+        _entry(_subentry(effort="not-an-effort"))
+    ]
+    get_rules = AsyncMock()
+    monkeypatch.setattr(runtime, "async_get_request_rules", get_rules)
+
+    assert (
+        await manager._candidate_preserves_saved_requests(_downloaded_candidate())
+        is False
+    )
+    get_rules.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "action",
     [
