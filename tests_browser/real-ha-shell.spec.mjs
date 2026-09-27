@@ -278,3 +278,59 @@ test("genuine HA native YAML editor saves with Ctrl+S and survives a fresh panel
   await panel.locator("#confirm-accept").click();
   await expect(panel.locator(".tool-card").filter({hasText: "real_shell_native_tool"})).toHaveCount(0);
 });
+
+test("genuine HA YAML keyboard edits validate before one persisted save", async ({context, page}) => {
+  await authenticate(context);
+  let panel = await openFunctionsFromOverview(page);
+  await panel.evaluate((element) => {
+    window.__keyboardToolSaves = [];
+    const original = element._hass.callWS.bind(element._hass);
+    element._hass.callWS = async (message) => {
+      if (message.section === "tools" && message.action === "save") {
+        window.__keyboardToolSaves.push(structuredClone(message));
+      }
+      return original(message);
+    };
+  });
+  await panel.locator("#add-tool").click();
+  const dialog = panel.locator("#tool-dialog");
+  const editor = panel.locator("#tool-yaml-native");
+  await expect(editor).toBeVisible({timeout: 30_000});
+  const surface = editor.locator('[contenteditable="true"], textarea').first();
+  await expect(surface).toBeVisible();
+
+  const yaml = (description) => `spec:\n  name: real_shell_keyboard_tool\n  description: ${description}\n  parameters:\n    type: object\n    properties: {}\nfunction:\n  type: native\n  name: get_user_from_user_id\n`;
+  const replaceThroughKeyboard = async (value) => {
+    await surface.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText(value);
+    await expect.poll(() => editor.evaluate((element) => element.yaml)).toBe(value);
+  };
+
+  await replaceThroughKeyboard(yaml("First valid keyboard edit"));
+  await expect(panel.locator("#tool-error")).toContainText("YAML changed");
+  await replaceThroughKeyboard(yaml("[unterminated"));
+  await expect(panel.locator("#tool-error")).toHaveClass(/invalid/);
+  await panel.locator("#tool-save").click();
+  await expect(dialog).toHaveJSProperty("open", true);
+  await expect(panel.locator("#tool-error")).toHaveClass(/invalid/);
+  await expect(panel.locator(".tool-card").filter({hasText: "real_shell_keyboard_tool"})).toHaveCount(0);
+  expect(await page.evaluate(() => window.__keyboardToolSaves)).toHaveLength(0);
+
+  await replaceThroughKeyboard(yaml("Final corrected keyboard edit"));
+  await expect(panel.locator("#tool-error")).toContainText("YAML changed");
+  await panel.locator("#tool-save").click();
+  await expect(dialog).toHaveJSProperty("open", false);
+  let card = panel.locator(".tool-card").filter({hasText: "real_shell_keyboard_tool"});
+  await expect(card).toContainText("Final corrected keyboard edit");
+  await expect(card).not.toContainText("First valid keyboard edit");
+  expect(await page.evaluate(() => window.__keyboardToolSaves)).toHaveLength(1);
+
+  panel = await openFunctionsFromOverview(page);
+  card = panel.locator(".tool-card").filter({hasText: "real_shell_keyboard_tool"});
+  await expect(card).toContainText("Final corrected keyboard edit");
+  await card.locator(".delete-tool").click();
+  await expect(panel.locator("#confirm-dialog")).toHaveJSProperty("open", true);
+  await panel.locator("#confirm-accept").click();
+  await expect(card).toHaveCount(0);
+});
