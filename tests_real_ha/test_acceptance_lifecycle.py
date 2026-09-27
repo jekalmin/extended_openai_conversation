@@ -13,6 +13,7 @@ from custom_components.extended_openai_conversation_responses.agent_config impor
     configured_function_tools_from_data,
 )
 from custom_components.extended_openai_conversation_responses.const import (
+    CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_FUNCTION_TOOLS,
     CONF_REASONING_EFFORT,
@@ -61,6 +62,7 @@ def _make_entry(
     include_ai_task: bool = True,
     local_intents: bool = False,
     conversation_options: dict | None = None,
+    base_url: str | None = None,
 ) -> MockConfigEntry:
     """Create a current-version entry that cannot make an authentication request."""
     conversation_data = dict(conversation_options or {})
@@ -91,6 +93,7 @@ def _make_entry(
             # The acceptance suite exercises the real HA and integration lifecycle,
             # but must never need an external OpenAI request merely to load an entry.
             CONF_SKIP_AUTHENTICATION: True,
+            **({CONF_BASE_URL: base_url} if base_url else {}),
         },
         version=CONFIG_ENTRY_VERSION,
         subentries_data=subentries,

@@ -3,7 +3,7 @@
   "layers": ["model", "real_ha", "provider_wire", "browser", "browser_real_ha", "process"],
   "features": {
     "initial_setup": {"real_ha": ["tests_real_ha/test_config_flow.py"]},
-    "ai_task": {"real_ha": ["tests_stress/test_ai_task_mixed_campaign.py", "tests_real_ha/test_ai_task_runtime.py", "tests_real_ha/test_ai_task_lifecycle.py"]},
+    "ai_task": {"real_ha": ["tests_stress/test_ai_task_mixed_campaign.py", "tests_real_ha/test_ai_task_runtime.py", "tests_real_ha/test_ai_task_lifecycle.py", "tests_real_ha/test_ai_task_provider_wire.py"], "provider_wire": ["tests_real_ha/test_ai_task_provider_wire.py"]},
     "voice_identity": {"real_ha": ["tests_stress/test_voice_household_campaign.py", "tests_real_ha/test_assist_voice_identity_precedence.py"], "provider_wire": ["tests_stress/test_voice_household_campaign.py"]},
     "intercom": {"real_ha": ["tests_stress/test_intercom_endurance_campaign.py", "tests_real_ha/test_intercom_voice_acceptance.py"]},
     "conversation_archive": {"real_ha": ["tests_stress/test_archive_living_campaign.py", "tests_stress/test_voice_household_campaign.py"]},

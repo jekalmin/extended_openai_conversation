@@ -9,15 +9,8 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-import voluptuous as vol
-
-from homeassistant.components import ai_task, media_source
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_API_KEY
-from homeassistant.core import Context, HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er, llm
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+import voluptuous as vol
 
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
@@ -28,6 +21,12 @@ from custom_components.extended_openai_conversation_responses.const import (
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DOMAIN,
 )
+from homeassistant.components import ai_task, media_source
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_API_KEY
+from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er, llm
 
 
 class FakeStream:
@@ -124,7 +123,7 @@ class ContextProbeTool(llm.Tool):
 class CallerAPI(llm.API):
     """Minimal caller-supplied HA LLM API for the genuine AI Task path."""
 
-    tools: list[llm.Tool] = []
+    tools: list[llm.Tool]
 
     async def async_get_api_instance(self, llm_context: llm.LLMContext) -> llm.APIInstance:
         return llm.APIInstance(
@@ -135,10 +134,10 @@ class CallerAPI(llm.API):
         )
 
 
-def _entry() -> MockConfigEntry:
+def _entry(api_mode: str = API_MODE_CHAT_COMPLETIONS) -> MockConfigEntry:
     """Build one local-only integration entry with one AI Task subentry."""
     options = dict(DEFAULT_AI_TASK_OPTIONS)
-    options[CONF_API_MODE] = API_MODE_CHAT_COMPLETIONS
+    options[CONF_API_MODE] = api_mode
     return MockConfigEntry(
         domain=DOMAIN,
         title="AI Task Runtime Acceptance",
