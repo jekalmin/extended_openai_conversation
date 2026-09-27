@@ -3,9 +3,36 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from tests_stress.generated_valid_states import DIMENSIONS, _valid
-from tests_stress.generated_valid_transitions import generate_transitions
+from tests_stress.generated_valid_transitions import (
+    JOURNEYS,
+    _named_paths,
+    generate_transitions,
+)
+
+
+def test_major_feature_contract_has_static_transition_and_journey_evidence() -> None:
+    contract = json.loads(
+        Path(__file__)
+        .with_name("agent_field_contract.json")
+        .read_text(encoding="utf-8")
+    )
+    features = contract["feature_evidence"]
+    assert set().union(
+        *(set(feature["dimensions"]) for feature in features.values())
+    ) == set(DIMENSIONS)
+    assert {feature["journey"] for feature in features.values()} <= set(JOURNEYS)
+    named = {path.family: path for path in _named_paths()}
+    for feature in features.values():
+        assert feature["transition"] == "generated_valid_transitions"
+        assert feature["dimensions"]
+        path = named[JOURNEYS[feature["journey"]]]
+        assert any(
+            any(a[key] != b[key] for key in feature["dimensions"])
+            for a, b in zip(path.states, path.states[1:], strict=False)
+        )
 
 
 def test_transition_paths_cover_every_enterable_value_with_valid_aba_returns() -> None:

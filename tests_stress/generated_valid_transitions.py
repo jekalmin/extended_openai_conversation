@@ -10,6 +10,17 @@ from typing import Any
 
 from tests_stress.generated_valid_states import DIMENSIONS, _valid, generate
 
+JOURNEYS = {
+    "installation-to-mature": "memory-knowledge",
+    "advanced-household": "local-voice",
+    "model-api-migration": "model-capability",
+    "long-lived-evolution": "archive-retention",
+    "guest-private-boundary": "guest-security",
+    "extensive-backup-restore": "ui-speech",
+    "function-heavy-evolution": "function-loading",
+    "voice-oriented-assistant": "provider-api",
+}
+
 
 def fingerprint(state: dict[str, Any]) -> str:
     return sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()[:12]
