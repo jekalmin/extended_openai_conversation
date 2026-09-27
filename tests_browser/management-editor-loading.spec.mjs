@@ -44,6 +44,7 @@ test("Function Tool editing waits for delayed YAML and persists the user's edit"
   await expect(panel.locator("#tool-save")).toBeDisabled();
   await expect(panel.locator("#tool-validate")).toBeDisabled();
   await expect(panel.locator("#tool-cancel")).toBeEnabled();
+  await expect.poll(() => page.evaluate(() => window.toolEditorLoads.length)).toBe(1);
   await page.evaluate(() => window.toolEditorLoads[0].resolve());
   await expect(editor).toBeEditable();
   await editor.fill(editedYaml);
@@ -65,6 +66,7 @@ test("cancelled editor loads cannot overwrite a reopened dialog", async ({page})
   const errors = trackPageErrors(page);
   const panel = await openFunctions(page);
   await panel.locator(".edit-tool").first().click();
+  await expect.poll(() => page.evaluate(() => window.toolEditorLoads.length)).toBe(1);
   await panel.locator("#tool-cancel").click();
   await panel.locator(".edit-tool").first().click();
   await expect.poll(() => page.evaluate(() => window.toolEditorLoads.length)).toBe(2);
