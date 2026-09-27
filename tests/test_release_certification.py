@@ -110,6 +110,8 @@ def test_unavailable_workflow_metadata_fails_with_source_and_expected_check():
         return FakeActions.workflow_runs(actions, filename, source_sha)
 
     actions.workflow_runs = unavailable
-    with pytest.raises(RuntimeError, match=f"Release source {SOURCE} is not certified") as error:
+    with pytest.raises(
+        RuntimeError, match=f"Release source {SOURCE} is not certified"
+    ) as error:
         certify(actions, SOURCE)
     assert "frontend.yml: expected successful workflow run" in str(error.value)
