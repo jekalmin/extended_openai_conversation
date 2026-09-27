@@ -4,6 +4,10 @@ from unittest.mock import Mock
 
 import yaml
 
+from custom_components.extended_openai_conversation_responses import (
+    function_tool_quarantine as quarantine,
+)
+
 
 def _phone_tool(*, min_length):
     return {
@@ -80,11 +84,6 @@ def test_runtime_quarantine_does_not_leak_into_next_request(monkeypatch) -> None
     assert captured["function_tools"] is second_tools
 
 
-from custom_components.extended_openai_conversation_responses import (
-    function_tool_quarantine as quarantine,
-)
-
-
 def test_runtime_quarantine_all_strips_string_group_members_and_warns(
     monkeypatch,
 ) -> None:
@@ -113,26 +112,32 @@ def test_runtime_quarantine_all_strips_string_group_members_and_warns(
     )
     monkeypatch.setattr(quarantine, "_LOGGER", logger)
 
-    assert quarantine._runtime_configured_function_tools(
-        {"functions": yaml.safe_dump([{"broken": True}])}
-    ) == []
-    assert quarantine._RUNTIME_QUARANTINE_ALL_FUNCTIONS.get() is True
-    assert quarantine._RUNTIME_QUARANTINED_FUNCTION_NAMES.get() == frozenset()
+    names_token = quarantine._RUNTIME_QUARANTINED_FUNCTION_NAMES.set(frozenset())
+    all_token = quarantine._RUNTIME_QUARANTINE_ALL_FUNCTIONS.set(False)
+    try:
+        assert quarantine._runtime_configured_function_tools(
+            {"functions": yaml.safe_dump([{"broken": True}])}
+        ) == []
+        assert quarantine._RUNTIME_QUARANTINE_ALL_FUNCTIONS.get() is True
+        assert quarantine._RUNTIME_QUARANTINED_FUNCTION_NAMES.get() == frozenset()
 
-    groups = [
-        {
-            "id": "all",
-            "functions": ["tool-a", 123, "tool-b"],
-        },
-        {"id": "malformed"},
-        "not-a-group",
-    ]
-    result = quarantine._runtime_validate_function_groups(groups, [])
+        groups = [
+            {
+                "id": "all",
+                "functions": ["tool-a", 123, "tool-b"],
+            },
+            {"id": "malformed"},
+            "not-a-group",
+        ]
+        result = quarantine._runtime_validate_function_groups(groups, [])
 
-    assert result[0]["functions"] == [123]
-    assert captured["groups"][0]["functions"] == [123]
-    logger.warning.assert_called_once()
-    assert "All configured Function Tools are invalid" in logger.warning.call_args.args[0]
+        assert result[0]["functions"] == [123]
+        assert captured["groups"][0]["functions"] == [123]
+        logger.warning.assert_called_once()
+        assert "All configured Function Tools are invalid" in logger.warning.call_args.args[0]
+    finally:
+        quarantine._RUNTIME_QUARANTINE_ALL_FUNCTIONS.reset(all_token)
+        quarantine._RUNTIME_QUARANTINED_FUNCTION_NAMES.reset(names_token)
 
 
 def test_runtime_quarantine_named_tools_only_removes_matching_group_members(
