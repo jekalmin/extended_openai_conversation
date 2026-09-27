@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "description": "Reviewed exact HA WebSocket key, required/optional, nullable, and boundary shape contract for every registered management action. The management schema is action-agnostic; action inventory separately enumerates every handler action.",
+  "management": {
+    "action": {
+      "required": true,
+      "kind": "string"
+    },
+    "active_from": {
+      "required": false,
+      "kind": "string"
+    },
+    "active_until": {
+      "required": false,
+      "kind": "string"
+    },
+    "category": {
+      "required": false,
+      "kind": "string"
+    },
+    "clear_fields": {
+      "required": false,
+      "kind": "enum_array",
+      "values": [
+        "subject",
+        "key",
+        "valid_from"
+      ]
+    },
+    "config": {
+      "required": false,
+      "kind": "object"
+    },
+    "confirm": {
+      "required": false,
+      "kind": "boolean"
+    },
+    "content": {
+      "required": false,
+      "kind": "string"
+    },
+    "continuity_key": {
+      "required": false,
+      "kind": "string"
+    },
+    "defaults": {
+      "required": false,
+      "kind": "object"
+    },
+    "description": {
+      "required": false,
+      "kind": "string"
+    },
+    "direction": {
+      "required": false,
+      "kind": "string"
+    },
+    "document": {
+      "required": false,
+      "kind": "union",
+      "forms": [
+        "string",
+        "object"
+      ]
+    },
+    "enabled": {
+      "required": false,
+      "kind": "boolean"
+    },
+    "end_date": {
+      "required": false,
+      "kind": "string"
+    },
+    "entry_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "expected_revision": {
+      "required": false,
+      "kind": "string"
+    },
+    "group": {
+      "required": false,
+      "kind": "object"
+    },
+    "group_id": {
+      "required": false,
+      "kind": "union",
+      "forms": [
+        "null",
+        "string"
+      ]
+    },
+    "groups": {
+      "required": false,
+      "kind": "array"
+    },
+    "id": {
+      "required": true,
+      "kind": "nonnegative_integer"
+    },
+    "importance": {
+      "required": false,
+      "kind": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high"
+      ]
+    },
+    "indefinite": {
+      "required": false,
+      "kind": "boolean"
+    },
+    "key": {
+      "required": false,
+      "kind": "string"
+    },
+    "kind": {
+      "required": false,
+      "kind": "string"
+    },
+    "limit": {
+      "required": false,
+      "kind": "integer"
+    },
+    "memory_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "memory_ids": {
+      "required": false,
+      "kind": "array"
+    },
+    "metadata_keys": {
+      "required": false,
+      "kind": "array"
+    },
+    "mode": {
+      "required": false,
+      "kind": "string"
+    },
+    "name": {
+      "required": false,
+      "kind": "string"
+    },
+    "offset": {
+      "required": false,
+      "kind": "integer"
+    },
+    "original_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "original_name": {
+      "required": false,
+      "kind": "string"
+    },
+    "pack": {
+      "required": false,
+      "kind": "union",
+      "forms": [
+        "string",
+        "object"
+      ]
+    },
+    "pin": {
+      "required": false,
+      "kind": "string"
+    },
+    "pin_repeat": {
+      "required": false,
+      "kind": "string"
+    },
+    "query": {
+      "required": false,
+      "kind": "string"
+    },
+    "refresh_confirmation": {
+      "required": false,
+      "kind": "boolean"
+    },
+    "review_token": {
+      "required": false,
+      "kind": "string"
+    },
+    "revision": {
+      "required": false,
+      "kind": "string"
+    },
+    "rule": {
+      "required": false,
+      "kind": "object"
+    },
+    "rule_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "rule_ids": {
+      "required": false,
+      "kind": "union",
+      "forms": [
+        "null",
+        "array"
+      ]
+    },
+    "run_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "sample_text": {
+      "required": false,
+      "kind": "string"
+    },
+    "scope_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "scope_kind": {
+      "required": false,
+      "kind": "enum",
+      "values": [
+        "all",
+        "archive",
+        "memory",
+        "temporary"
+      ]
+    },
+    "section": {
+      "required": false,
+      "kind": "string"
+    },
+    "selection": {
+      "required": false,
+      "kind": "string"
+    },
+    "session_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "settings": {
+      "required": false,
+      "kind": "object"
+    },
+    "source_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "start_date": {
+      "required": false,
+      "kind": "string"
+    },
+    "start_turn": {
+      "required": false,
+      "kind": "integer"
+    },
+    "subentry_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "subject": {
+      "required": false,
+      "kind": "string"
+    },
+    "successful": {
+      "required": false,
+      "kind": "boolean"
+    },
+    "target_scope_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "temporary_scope_id": {
+      "required": false,
+      "kind": "string"
+    },
+    "text": {
+      "required": false,
+      "kind": "string"
+    },
+    "title": {
+      "required": false,
+      "kind": "string"
+    },
+    "tool": {
+      "required": false,
+      "kind": "object"
+    },
+    "tools": {
+      "required": false,
+      "kind": "union",
+      "forms": [
+        "string",
+        "array"
+      ]
+    },
+    "type": {
+      "required": true,
+      "kind": "constant",
+      "value": "extended_openai_conversation_responses/management"
+    },
+    "valid_from": {
+      "required": false,
+      "kind": "string"
+    },
+    "wording_groups": {
+      "required": false,
+      "kind": "array"
+    },
+    "yaml": {
+      "required": false,
+      "kind": "string"
+    }
+  },
+  "backup_transfer": {
+    "action": {
+      "required": true,
+      "kind": "string"
+    },
+    "data": {
+      "required": false,
+      "kind": "object",
+      "default": {}
+    },
+    "entry_id": {
+      "required": true,
+      "kind": "string"
+    },
+    "id": {
+      "required": true,
+      "kind": "nonnegative_integer"
+    },
+    "subentry_id": {
+      "required": true,
+      "kind": "string"
+    },
+    "type": {
+      "required": true,
+      "kind": "constant",
+      "value": "extended_openai_conversation_responses/management/backup_transfer"
+    }
+  },
+  "backup_transfer_actions": [
+    "setup_export",
+    "export_start",
+    "export_chunk",
+    "export_cancel",
+    "import_start",
+    "import_chunk",
+    "import_inspect",
+    "import_restore",
+    "import_cancel"
+  ]
+}
