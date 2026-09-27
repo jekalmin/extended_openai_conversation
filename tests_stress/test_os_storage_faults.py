@@ -22,6 +22,7 @@ from custom_components.extended_openai_conversation_responses.restore_recovery i
     _journal_store,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from tests_stress.conftest import record
 
 
@@ -37,11 +38,32 @@ def _files(path: str) -> set[str]:
     return {child.name for child in Path(path).parent.iterdir()}
 
 
+@pytest.fixture
+def real_store_io(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Undo pytest-HA's in-memory Store shim for these OS-boundary probes."""
+    hass.config.config_dir = str(tmp_path)
+
+    async def write_to_disk(store: Store, data: dict) -> None:
+        # All selected EOAI stores serialize in the executor; retain HA's real
+        # _write_data -> write_utf8_file_atomic -> fsync/replace path.
+        await store.hass.async_add_executor_job(store._write_data, data)
+
+    async def load_from_disk(store: Store):
+        return await store._async_load_data()
+
+    monkeypatch.setattr(Store, "_async_write_data", write_to_disk)
+    monkeypatch.setattr(Store, "_async_load", load_from_disk)
+
+
 async def test_knowledge_fsync_enospc_rolls_back_and_recovers(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
+    real_store_io: None,
 ) -> None:
+    del real_store_io
     storage = HomeAssistantKnowledgeStorage(hass, "disk-entry", "disk-agent")
     library = KnowledgeLibrary(storage)
     await library.async_initialize()
@@ -81,7 +103,9 @@ async def test_request_rules_atomic_replace_erofs_rolls_back_and_recovers(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
+    real_store_io: None,
 ) -> None:
+    del real_store_io
     key = "extended_openai_conversation.disk_fault_rules"
     store = RequestRuleStore(hass, RULES_VERSION, key)
     rules = RequestRules(store)
@@ -124,7 +148,9 @@ async def test_restore_journal_replace_eacces_never_claims_commit(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
+    real_store_io: None,
 ) -> None:
+    del real_store_io
     store = _journal_store(hass, "disk-entry", "disk-agent")
     saved = {"phase": "saved", "private_marker": "do-not-log-this"}
     assert await _async_write_journal_verified(store, saved)
