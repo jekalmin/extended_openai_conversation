@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
+from itertools import pairwise
 import json
+import random
 from typing import Any, Literal
 
 import httpx
@@ -34,6 +36,69 @@ class _BrokenStream(httpx.AsyncByteStream):
     async def __aiter__(self):
         yield self.prefix
         raise httpx.ReadError("provider stream disconnected", request=self.request)
+
+
+def split_valid_sse(
+    payload: bytes,
+    *,
+    positions: list[int] | None = None,
+    sizes: list[int] | None = None,
+    seed: int | None = None,
+) -> list[bytes]:
+    """Partition unchanged SSE bytes at explicit offsets or seeded chunk sizes."""
+    if sum(option is not None for option in (positions, sizes, seed)) != 1:
+        raise ValueError("Choose exactly one SSE chunking strategy")
+    if seed is not None:
+        rng = random.Random(seed)
+        sizes = [rng.choice((1, 2, 3, 5, 13, 64)) for _ in range(len(payload))]
+    if sizes is not None:
+        if not sizes or any(size < 1 for size in sizes):
+            raise ValueError("SSE chunk sizes must be positive")
+        offsets = []
+        offset = 0
+        for size in sizes:
+            offset += size
+            if offset >= len(payload):
+                break
+            offsets.append(offset)
+        positions = offsets
+    assert positions is not None
+    if positions != sorted(set(positions)) or any(
+        position <= 0 or position >= len(payload) for position in positions
+    ):
+        raise ValueError("SSE split positions must be unique interior offsets")
+    boundaries = [0, *positions, len(payload)]
+    chunks = [payload[start:end] for start, end in pairwise(boundaries)]
+    assert b"".join(chunks) == payload
+    return chunks
+
+
+class GatedSSEStream(httpx.AsyncByteStream):
+    """Expose deterministic content-delivered and close boundaries to tests."""
+
+    def __init__(self, chunks: list[bytes], *, gate_after: int | None = None) -> None:
+        self.chunks = chunks
+        self.gate_after = gate_after
+        self.delivered = asyncio.Event()
+        self.release = asyncio.Event()
+        self.closed = asyncio.Event()
+        self.yielded = 0
+
+    async def __aiter__(self):
+        try:
+            for chunk in self.chunks:
+                if self.gate_after is not None and self.yielded == self.gate_after:
+                    self.delivered.set()
+                    await self.release.wait()
+                self.yielded += 1
+                yield chunk
+            self.delivered.set()
+        finally:
+            self.closed.set()
+
+    async def aclose(self) -> None:
+        self.closed.set()
+        self.release.set()
 
 
 class ProviderFaultTransport:
