@@ -50,8 +50,8 @@ jobs:
               raise SystemExit(f"Current tracked version is not X.Y.Z: {current!r}")
           if target != current:
               raise SystemExit(
-                  f"Release version {target} must already be tracked in source "
-                  f"commit {current}. Commit the version bump to develop and "
+                  f"Release version {target} must match tracked source version "
+                  f"{current}. Commit the version bump to develop and "
                   "certify that exact commit before publishing."
               )
           PY

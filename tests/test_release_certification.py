@@ -99,3 +99,17 @@ def test_any_complete_successful_heavy_run_is_sufficient():
     failed = {**actions.runs["enhanced-stress.yml"][0], "conclusion": "failure"}
     actions.runs["enhanced-stress.yml"].insert(0, failed)
     assert "enhanced-stress.yml" in certify(actions, SOURCE)
+
+
+def test_unavailable_workflow_metadata_fails_with_source_and_expected_check():
+    actions = FakeActions()
+
+    def unavailable(filename, source_sha):
+        if filename == "frontend.yml":
+            raise OSError("Actions API unavailable")
+        return FakeActions.workflow_runs(actions, filename, source_sha)
+
+    actions.workflow_runs = unavailable
+    with pytest.raises(RuntimeError, match=f"Release source {SOURCE} is not certified") as error:
+        certify(actions, SOURCE)
+    assert "frontend.yml: expected successful workflow run" in str(error.value)

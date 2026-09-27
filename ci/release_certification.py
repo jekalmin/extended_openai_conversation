@@ -124,18 +124,28 @@ def certify(actions: GitHubActions, source_sha: str) -> dict[str, str]:
     evidence = {}
     missing = []
     for filename in REQUIRED_WORKFLOWS:
-        workflow_id, runs = actions.workflow_runs(filename, source_sha)
+        try:
+            workflow_id, runs = actions.workflow_runs(filename, source_sha)
+        except Exception as exc:
+            missing.append(
+                f"{filename}: expected successful workflow run; metadata could not be verified ({exc})"
+            )
+            continue
         candidates = [
             run
             for run in runs
             if qualifying_run(run, workflow_id=workflow_id, source_sha=source_sha)
         ]
         if filename == "enhanced-stress.yml":
-            candidates = [
-                run
-                for run in candidates
-                if complete_heavy_nightly(run, actions.run_jobs(run["id"]))
-            ]
+            complete = []
+            job_errors = []
+            for run in candidates:
+                try:
+                    if complete_heavy_nightly(run, actions.run_jobs(run["id"])):
+                        complete.append(run)
+                except Exception as exc:
+                    job_errors.append(f"run {run['id']}: {exc}")
+            candidates = complete
         if candidates:
             evidence[filename] = candidates[0]["html_url"]
         else:
@@ -144,7 +154,12 @@ def certify(actions: GitHubActions, source_sha: str) -> dict[str, str]:
                 if filename == "enhanced-stress.yml"
                 else "successful workflow run"
             )
-            missing.append(f"{filename}: expected {detail} on this exact SHA")
+            suffix = (
+                f"; job metadata errors: {', '.join(job_errors)}"
+                if filename == "enhanced-stress.yml" and job_errors
+                else ""
+            )
+            missing.append(f"{filename}: expected {detail} on this exact SHA{suffix}")
     if missing:
         raise RuntimeError(
             f"Release source {source_sha} is not certified:\n- "
