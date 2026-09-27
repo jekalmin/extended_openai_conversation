@@ -1,0 +1,69 @@
+name: Small Live OpenAI Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_only:
+        description: "Select cases without calling OpenAI"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "43 4 * * 3"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: small-live-openai-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Six catalogue-guided live probes
+    if: github.event_name == 'schedule' || github.actor == 'conorod1992'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/extended-openai-ci-stable:ha-stable
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Checkout trusted develop
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: develop
+          persist-credentials: false
+      - name: Reconcile current dependencies
+        run: |
+          set -euo pipefail
+          CURRENT_ENVIRONMENT_SHA="$(cat requirements_test.txt custom_components/extended_openai_conversation_responses/manifest.json | sha256sum | awk '{print $1}')"
+          BUILT_ENVIRONMENT_SHA="$(cat /opt/eoai-ci/environment.sha256)"
+          if [ "$CURRENT_ENVIRONMENT_SHA" != "$BUILT_ENVIRONMENT_SHA" ]; then
+            pip install -r requirements_test.txt
+            pip install --upgrade homeassistant
+            python ci/install_ha_dependencies.py --manifest custom_components/extended_openai_conversation_responses/manifest.json
+          fi
+          pip check
+      - name: Run bounded live canaries
+        run: |
+          set -euo pipefail
+          args=(--report live-openai-canary-report.json)
+          if [ "${{ inputs.plan_only }}" = "true" ]; then
+            args+=(--plan-only)
+          fi
+          python -m ci.live_openai_canary "${args[@]}"
+      - name: Upload sanitized report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: small-live-openai-canary-report
+          path: live-openai-canary-report.json
+          if-no-files-found: warn
+          retention-days: 30

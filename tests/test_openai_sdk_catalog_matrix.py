@@ -8,6 +8,9 @@ from typing import Any
 import httpx
 import pytest
 
+from custom_components.extended_openai_conversation_responses.const import (
+    CONF_FUNCTION_TOOLS,
+)
 from custom_components.extended_openai_conversation_responses.model_capabilities import (
     frontend_capabilities,
 )
@@ -183,7 +186,7 @@ async def test_every_current_model_emits_only_catalogue_allowed_sdk_fields(
         if case["reasoning_effort"] is not None:
             options["reasoning_effort"] = case["reasoning_effort"]
         if case["functions"]:
-            options["function_tools"] = [_tool()]
+            options[CONF_FUNCTION_TOOLS] = [_tool()]
         if case["sampling"]:
             options.update(temperature=0.25, top_p=0.75)
         if case["tier"] is not None:
