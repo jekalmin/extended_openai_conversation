@@ -24,25 +24,7 @@ on:
   push:
     branches:
       - develop
-    paths:
-      - "frontend/**"
-      - "custom_components/extended_openai_conversation_responses/frontend/**"
-      - "custom_components/extended_openai_conversation_responses/management_ui.py"
-      - "custom_components/extended_openai_conversation_responses/__init__.py"
-      - "custom_components/extended_openai_conversation_responses/debug_ui.py"
-      - "custom_components/extended_openai_conversation_responses/agent_config.py"
-      - "custom_components/extended_openai_conversation_responses/memory.py"
-      - "custom_components/extended_openai_conversation_responses/request_rules.py"
-      - "tests/*.test.mjs"
-      - "tests_browser/**"
-      - "tests_real_ha/test_browser_backend_acceptance.py"
-      - "tests_real_ha/test_browser_process_restart_acceptance.py"
-      - "tests_real_ha/test_browser_refresh_boundary_acceptance.py"
-      - "tests_real_ha/test_browser_runtime_acceptance.py"
-      - "tests_real_ha/test_management_backend_acceptance.py"
-      - "playwright*.config.mjs"
-      - "requirements_test.txt"
-      - ".github/workflows/frontend.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -87,6 +69,9 @@ jobs:
       - name: Build frontend bundle
         working-directory: frontend
         run: npm run build
+
+      - name: Check production bundle regression ceilings
+        run: python ci/check_frontend_bundle.py
 
       - name: Verify tracked production frontend bundle
         run: git diff --exit-code -- custom_components/extended_openai_conversation_responses/frontend/dist/

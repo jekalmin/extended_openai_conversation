@@ -741,6 +741,41 @@ async def test_cold_catalog_skips_tool_validation_for_multiple_agents(monkeypatc
     assert all(agent["function_count"] is None for agent in result["agents"])
 
 
+async def test_large_catalog_keeps_expensive_work_constant(monkeypatch) -> None:
+    """Fifty agents must not trigger fifty Store loads or tool validations."""
+    hass, entry, original = _hass_with_agent()
+    for number in range(1, 50):
+        subentry = SimpleNamespace(
+            subentry_id=f"agent-{number}",
+            subentry_type="conversation",
+            title=f"Scale agent {number}",
+            data={**original.data, "functions": _persisted_invalid_function_tools()},
+        )
+        entry.subentries[subentry.subentry_id] = subentry
+    function_repair._health_cache.clear()
+    expensive = {}
+    for name in (
+        "async_get_usage", "async_get_memory", "async_get_knowledge",
+        "async_get_guest_mode", "async_get_archive", "async_scope_catalog_projection",
+        "management_function_tool_health",
+    ):
+        expensive[name] = AsyncMock(side_effect=AssertionError(f"{name} must stay lazy"))
+        monkeypatch.setattr(loading, name, expensive[name])
+    monkeypatch.setattr(
+        function_repair, "_uncached_function_tool_health",
+        Mock(side_effect=AssertionError("catalog must not validate fifty tools")),
+    )
+
+    result = await async_agent_catalog(hass, "admin", True)
+
+    assert result["_performance"]["agent_count"] == 50
+    assert len(result["agents"]) == len(result["_performance"]["snapshots"]) == 50
+    assert all(agent["function_count"] is None for agent in result["agents"][1:])
+    assert all(mock.await_count == 0 for mock in expensive.values())
+    print({"agents": 50, "expensive_manager_loads": 0, "tool_validations": 0,
+           "catalog_ms": result["_performance"]["total_ms"]})
+
+
 async def test_agent_catalog_keeps_invalid_function_tool_agent_visible(
     monkeypatch,
 ) -> None:
