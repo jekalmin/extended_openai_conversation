@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import json
 from pathlib import Path
 
@@ -20,6 +21,39 @@ from tests_stress.generated_valid_states import (
 )
 
 CONTRACT = Path(__file__).with_name("agent_field_contract.json")
+REVIEWED_CHOICES = (
+    "SERVICE_TIER_OPTIONS",
+    "MEMORY_RETRIEVAL_MODES",
+    "SHARED_MEMORY_MODES",
+    "GUEST_ACCESS_POLICIES",
+    "GUEST_SHARED_MEMORY_POLICIES",
+    "WEB_SEARCH_CONTEXT_OPTIONS",
+    "FUNCTION_GROUP_LOADING_MODES",
+    "CONTINUE_CONVERSATION_OPTIONS",
+    "ARCHIVE_RETENTION_OPTIONS",
+    "USAGE_RETENTION_OPTIONS",
+    "CONVERSATION_TIMEOUT_OPTIONS",
+)
+CAPABILITY_KEYS = (
+    "api",
+    "reasoning",
+    "temperature",
+    "top_p",
+    "service_tiers",
+    "streaming",
+    "tools",
+    "responses_web_search",
+    "recommended_profile",
+    "output_tokens",
+)
+
+
+def _catalogue_digest() -> str:
+    reviewed = {
+        model: {key: metadata[key] for key in CAPABILITY_KEYS}
+        for model, metadata in sorted(BUNDLED_CATALOG.resolved.items())
+    }
+    return sha256(json.dumps(reviewed, sort_keys=True).encode()).hexdigest()
 
 
 def _check_contract(fields: dict, dimension_values: dict) -> None:
@@ -55,6 +89,10 @@ def test_every_persistent_field_and_enum_is_classified() -> None:
     )
     assert set(DIMENSIONS["voice_scope_policy"]) == set(const.VOICE_POLICIES)
     assert set(DIMENSIONS["chat_model"]) == set(BUNDLED_CATALOG.resolved)
+    assert contract["reviewed_choice_values"] == {
+        name: list(getattr(const, name)) for name in REVIEWED_CHOICES
+    }
+    assert contract["catalogue_capability_digest"] == _catalogue_digest()
 
 
 def test_covering_generator_is_valid_complete_bounded_and_reproducible() -> None:

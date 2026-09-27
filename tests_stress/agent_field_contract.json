@@ -1001,5 +1001,71 @@
       false,
       true
     ]
-  }
+  },
+  "reviewed_choice_values": {
+    "SERVICE_TIER_OPTIONS": [
+      "auto",
+      "default",
+      "flex",
+      "fast",
+      "priority",
+      "ultrafast"
+    ],
+    "MEMORY_RETRIEVAL_MODES": [
+      "lexical",
+      "hybrid"
+    ],
+    "SHARED_MEMORY_MODES": [
+      "disabled",
+      "explicit",
+      "automatic"
+    ],
+    "GUEST_ACCESS_POLICIES": [
+      "off",
+      "on",
+      "custom"
+    ],
+    "GUEST_SHARED_MEMORY_POLICIES": [
+      "off",
+      "read_only",
+      "read_write"
+    ],
+    "WEB_SEARCH_CONTEXT_OPTIONS": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "FUNCTION_GROUP_LOADING_MODES": [
+      "always",
+      "on_demand"
+    ],
+    "CONTINUE_CONVERSATION_OPTIONS": [
+      "ha_default",
+      "always",
+      "conditional"
+    ],
+    "ARCHIVE_RETENTION_OPTIONS": [
+      7,
+      30,
+      90,
+      180,
+      365
+    ],
+    "USAGE_RETENTION_OPTIONS": [
+      0,
+      7,
+      30,
+      90,
+      180,
+      365
+    ],
+    "CONVERSATION_TIMEOUT_OPTIONS": [
+      5,
+      15,
+      30,
+      60,
+      240
+    ]
+  },
+  "catalogue_capability_digest": "1e797f47339b0c3ef0ef32126acd459aa5679c0ce9fe556b16498994b0c8074d"
 }

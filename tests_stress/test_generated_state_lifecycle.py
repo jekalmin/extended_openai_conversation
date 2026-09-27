@@ -8,6 +8,9 @@ from custom_components.extended_openai_conversation_responses import (
     agent_config,
     backup,
 )
+from custom_components.extended_openai_conversation_responses.const import (
+    GUEST_POLICY_VERSION,
+)
 from custom_components.extended_openai_conversation_responses.model_capabilities import (
     parameter_is_allowed,
 )
@@ -32,17 +35,58 @@ from tests_stress.conftest import record
 from tests_stress.generated_valid_states import generate, normalized_state
 
 
+def _completed_payload(api: str, model: str) -> dict:
+    if api == "responses":
+        return {
+            "id": "resp-coverage",
+            "object": "response",
+            "created_at": 1,
+            "model": model,
+            "status": "completed",
+            "output": [
+                {
+                    "id": "msg-coverage",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Coverage reply",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+        }
+    return {
+        "id": "chatcmpl-coverage",
+        "object": "chat.completion",
+        "created": 1,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": "Coverage reply"},
+            }
+        ],
+    }
+
+
 async def _converse(hass: HomeAssistant, entry, monkeypatch, api: str, model: str):
     agent = conversation.async_get_agent(hass, entry.entry_id)
     assert agent is not None
-    reply = (
-        _responses_sse_text("Coverage reply")
-        if api == "responses"
-        else _chat_sse_text("Coverage reply")
-    )
-    wire = _install_wire(
-        monkeypatch, agent, [reply.replace(b"gpt-5.6", model.encode())]
-    )
+    if model_metadata(model)["streaming"]:
+        reply = (
+            _responses_sse_text("Coverage reply")
+            if api == "responses"
+            else _chat_sse_text("Coverage reply")
+        )
+        scripted = reply.replace(b"gpt-5.6", model.encode())
+    else:
+        scripted = (200, _completed_payload(api, model))
+    wire = _install_wire(monkeypatch, agent, [scripted])
     result = await conversation.async_converse(
         hass=hass,
         text="Generated coverage prompt",
@@ -64,7 +108,7 @@ def _assert_wire(request: dict, normalized: dict, api: str) -> None:
         "/v1/responses" if api == "responses" else "/v1/chat/completions"
     )
     assert body["model"] == model
-    assert body.get("stream") is True
+    assert body.get("stream", False) is model_metadata(model)["streaming"]
     assert "max_tokens" not in body
     assert "functions" not in body
     assert "function_call" not in body
@@ -104,12 +148,23 @@ async def test_generated_valid_states_cross_real_ha_and_sdk_wire(
     entry = _make_entry(
         "Generated valid states",
         include_ai_task=False,
-        conversation_options={"functions": []},
+        conversation_options={
+            "functions": [],
+            "guest_policy_version": GUEST_POLICY_VERSION,
+        },
     )
     await _setup_entry(hass, entry)
     client = await _admin_client(hass, hass_ws_client)
     for number, case in enumerate(suite.cases):
+        case_started = monotonic()
         normalized, api = normalized_state(case)
+        record(
+            stress_trace,
+            "generated_state_start",
+            case=number,
+            model=normalized["chat_model"],
+            api=api,
+        )
         before = await _management_call(
             client, entry=entry, section="configuration", action="get"
         )
@@ -171,6 +226,7 @@ async def test_generated_valid_states_cross_real_ha_and_sdk_wire(
             case=number,
             model=normalized["chat_model"],
             api=api,
+            elapsed_seconds=round(monotonic() - case_started, 3),
         )
     record(
         stress_trace,
