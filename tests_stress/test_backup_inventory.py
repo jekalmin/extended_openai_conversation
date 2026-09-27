@@ -123,19 +123,24 @@ def test_every_persisted_agent_field_has_backup_classification() -> None:
 def test_every_agent_field_has_lifecycle_contract() -> None:
     path = Path(__file__).with_name("agent_field_contract.json")
     contracts = json.loads(path.read_text(encoding="utf-8"))
-    assert contracts["schema_version"] == 1
+    assert contracts["schema_version"] == 2
     fields = contracts["fields"]
     assert set(fields) == BACKED_UP_AGENT_FIELDS, (
         "Agent configuration changed: classify each field's save, persistence, "
         "backup, and migration semantics in agent_field_contract.json"
     )
-    required = {"save_reload", "persistence", "backup", "migration"}
+    required = {"save_reload", "persistence", "backup", "migration", "coverage"}
     for name, contract in fields.items():
         assert set(contract) == required, name
         assert contract["save_reload"] == "config_subentry", name
         assert contract["persistence"] == "ha_config_entries", name
         assert contract["backup"] == "full_and_setup", name
         assert contract["migration"] in {"standard", "special"}, name
+        assert contract["coverage"]["kind"] in {
+            "combinatorial_dimension", "derived", "bounded_payload",
+            "covered_separately", "intentionally_excluded",
+        }, name
+        assert contract["coverage"].get("dimension") or contract["coverage"].get("reason"), name
 
 
 def test_new_agent_field_fails_lifecycle_contract() -> None:
