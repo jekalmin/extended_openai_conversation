@@ -744,7 +744,7 @@ async def test_cold_catalog_skips_tool_validation_for_multiple_agents(monkeypatc
 async def test_large_catalog_keeps_expensive_work_constant(monkeypatch) -> None:
     """Fifty agents must not trigger fifty Store loads or tool validations."""
     hass, entry, original = _hass_with_agent()
-    for number in range(1, 50):
+    for number in range(2, 51):
         subentry = SimpleNamespace(
             subentry_id=f"agent-{number}",
             subentry_type="conversation",
