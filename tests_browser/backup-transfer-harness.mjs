@@ -74,6 +74,7 @@ export function createBackupTransferBackend(backend) {
         action: "save",
         title: saved.configuration.title,
         config: clone(saved.configuration.config),
+        revision: backend.state().configuration.revision,
       });
     }
 

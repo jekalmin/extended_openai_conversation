@@ -11,7 +11,11 @@ const backupTransfer = createBackupTransferBackend(backend);
 const managementType = "extended_openai_conversation_responses/management";
 const backupTransferType = "extended_openai_conversation_responses/management/backup_transfer";
 const broadcastType = "extended_openai_conversation_responses/broadcast";
+const requestDebugType = "extended_openai_conversation_responses/request_debug";
+const modelCatalogType = "extended_openai_conversation_responses/model_catalog";
+const credentialType = "extended_openai_conversation_responses/management/update_api_key";
 const calls = [];
+const broadcast = {enabled: false, history: []};
 history.replaceState({}, "", `/extended-openai/${route}`);
 
 const hass = {
@@ -25,8 +29,35 @@ const hass = {
       }), scopes: backend.scopes()};
     }
     if (message.type === backupTransferType) return backupTransfer(message);
-    if (message.type === broadcastType && message.action === "snapshot") return {enabled: false, can_manage: isAdmin, catalog: {satellites: [], areas: []}, history: []};
-    if (message.type !== managementType) return {};
+    if (message.type === requestDebugType) return backend.debugCall(message);
+    if (message.type === broadcastType) {
+      if (message.action === "snapshot") return {enabled: broadcast.enabled, can_manage: isAdmin, catalog: {satellites: [], areas: []}, history: structuredClone(broadcast.history)};
+      if (message.action === "set_enabled") {
+        if (!isAdmin || typeof message.enabled !== "boolean") throw new Error("Invalid EOAI Broadcast setting request");
+        broadcast.enabled = message.enabled;
+        return {enabled: broadcast.enabled};
+      }
+      if (message.action === "send") {
+        if (!isAdmin || !String(message.message || "").trim() || (!message.whole_home && !message.entity_ids?.length)) throw new Error("Invalid EOAI Broadcast send request");
+        const item = {message: message.message, status: "queued", entity_ids: message.entity_ids || []};
+        broadcast.history.unshift(item);
+        return structuredClone(item);
+      }
+      throw new Error(`Unsupported EOAI Broadcast fixture request: ${JSON.stringify(message)}`);
+    }
+    if (message.type === modelCatalogType) {
+      if (!["lookup", "check", "update", "apply", "reset"].includes(message.action)) throw new Error(`Unsupported EOAI model catalogue fixture request: ${JSON.stringify(message)}`);
+      if (message.model !== undefined && typeof message.model !== "string") throw new Error("Model catalogue model must be a string");
+      return {catalog_version: 1, update_available: false, last_error: null, model_capabilities: {}, model_metadata: {}, catalog_models: [], reasoning_effort_options: ["low", "medium", "high"]};
+    }
+    if (message.type === credentialType) {
+      if (!isAdmin || typeof message.entry_id !== "string" || !String(message.api_key || "").trim()) throw new Error("Invalid EOAI credential fixture request");
+      return {status: "updated", entry_id: message.entry_id};
+    }
+    if (message.type !== managementType) {
+      if (message.type?.startsWith("extended_openai_conversation_responses/")) throw new Error(`Unsupported EOAI fixture WebSocket type: ${JSON.stringify(message)}`);
+      return {};
+    }
     return backend.call(message);
   },
 };

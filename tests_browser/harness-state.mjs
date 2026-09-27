@@ -39,6 +39,7 @@ function freshState() {
       revision: 3, defaults: {word_forms: true, wording_alternatives: true, fuzzy: false, fuzzy_threshold: 90}, wording_groups: [], groups: [], diagnostics: {},
       rules: [{id: "rule-1", name: "Baseline rule", enabled: true, phrases: ["baseline route"], match_type: "contains", action_type: "model_routing", action: {model: "gpt-5-mini", reasoning_effort: "", scope: "request", reset: false, success_response: "Updated"}, matching_behavior: "defaults", matching: {word_forms: true, wording_alternatives: true, fuzzy: false, fuzzy_threshold: 90}, order: 0}],
     },
+    requestDebug: {enabled: false, limit: 10, count: 0, runs: []},
     toolYamls: {baseline_tool: "spec:\n  name: baseline_tool\n  description: Baseline browser fixture Function Tool\n  parameters:\n    type: object\n    properties: {}\nfunction:\n  type: script\n  sequence: []\n"},
     nextMemoryId: 2, nextKnowledgeId: 1, nextRuleId: 2, nextRuleGroupId: 1, failedConfigurationOnce: false,
   };
@@ -81,6 +82,17 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
 
   async function call(message) {
     const key = `${message.section || ""}/${message.action || ""}`;
+    const requireFields = (fields) => {
+      for (const [field, type] of fields) {
+        const value = message[field];
+        if (typeof value !== type || (type === "string" && !value.trim()) || (type === "object" && (!value || Array.isArray(value)))) {
+          throw new Error(`Malformed EOAI management ${key}: ${field} must be ${type}`);
+        }
+      }
+    };
+    if (typeof message.section !== "string" || typeof message.action !== "string") {
+      throw new Error(`Unsupported EOAI management request: section and action are required (${JSON.stringify(message)})`);
+    }
     if (key === "overview/summary") {
       return {
         usage: {today: {total_tokens: 1234}, month: {total_tokens: 5678}, lifetime: {total_tokens: 9999}},
@@ -123,8 +135,10 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       if (message.kind === "guest_mode") {
         return {kind: "guest_mode", agent: {guest_mode: {state: "inactive", currently_active: false}}};
       }
+      throw new Error(`Unsupported EOAI management overview detail kind: ${JSON.stringify(message.kind)}`);
     }
     if (key === "usage/summary") return {today: {total_tokens: 1234}, month: {total_tokens: 5678}, lifetime: {total_tokens: 9999}};
+    if (key === "diagnostics/test_agent") return {status: "passed", checks: [{name: "Model access", status: "passed", message: "Selected model is available"}]};
     if (key === "conversations/settings") return {archive_enabled: true, archive_retention_days: 30, archive_model_search_enabled: false};
     if (key === "knowledge/list") {
       if (partialOverview) throw new Error("Knowledge fixture unavailable");
@@ -138,6 +152,8 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       return {source: clone(source)};
     }
     if (key === "knowledge/create" || key === "knowledge/update") {
+      requireFields([["title", "string"], ["content", "string"]]);
+      if (key.endsWith("update")) requireFields([["source_id", "string"]]);
       state.knowledgeSources ||= [];
       let source;
       if (key.endsWith("create")) {
@@ -217,6 +233,9 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
     }
     if (key === "configuration/validate") return {valid: true, errors: {}, model_capabilities: {}};
     if (key === "configuration/update" || key === "configuration/save") {
+      if (!message.config || typeof message.config !== "object" || Array.isArray(message.config) || typeof message.revision !== "string") {
+        throw new Error(`Malformed EOAI management ${key}: config object and revision are required`);
+      }
       if (failConfigurationOnce && !state.failedConfigurationOnce) { state.failedConfigurationOnce = true; save(); throw new Error("Fixture rejected configuration save once"); }
       if (message.revision && message.revision !== state.configuration.revision) throw new Error("Saved data changed; reload before saving.");
       const updates = clone(message.config);
@@ -228,11 +247,14 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
     }
 
     if (key === "memories/list") return {memories: clone(state.memories.filter((m) => !message.scope_id || m.scope_id === message.scope_id)), total: state.memories.length};
+    if (key === "memories/temporary_list") return {memories: [], scope_id: message.scope_id, stats: {}};
     if (key === "memories/add") {
+      requireFields([["scope_id", "string"], ["content", "string"]]);
       const memory = {revision: 1, memory_id: `memory-${state.nextMemoryId++}`, scope_id: message.scope_id, content: message.content, category: message.category || "general", source: "manual", created_at: now(), updated_at: now()};
       state.memories.push(memory); counts(); save(); return {status: "created", scope_id: memory.scope_id, memory: clone(memory)};
     }
     if (key === "memories/update") {
+      requireFields([["scope_id", "string"], ["memory_id", "string"], ["content", "string"]]);
       const memory = state.memories.find((m) => m.memory_id === message.memory_id && m.scope_id === message.scope_id); if (!memory) throw new Error("Memory not found");
       memory.content = message.content; memory.category = message.category || "general";
       if (message.target_scope_id) memory.scope_id = message.target_scope_id;
@@ -260,8 +282,8 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       state.requestRules.rules.push(...imported);normalizeRules();state.requestRules.revision++;save();
       return {rules:clone(imported),groups:clone(state.requestRules.groups),revision:state.requestRules.revision,review};
     }
-    if (key === "request_rules/create") { const rule = {...clone(message.rule), id: `rule-${state.nextRuleId++}`}; state.requestRules.rules.push(rule); normalizeRules(); state.requestRules.revision++; save(); return {rule: clone(rule), revision: state.requestRules.revision}; }
-    if (key === "request_rules/update") { const i = state.requestRules.rules.findIndex((r) => r.id === message.rule_id); if (i < 0) throw new Error("Request Rule not found"); state.requestRules.rules[i] = {...clone(message.rule), id: message.rule_id}; normalizeRules(); state.requestRules.revision++; save(); return {rule: clone(state.requestRules.rules[i]), revision: state.requestRules.revision}; }
+    if (key === "request_rules/create") { requireFields([["rule", "object"]]); const rule = {...clone(message.rule), id: `rule-${state.nextRuleId++}`}; state.requestRules.rules.push(rule); normalizeRules(); state.requestRules.revision++; save(); return {rule: clone(rule), revision: state.requestRules.revision}; }
+    if (key === "request_rules/update") { requireFields([["rule_id", "string"], ["rule", "object"]]); const i = state.requestRules.rules.findIndex((r) => r.id === message.rule_id); if (i < 0) throw new Error("Request Rule not found"); state.requestRules.rules[i] = {...clone(message.rule), id: message.rule_id}; normalizeRules(); state.requestRules.revision++; save(); return {rule: clone(state.requestRules.rules[i]), revision: state.requestRules.revision}; }
     if (key === "request_rules/delete") { state.requestRules.rules = state.requestRules.rules.filter((r) => r.id !== message.rule_id); normalizeRules(); state.requestRules.revision++; save(); return {revision: state.requestRules.revision}; }
     if (key === "request_rules/duplicate") {
       if (message.revision !== state.requestRules.revision) throw new Error("Saved data changed; reload before saving.");
@@ -292,6 +314,7 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
     if (key === "tools/serialize") return {yaml: state.toolYamls[message.tool?.spec?.name] || ""};
     if (key === "tools/validate_yaml") return parseTool(message.yaml);
     if (key === "tools/save") {
+      requireFields([["tool", "object"], ["revision", "string"]]);
       if (message.revision !== state.configuration.revision) throw new Error("Configuration changed in another tab. Reload the latest saved settings before saving.");
       
       const tool = clone(message.tool), list = state.configuration.config.functions || [], original = message.original_name;
@@ -320,9 +343,31 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
     if (key === "backup/inspect") return inspect(message.document);
     if (key === "backup/restore") { const doc = JSON.parse(message.document); if (!doc?.state?.configuration) throw new Error("Invalid browser fixture backup"); state = clone(doc.state); pendingToolYamls.clear(); counts(); save(); return {restored: true}; }
 
-    return ({"conversations/list": {sessions: []}, "conversations/active": {active: []}, "usage/daily": {days: []}, "usage/runs": {runs: []}, "usage/retention": {}})[key] ?? {};
+    const staticResponses = {"conversations/list": {sessions: []}, "conversations/active": {active: []}, "usage/daily": {days: []}, "usage/runs": {runs: []}, "usage/retention": {}};
+    if (Object.hasOwn(staticResponses, key)) return clone(staticResponses[key]);
+    throw new Error(`Unsupported EOAI management fixture request ${key}: ${JSON.stringify(message)}`);
+  }
+
+  async function debugCall(message) {
+    if (message.action === "agents") return {agents: [clone(state.agent)]};
+    if (message.action === "runs") return {...clone(state.requestDebug), allowed_limits: [5, 10, 25, 50]};
+    if (message.action === "configure") {
+      if (typeof message.enabled !== "boolean" && ![5, 10, 25, 50].includes(message.limit)) {
+        throw new Error(`Malformed EOAI request-debug configuration: ${JSON.stringify(message)}`);
+      }
+      if (message.enabled !== undefined) state.requestDebug.enabled = message.enabled;
+      if (message.limit !== undefined) state.requestDebug.limit = message.limit;
+      save();
+      return {...clone(state.requestDebug), allowed_limits: [5, 10, 25, 50]};
+    }
+    if (message.action === "clear") {
+      if (message.confirm !== true) throw new Error("Request-debug clear requires confirmation");
+      state.requestDebug.count = 0; state.requestDebug.runs = []; save();
+      return {cleared: true};
+    }
+    throw new Error(`Unsupported EOAI request-debug fixture action: ${JSON.stringify(message)}`);
   }
 
   counts();
-  return {call, state: () => clone(state), reset: () => { state = freshState(); pendingToolYamls.clear(); save(); return clone(state); }, agent: () => clone(state.agent), scopes: () => clone(state.scopes)};
+  return {call, debugCall, state: () => clone(state), reset: () => { state = freshState(); pendingToolYamls.clear(); save(); return clone(state); }, agent: () => clone(state.agent), scopes: () => clone(state.scopes)};
 }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "routes": {
     "overview": "read-only",
     "guide": "render-navigation",
@@ -24,5 +24,30 @@
     "usage-maintenance/backup-restore": "read-write",
     "usage-maintenance/diagnostics": "read-only",
     "usage-maintenance/retention": "read-write"
+  },
+  "journeys": {
+    "overview": ["overview-broadcast-lazy.spec.mjs", "Overview snapshot is usable while the full implementation is still loading"],
+    "guide": ["management-panel.spec.mjs", "renders the shipped Guide and responds to real browser interactions"],
+    "assistant/basics": ["management-panel.spec.mjs", "general configuration survives a fresh panel load and a rejected save can be retried"],
+    "assistant/model-responses": ["route-settings-persistence.spec.mjs", "route setting persists: assistant/model-responses"],
+    "assistant/conversation": ["route-settings-persistence.spec.mjs", "route setting persists: assistant/conversation"],
+    "assistant/prompt-context": ["route-settings-persistence.spec.mjs", "route setting persists: assistant/prompt-context"],
+    "assistant/voice": ["route-settings-persistence.spec.mjs", "route setting persists: assistant/voice"],
+    "assistant/speech": ["route-settings-persistence.spec.mjs", "route setting persists: assistant/speech"],
+    "capabilities/home-assistant": ["route-settings-persistence.spec.mjs", "route setting persists: capabilities/home-assistant"],
+    "capabilities/web-skills": ["route-settings-persistence.spec.mjs", "route setting persists: capabilities/web-skills"],
+    "capabilities/request-rules": ["management-crud.spec.mjs", "Request Rules support create, precedence changes, reload, edit, and delete"],
+    "capabilities/functions": ["management-tools-backup.spec.mjs", "Function Tools support create, reload, edit, and delete through YAML"],
+    "capabilities/quiet-hours": ["route-settings-persistence.spec.mjs", "route setting persists: capabilities/quiet-hours"],
+    "capabilities/guest-mode": ["route-settings-persistence.spec.mjs", "route setting persists: capabilities/guest-mode"],
+    "data-memory/memory-settings": ["route-settings-persistence.spec.mjs", "route setting persists: data-memory/memory-settings"],
+    "data-memory/memories": ["management-crud.spec.mjs", "persistent memories support create, reload, edit, and delete"],
+    "data-memory/knowledge": ["management-crud.spec.mjs", "Knowledge sources support create, reload, edit, and delete"],
+    "data-memory/conversations": ["management-sections.spec.mjs", "Conversation history loads scoped archive state through the management UI"],
+    "usage-maintenance/usage": ["management-sections.spec.mjs", "Usage renders aggregate detail and navigates into retention settings"],
+    "usage-maintenance/request-debug": ["request-debug-persistence.spec.mjs", "Request debugging capture policy persists across a fresh panel"],
+    "usage-maintenance/backup-restore": ["management-tools-backup.spec.mjs", "full backup and restore round-trips settings, memories, rules, tools, and groups"],
+    "usage-maintenance/diagnostics": ["diagnostics-result.spec.mjs", "Diagnostics renders the selected agent and a real result from its management action"],
+    "usage-maintenance/retention": ["route-settings-persistence.spec.mjs", "route setting persists: usage-maintenance/retention"]
   }
 }

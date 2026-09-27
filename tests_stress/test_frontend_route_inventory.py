@@ -29,7 +29,7 @@ def shipped_routes(source: str) -> set[str]:
 
 def test_every_frontend_route_has_reviewed_acceptance_level() -> None:
     inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
-    assert inventory["schema_version"] == 1
+    assert inventory["schema_version"] == 2
     actual = shipped_routes(SOURCE.read_text(encoding="utf-8"))
     classified = inventory["routes"]
     assert set(classified) == actual, (
@@ -37,6 +37,20 @@ def test_every_frontend_route_has_reviewed_acceptance_level() -> None:
         f"new={sorted(actual - set(classified))}, removed={sorted(set(classified) - actual)}"
     )
     assert set(classified.values()) <= LEVELS
+    assert set(inventory["journeys"]) == actual
+    for route, (spec, title) in inventory["journeys"].items():
+        level = classified[route]
+        lower = title.lower()
+        if level == "full-crud":
+            assert all(verb in lower for verb in ("create", "reload", "edit", "delete")), route
+        elif level == "read-write":
+            assert any(verb in lower for verb in ("persist", "surviv", "round-trips")), route
+        source = (ROOT / "tests_browser" / spec).read_text(encoding="utf-8")
+        if spec == "route-settings-persistence.spec.mjs":
+            assert f'"{route}"' in source and f"route setting persists: ${{route}}" in source
+            assert title == f"route setting persists: {route}"
+        else:
+            assert f'test("{title}"' in source, (route, spec, title)
 
 
 def test_new_route_fails_inventory_contract() -> None:

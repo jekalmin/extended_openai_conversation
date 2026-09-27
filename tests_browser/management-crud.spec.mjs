@@ -1,6 +1,36 @@
 import {expect, test} from "@playwright/test";
 import {acceptConfirmation, expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers.mjs";
 
+test("Knowledge sources support create, reload, edit, and delete", async ({page}) => {
+  const errors = trackPageErrors(page);
+  await page.goto(fixtureUrl("data-memory/knowledge"));
+  let panel = page.locator("extended-openai-management-panel");
+  await panel.locator("#add-source").click();
+  await panel.locator("#knowledge-title").fill("Browser reference");
+  await panel.locator("#knowledge-description").fill("First revision");
+  await panel.locator("#knowledge-content").fill("Reference facts for a browser journey.");
+  await panel.locator("#knowledge-save").click();
+  await expect(panel.getByText("Browser reference", {exact: true})).toBeVisible();
+  await page.goto(fixtureUrl("data-memory/knowledge"));
+  panel = page.locator("extended-openai-management-panel");
+  let card = panel.locator(".list-card").filter({hasText: "Browser reference"});
+  await expect(card).toBeVisible();
+  await card.locator(".source-edit-button").click();
+  await panel.locator("#knowledge-description").fill("Second revision");
+  await panel.locator("#knowledge-save").click();
+  await page.goto(fixtureUrl("data-memory/knowledge"));
+  panel = page.locator("extended-openai-management-panel");
+  card = panel.locator(".list-card").filter({hasText: "Browser reference"});
+  await expect(card).toContainText("Second revision");
+  await card.locator(".delete-source").click();
+  await acceptConfirmation(panel);
+  await page.goto(fixtureUrl("data-memory/knowledge"));
+  panel = page.locator("extended-openai-management-panel");
+  await expect(panel.getByText("Browser reference", {exact: true})).toHaveCount(0);
+  expect(await page.evaluate(() => window.browserHarness.getState().knowledgeSources)).toEqual([]);
+  await expectHarnessClean(page, errors);
+});
+
 test("persistent memories support create, reload, edit, and delete", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(fixtureUrl("data-memory/memories"));
