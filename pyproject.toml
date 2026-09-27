@@ -49,10 +49,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.coverage.report]
-# Regression guardrail: the last measured stable-CI baseline was 78.32%.
-# Keep a small 0.32 percentage-point allowance for benign measurement drift while
-# failing meaningful coverage regressions. Raise this floor as coverage improves.
-fail_under = 78
+# Regression guardrail. Stable CI currently measures about 96.6% branch coverage.
+# Keep modest headroom for legitimate code growth/refactors while preventing
+# material coverage regressions. Raise this floor as the baseline improves.
+fail_under = 95
 
 [tool.mutmut]
 source_paths = ["custom_components/extended_openai_conversation_responses/"]
