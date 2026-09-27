@@ -32,9 +32,17 @@ A **Local command** runs one or more Home Assistant actions or enabled ExtendedO
 
 Existing `target` and `data` values are preserved when a rule is edited. **Advanced JSON** is a lossless fallback for service data or target keys that the friendly editor does not expose.
 
-If any action fails, the remaining actions do not run and the configured failure response is returned. While Guest Mode is active, the entire sequence is authorized before the first action runs; if one action is unavailable, none run.
+If the native script fails or aborts, the remaining actions do not run and the configured failure response is returned. An action with `continue_on_error: true` may recover according to Home Assistant semantics; if the script then completes, the rule succeeds. While Guest Mode is active, the entire sequence is authorized before the first action runs; if one action is unavailable, none run.
 
-Turn on **Continue to AI** when the local sequence should run first and the provider should then answer. **AI input** defaults to **Original request**; choose **Captured value** to send one named Sentence Pattern capture instead. The provider is called once after all local steps succeed; the local success response is used only when the request is consumed locally. A failed step or Guest Mode denial stops the request and does not continue to AI. Earlier successful side effects are not rolled back if a later step fails.
+Turn on **Continue to AI** when the local sequence should run first and the provider should then answer. **AI input** defaults to **Original request**; choose **Captured value** to send one named Sentence Pattern capture instead. A rule follows this order after Home Assistant runs its native action sequence:
+
+1. A failed or aborted script, including **Stop** with `error: true` or a false top-level condition action, returns the rule's failure response. It never calls AI.
+2. A final **Set conversation response** value returns that response, overriding the generic success response. It never calls AI. Home Assistant's latest effective setter wins; parallel setters can be timing dependent.
+3. A successful **Stop** consumes the request locally. It returns a prior conversation response if one exists, otherwise the rule's success response.
+4. After normal completion without a final conversation response or stop, **Continue to AI** calls the provider once when enabled.
+5. Otherwise, the rule returns its success response.
+
+A condition inside `if`, `choose`, `repeat`, or another nested sequence halts only the scope Home Assistant halts. A fatal wait timeout (`continue_on_timeout: false`) follows the failure path; `continue_on_timeout: true` can complete normally. Earlier successful side effects are not rolled back if a later step fails. Native `variables` and service `response_variable` values remain available to later actions in the script, but are not automatically interpolated in the separate Request Rule success response. Only request captures and dedicated Function Tool result aliases are supported there.
 
 ### Example: fast local script
 
@@ -196,7 +204,7 @@ The selected capture must be present on every trigger variant and every possible
 
 Open **Rule Sharing** at the bottom of Request Rules to export all rules, one group, or selected rules. A rule pack contains only selected rules, their organizational groups, and the effective matching settings owned by those rules. It does not contain provider credentials, Function Tool definitions, memories, knowledge, archive data, unrelated agent settings, or agent-wide wording alternatives. The pack has an explicit format and version for compatibility.
 
-Import first shows **Review Rule Pack**, including rules, actions, conditions, Function Tool references, and unavailable resources. Nothing executes during review. Confirming appends the rules after your existing rules in their exported relative order and leaves every imported rule **disabled**. Enable and test each rule after checking its dependencies. Groups with the same name are reused; other groups receive new internal IDs. Rule Sharing never changes the destination agent's wording alternatives; if a shared rule's author relies on additional alternative phrases, those remain a separate setup choice. A conflicting or invalid pack is rejected without replacing existing rules. Full agent backup and selective transfer remain separate capabilities.
+Import first shows **Review Rule Pack**, including rules, actions, conditions, Function Tool references, and unavailable resources. Nothing executes during review. Confirming appends the rules after your existing rules in their exported relative order and leaves every imported rule **disabled**. Newly created rules start enabled and can be toggled from the Request Rules list. Enable and test each rule after checking its dependencies. Groups with the same name are reused; other groups receive new internal IDs. Rule Sharing never changes the destination agent's wording alternatives; if a shared rule's author relies on additional alternative phrases, those remain a separate setup choice. A conflicting or invalid pack is rejected without replacing existing rules. Full agent backup and selective transfer remain separate capabilities.
 
 ## Request Rules compared with native automations
 

@@ -45,6 +45,7 @@ from custom_components.extended_openai_conversation_responses.request_rules impo
     validate_wording_groups,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.typing import UNDEFINED
 
 
 class MemoryStore:
@@ -731,7 +732,12 @@ async def test_function_result_capture_feeds_later_step_and_response(
         async def async_run(self, _variables, _context=None):
             variables = dict(_variables)
             for step in self.sequence:
-                if step.get("action") == f"{DOMAIN}.{SERVICE_CALL_FUNCTION}":
+                if "variables" in step:
+                    values = step["variables"]
+                    raw = values.variables if hasattr(values, "variables") else values
+                    if all(name.startswith(("__eoai_completed_", "__eoai_stopped_", "__eoai_wait_completed_")) for name in raw):
+                        variables.update(values.async_simple_render(variables) if hasattr(values, "async_simple_render") else values)
+                elif step.get("action") == f"{DOMAIN}.{SERVICE_CALL_FUNCTION}":
                     await async_call_active_function(
                         step["data"]["function"],
                         step["data"]["arguments"],
@@ -745,6 +751,7 @@ async def test_function_result_capture_feeds_later_step_and_response(
                         if hasattr(message, "async_render")
                         else message
                     )
+            return SimpleNamespace(variables=variables, conversation_response=UNDEFINED)
 
         async def async_unload(self):
             pass
@@ -798,7 +805,7 @@ async def test_missing_function_result_path_stops_later_steps(
             self.sequence = sequence
 
         async def async_run(self, _variables, _context=None):
-            step = self.sequence[0]
+            step = next(step for step in self.sequence if step.get("action"))
             if step["action"] == f"{DOMAIN}.{SERVICE_CALL_FUNCTION}":
                 await async_call_active_function(
                     step["data"]["function"], {}, step["data"].get("result_alias")
@@ -1326,6 +1333,7 @@ def fake_ha_script(monkeypatch):
                     service_data=data,
                     blocking=True,
                 )
+            return SimpleNamespace(variables=variables, conversation_response=UNDEFINED)
 
         async def async_unload(self):
             return None
