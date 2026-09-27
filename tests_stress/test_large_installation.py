@@ -188,12 +188,16 @@ async def test_large_installation_survives_setup_management_backup_and_assist(
             hass, secondary.entry_id, secondary_subentry.subentry_id
         )
         assert len((await reloaded_overflow.async_backup_data())["sources"]) == overflow_knowledge_count
+    model_calls = 0
+    public_turn_ms = []
     for entry in entries:
         agent = conversation.async_get_agent(hass, entry.entry_id)
         assert agent is not None
 
         async def model(log, *, entity_id=agent.entity_id, **kwargs):
+            nonlocal model_calls
             del kwargs
+            model_calls += 1
             log.async_add_assistant_content_without_tools(
                 conversation.AssistantContent(
                     agent_id=entity_id, content="scale healthy"
@@ -201,6 +205,7 @@ async def test_large_installation_survives_setup_management_backup_and_assist(
             )
 
         monkeypatch.setattr(agent, "_async_handle_chat_log", model)
+        turn_started = perf_counter()
         result = await conversation.async_converse(
             hass=hass,
             text="scale public probe",
@@ -209,7 +214,11 @@ async def test_large_installation_survives_setup_management_backup_and_assist(
             language="en",
             agent_id=entry.entry_id,
         )
+        public_turn_ms.append(round((perf_counter() - turn_started) * 1000, 2))
         assert result.response.as_dict()["speech"]["plain"]["speech"] == "scale healthy"
+        assert model_calls == len(public_turn_ms), (
+            "One Assist turn must invoke its model handler once"
+        )
     record(
         stress_trace,
         "summary",
@@ -221,6 +230,9 @@ async def test_large_installation_survives_setup_management_backup_and_assist(
         memory_records=memory_count,
         knowledge_sources=knowledge_count,
         public_turns=agents,
+        model_calls=model_calls,
+        public_turn_ms=public_turn_ms,
+        public_turn_max_ms=max(public_turn_ms),
         setup_seconds=setup_seconds,
         population_seconds=population_seconds,
         snapshot_seconds=snapshot_seconds,

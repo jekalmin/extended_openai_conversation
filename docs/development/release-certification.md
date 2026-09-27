@@ -27,8 +27,9 @@ uses 50 agents and asserts zero Store loads and tool validations during initial
 navigation. The frontend build reports the production JS, CSS, and entry sizes
 and fails only after roughly 25–35% growth above the 2026-09-27 baseline.
 These structural checks avoid shared-runner wall-clock gates; the existing
-large-installation nightly still records setup, population, backup, and reload
-timings for diagnosis.
+large-installation nightly records setup, population, backup, and per-Assist
+timings and asserts one model handler call per public turn through its tool and
+Request Rule-heavy fixture.
 
 # Production incident regression rule
 
