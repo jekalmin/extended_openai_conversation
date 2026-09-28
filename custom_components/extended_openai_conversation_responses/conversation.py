@@ -1609,7 +1609,12 @@ class ExtendedOpenAIAgentEntity(
             if isinstance(entity.get("entity_id"), str)
         }
         if missing := entity_ids - live_ids:
-            raise EntityNotExposed(sorted(missing)[0])
+            entity_id = sorted(missing)[0]
+            if hass.states.get(entity_id) is None:
+                raise HomeAssistantError(
+                    f"Target entity {entity_id} no longer exists"
+                )
+            raise EntityNotExposed(entity_id)
 
     def _get_function_tools(self) -> list[dict[str, Any]]:
         """Get the effective configured and integration-owned function tools."""
