@@ -31,6 +31,7 @@ import homeassistant.util.dt as dt_util
 from ..const import DOMAIN, EVENT_AUTOMATION_REGISTERED
 from ..exceptions import CallServiceError, EntityNotExposed, NativeNotFound
 from ..ha_actions import async_call_ha_action
+from ..helpers import get_exposed_entities
 from ..intercom import async_get_intercom
 from ..safety_hardening import (
     _async_require_admin,
@@ -355,6 +356,11 @@ class NativeFunction(Function):
         self.validate_entity_ids(hass, entity_id or [], exposed_entities)
         self.validate_service_targets(hass, service_data, exposed_entities)
 
+        def require_current_exposure() -> None:
+            current_exposed = get_exposed_entities(hass)
+            self.validate_entity_ids(hass, entity_id or [], current_exposed)
+            self.validate_service_targets(hass, service_data, current_exposed)
+
         try:
             previous_state = await async_call_ha_action(
                 hass,
@@ -362,6 +368,7 @@ class NativeFunction(Function):
                 service,
                 data=service_data,
                 blocking=True,
+                before_execute=require_current_exposure,
             )
             result: dict[str, Any] = {"success": True}
             if previous_state:

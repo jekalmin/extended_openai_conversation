@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import voluptuous as vol
@@ -41,6 +41,7 @@ async def async_call_ha_action(
     target: Mapping[str, Any] | None = None,
     blocking: bool = False,
     context: Context | None = None,
+    before_execute: Callable[[], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Call one HA action through the integration's common authorization seam.
 
@@ -72,6 +73,9 @@ async def async_call_ha_action(
             "Home Assistant target changed while authorization was in progress; "
             "please retry"
         )
+
+    if before_execute is not None:
+        before_execute()
 
     return await _async_call_ha_action_unchecked(
         hass,
