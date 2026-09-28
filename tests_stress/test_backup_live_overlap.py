@@ -8,6 +8,9 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockUser
 
 from custom_components.extended_openai_conversation_responses import backup
+from custom_components.extended_openai_conversation_responses.agent_maintenance import (
+    get_agent_maintenance_gate,
+)
 from custom_components.extended_openai_conversation_responses.const import (
     CONF_ARCHIVE_ENABLED,
     CONF_MEMORY_MODE,
@@ -221,4 +224,110 @@ async def test_restore_drains_paused_management_memory_commit(
         layer="Real HA Management + backup restore",
         paused_durable_mutations=1,
         restore_waited_for_commit=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_wins_after_committed_management_write_loses_ack(
+    hass: HomeAssistant,
+    hass_ws_client,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A committed write with a lost reply drains before restore becomes authority."""
+    entry = _make_entry(
+        "Restore committed acknowledgement loss",
+        include_ai_task=False,
+        conversation_options={CONF_MEMORY_MODE: MEMORY_MODE_MANUAL},
+    )
+    await _setup_entry(hass, entry)
+    subentry = _conversation_subentry(entry)
+    client = await _admin_client(
+        hass,
+        hass_ws_client,
+        user_id="restore-ack-admin",
+        name="Restore Ack Admin",
+    )
+    target_memory = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
+    target_record = await target_memory.async_add(
+        "restore-ack-admin", "RESTORE-AUTHORITATIVE", "acceptance", "explicit"
+    )
+    target = await backup.async_collect_backup_snapshot(hass, entry, subentry)
+    assert await target_memory.async_delete(
+        "restore-ack-admin", [target_record["memory"]["memory_id"]]
+    ) == 1
+
+    commit_complete = asyncio.Event()
+    release_ack = asyncio.Event()
+    save = target_memory._storage.async_save
+
+    async def commit_then_pause_ack(data):
+        await save(data)
+        commit_complete.set()
+        await release_ack.wait()
+
+    monkeypatch.setattr(target_memory._storage, "async_save", commit_then_pause_ack)
+    caller = asyncio.create_task(
+        _management_call(
+            client,
+            entry=entry,
+            section="memories",
+            action="add",
+            content="COMMITTED-BUT-RESTORED-AWAY",
+            category="acceptance",
+        )
+    )
+    await asyncio.wait_for(commit_complete.wait(), timeout=10)
+
+    gate = get_agent_maintenance_gate(hass, entry.entry_id, subentry.subentry_id)
+    restore = asyncio.create_task(
+        backup.async_restore_backup(hass, entry, subentry, target)
+    )
+    for _ in range(100):
+        if gate._waiting_writers:  # noqa: SLF001 - deterministic lease boundary
+            break
+        await asyncio.sleep(0)
+    assert gate._waiting_writers, "restore did not queue behind the committed mutation"
+    assert not restore.done()
+
+    # The command was sent and the Store commit completed. Cancelling only the
+    # caller's receive coroutine models a lost WebSocket acknowledgement.
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    release_ack.set()
+
+    restored = await asyncio.wait_for(restore, timeout=15)
+    assert restored["status"] == "restored"
+    await hass.async_block_till_done()
+
+    live_memory = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
+    live_contents = [
+        item.content for item in await live_memory.async_list("restore-ack-admin")
+    ]
+    assert live_contents == ["RESTORE-AUTHORITATIVE"]
+    assert (
+        await backup.async_collect_backup_snapshot(hass, entry, subentry)
+    )["memories"] == target["memories"]
+
+    await _fresh_reload(hass, entry)
+    reload_client = await _admin_client(
+        hass,
+        hass_ws_client,
+        user_id="restore-ack-admin",
+        name="Restore Ack Reload Admin",
+    )
+    reloaded = await _management_call(
+        reload_client, entry=entry, section="memories", action="list"
+    )
+    assert [item["content"] for item in reloaded["memories"]] == [
+        "RESTORE-AUTHORITATIVE"
+    ]
+    record(
+        stress_trace,
+        "summary",
+        layer="Real HA Management + committed Store write + backup restore",
+        committed_writes_with_lost_ack=1,
+        restore_waited_for_commit=1,
+        authoritative_restore_after_reload=True,
     )
