@@ -31,7 +31,9 @@ import homeassistant.util.dt as dt_util
 from ..const import DOMAIN, EVENT_AUTOMATION_REGISTERED
 from ..exceptions import CallServiceError, EntityNotExposed, NativeNotFound
 from ..ha_actions import async_call_ha_action
+from ..ha_permissions import get_active_ha_context
 from ..intercom import async_get_intercom
+from ..intercom_permissions import async_authorized_broadcast_targets
 from ..safety_hardening import (
     _async_require_admin,
     _normalized_statistics_arguments,
@@ -270,15 +272,27 @@ class NativeFunction(Function):
                     f"Unknown Broadcast destination: {destination}"
                 )
             resolved.pop("name", None)
+            if "entity_id" in resolved:
+                resolved["entity_ids"] = [resolved.pop("entity_id")]
             target.update(resolved)
         if not whole_home and not destination:
             raise HomeAssistantError("Choose a Broadcast destination or whole_home")
         origin_device_id = (
             getattr(llm_context, "device_id", None) if llm_context is not None else None
         )
+        # Use the same resolved-target CONTROL boundary as the service and
+        # WebSocket Broadcast entry points. Voice/system requests without an
+        # authenticated HA user retain the existing trusted behavior.
+        targets = await async_authorized_broadcast_targets(
+            hass,
+            manager,
+            context=get_active_ha_context(),
+            origin_device_id=origin_device_id,
+            **target,
+        )
         result = await manager.async_send(
             str(arguments.get("message", "")),
-            **target,
+            entity_ids=targets,
             origin_device_id=origin_device_id,
             source="llm_tool",
         )

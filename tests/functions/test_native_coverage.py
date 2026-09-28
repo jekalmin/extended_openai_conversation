@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 import yaml
@@ -122,12 +122,17 @@ async def test_broadcast_resolves_destination_and_passes_origin(
         resolve_named_target=Mock(
             return_value={"name": "Kitchen", "entity_id": "assist_satellite.kitchen"}
         ),
+        resolve_targets=Mock(return_value=["assist_satellite.kitchen"]),
         async_send=AsyncMock(
             return_value={"id": "message-1", "targets": ["kitchen"], "deliveries": 1}
         ),
     )
     monkeypatch.setattr(
         native_module, "async_get_intercom", AsyncMock(return_value=manager)
+    )
+    authorized_targets = AsyncMock(return_value=["assist_satellite.kitchen"])
+    monkeypatch.setattr(
+        native_module, "async_authorized_broadcast_targets", authorized_targets
     )
 
     result = await NativeFunction().send_broadcast(
@@ -144,10 +149,17 @@ async def test_broadcast_resolves_destination_and_passes_origin(
         "targets": ["kitchen"],
         "deliveries": 1,
     }
+    authorized_targets.assert_awaited_once_with(
+        hass,
+        manager,
+        context=ANY,
+        origin_device_id="origin-device",
+        whole_home=False,
+        entity_ids=["assist_satellite.kitchen"],
+    )
     manager.async_send.assert_awaited_once_with(
         "Dinner is ready",
-        whole_home=False,
-        entity_id="assist_satellite.kitchen",
+        entity_ids=["assist_satellite.kitchen"],
         origin_device_id="origin-device",
         source="llm_tool",
     )
