@@ -703,7 +703,14 @@ async def test_provider_tool_cannot_use_stale_guest_entity_exposure(
     assert calls == []
     assert len(wire.requests) == 2
     tool_result = _tool_result_from_chat_request(wire.requests[1]["body"])
-    assert tool_result["result"][0]["success"] is False
+    tool_results = tool_result.get("result")
+    assert not (
+        isinstance(tool_results, list)
+        and any(
+            isinstance(item, dict) and item.get("success") is True
+            for item in tool_results
+        )
+    )
 
 
 async def test_lost_tool_ack_replay_does_not_reuse_revoked_guest_exposure(

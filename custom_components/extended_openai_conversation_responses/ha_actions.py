@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 import voluptuous as vol
@@ -31,6 +33,23 @@ from homeassistant.helpers import (
 
 from .ha_permissions import async_require_control_permission, get_active_ha_context
 
+ActionTargetRevalidator = Callable[[HomeAssistant, set[str]], None]
+_ACTIVE_ACTION_TARGET_REVALIDATOR: ContextVar[ActionTargetRevalidator | None] = (
+    ContextVar("extended_openai_action_target_revalidator", default=None)
+)
+
+
+@contextmanager
+def action_target_revalidation(
+    revalidator: ActionTargetRevalidator,
+) -> Iterator[None]:
+    """Recheck the active tool's target scope at the side-effect boundary."""
+    token = _ACTIVE_ACTION_TARGET_REVALIDATOR.set(revalidator)
+    try:
+        yield
+    finally:
+        _ACTIVE_ACTION_TARGET_REVALIDATOR.reset(token)
+
 
 async def async_call_ha_action(
     hass: HomeAssistant,
@@ -41,7 +60,6 @@ async def async_call_ha_action(
     target: Mapping[str, Any] | None = None,
     blocking: bool = False,
     context: Context | None = None,
-    before_execute: Callable[[], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Call one HA action through the integration's common authorization seam.
 
@@ -74,8 +92,8 @@ async def async_call_ha_action(
             "please retry"
         )
 
-    if before_execute is not None:
-        before_execute()
+    if revalidator := _ACTIVE_ACTION_TARGET_REVALIDATOR.get():
+        revalidator(hass, entity_ids)
 
     return await _async_call_ha_action_unchecked(
         hass,
