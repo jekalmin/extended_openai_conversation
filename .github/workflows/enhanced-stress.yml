@@ -289,13 +289,13 @@ jobs:
         if: inputs.campaign != 'diagnostics'
         env:
           RUN_REAL_HA_BROWSER: "1"
+          RUN_ENHANCED_MANAGEMENT_CONTRACT: "1"
         run: >-
           python ci/run_sanitized.py stress-artifacts/browser-real-ha-ws.log --
           pytest
           tests_stress/test_management_ws_contract.py
           tests_real_ha/test_browser_backend_acceptance.py::test_shipped_browser_frontend_talks_to_real_management_websocket
-          tests_real_ha/test_browser_backend_acceptance.py::test_seeded_management_mutations_cross_real_websocket
-          tests_real_ha/test_browser_backend_acceptance.py::test_function_repair_mutations_cross_real_websocket
+          tests_real_ha/test_nightly_management_contract.py
           tests_stress/test_browser_backend_resilience.py
           -v -s --asyncio-mode=auto --timeout=600 --log-cli-level=WARNING
       - name: Verify controlled Playwright failure artifacts

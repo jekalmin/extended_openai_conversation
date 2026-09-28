@@ -246,6 +246,13 @@ test("real browser creates, groups, edits, reloads, and deletes a Request Rule t
   await page.goto(realFixtureUrl("capabilities/request-rules"));
   panel = page.locator("extended-openai-management-panel");
   await expect(panel.locator(".wording-canonical").last()).toHaveValue("browser phrase");
+  await panel.locator(".wording-editor summary").click();
+  await panel.locator(".wording-remove").last().click();
+  await panel.locator("#save-page").click();
+  await page.goto(realFixtureUrl("capabilities/request-rules"));
+  panel = page.locator("extended-openai-management-panel");
+  await expect(panel.locator(".wording-group")).toHaveCount(0);
+  await expectContractCalls(page, "request_rules_empty");
   await panel.locator(".request-rule-card").last().locator(".rule-delete").click();
   await acceptConfirmation(panel);
   await expect(panel.locator(".request-rule-card")).toHaveCount(1);

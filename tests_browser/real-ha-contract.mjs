@@ -30,6 +30,9 @@ export async function expectContractCalls(page, journey) {
       && call.action === action.action
       && action.keys.every((key) => Object.hasOwn(call, key))
       && containsShape(call, action.contains || action.equals || {}));
-    expect(matching.length, `${journey}: successful ${action.section}/${action.action} with ${action.keys.join(", ")}`).toBeGreaterThanOrEqual(action.min_calls || 1);
+    const candidates = observed.flatMap((call, index) =>
+      call.section === action.section && call.action === action.action
+        ? [{keys: Object.keys(call), success: outcomes[index]?.success}] : []);
+    expect(matching.length, `${journey}: successful ${action.section}/${action.action} with ${action.keys.join(", ")}; observed ${JSON.stringify(candidates)}`).toBeGreaterThanOrEqual(action.min_calls || 1);
   }
 }

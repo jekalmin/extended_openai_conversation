@@ -32,6 +32,7 @@ EXPECTED_JOURNEYS = {
     "function_repair",
     "memory",
     "request_rules",
+    "request_rules_empty",
     "rule_pack",
     "functions",
     "knowledge",

@@ -11,7 +11,7 @@ test("quarantined Function Tools repair through shipped frontend and genuine HA"
   await page.goto(fixture);
   await page.waitForFunction(() => window.browserHarness?.panel?._selectedAgent?.());
   const before = await page.evaluate(() => window.browserHarness.panel._call("function_repair", "get"));
-  expect(before.invalid_tools.map((item) => item.index)).toEqual([1, 2, 3]);
+  expect(before.invalid_tools.map((item) => item.index)).toEqual([0, 2, 3]);
 
   const safeEdit = await page.evaluate(() => window.browserHarness.panel._call("configuration", "save", {
     config: {prompt: "Nightly safe edit while tools need repair"},
@@ -21,10 +21,10 @@ test("quarantined Function Tools repair through shipped frontend and genuine HA"
   const changed = await page.evaluate(async () => {
     const panel = window.browserHarness.panel;
     const first = await panel._call("function_repair", "get");
-    const replacement = structuredClone(first.tools[0]);
+    const replacement = structuredClone(first.tools[1]);
     replacement.spec.name = "nightly_repaired_tool";
     const savedOne = await panel._call("function_repair", "save_one", {
-      index: 1, tool: replacement, revision: first.revision,
+      index: 0, tool: replacement, revision: first.revision,
     });
     const second = await panel._call("function_repair", "get");
     const deletedOne = await panel._call("function_repair", "delete_one", {
@@ -44,14 +44,11 @@ test("quarantined Function Tools repair through shipped frontend and genuine HA"
   await page.waitForFunction(() => window.browserHarness?.panel?._selectedAgent?.());
   const after = await page.evaluate(async () => {
     const panel = window.browserHarness.panel;
-    return {
-      repair: await panel._call("function_repair", "get"),
-      configuration: await panel._call("configuration", "get"),
-    };
+    return panel._call("configuration", "get");
   });
-  expect(after.repair.invalid_tools).toHaveLength(0);
-  expect(after.configuration.config.functions.map((item) => item.spec.name)).toContain("nightly_repaired_tool");
-  expect(after.configuration.config.prompt).toBe("Nightly safe edit while tools need repair");
+  expect(after.function_repair).toBeUndefined();
+  expect(after.config.functions.map((item) => item.spec.name)).toContain("nightly_repaired_tool");
+  expect(after.config.prompt).toBe("Nightly safe edit while tools need repair");
   await expectContractCalls(page, "function_repair");
   await expectHarnessClean(page, pageErrors);
 });
