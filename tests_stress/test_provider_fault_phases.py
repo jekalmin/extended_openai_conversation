@@ -291,6 +291,8 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
     hass.config_entries.async_update_subentry(
         agent.entry, agent.subentry, data=original_data
     )
+    agent = conversation.async_get_agent(hass, agent.entry.entry_id)
+    assert agent is not None
     tool_b = deepcopy(tool_a)
     tool_b["spec"]["description"] = "Replacement Tool B"
     group_b = {**group_a, "id": "compound-group-b", "name": "Compound B"}
