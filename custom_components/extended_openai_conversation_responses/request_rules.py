@@ -2664,6 +2664,8 @@ async def _async_evaluate_matched_rule(
         except GuestModeDenied:
             return RuleEvaluation(match, True, GUEST_MODE_UNAVAILABLE, successful=False)
         except Exception:
+            if require_matching_revision is not None:
+                require_matching_revision()
             _LOGGER.exception(
                 "Request Rule '%s' failed while running its local Home Assistant "
                 "action. Review the rule's actions and referenced entities/services "

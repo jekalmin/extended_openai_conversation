@@ -209,12 +209,8 @@ async def test_inflight_rule_identity_rejects_replacement_and_aba(
     assert rules.revision() != before
     assert rules.snapshot()["rules"] == [original]
     release.set()
-    if phase == "matching":
-        with pytest.raises(HomeAssistantError, match="changed during matching"):
-            await asyncio.wait_for(pending, timeout=10)
-    else:
-        result = await asyncio.wait_for(pending, timeout=10)
-        assert result is not None and result.successful is False
+    with pytest.raises(HomeAssistantError, match="changed during matching"):
+        await asyncio.wait_for(pending, timeout=10)
     assert calls == []
 
     wire = _install_wire(monkeypatch, agent, [])
