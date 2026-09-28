@@ -256,7 +256,11 @@ export function createStateBackend({partialOverview = false, failConfigurationOn
       state.configuration = {...state.configuration, title: message.title ?? state.configuration.title, revision: `${state.configuration.revision}x`, config: {...state.configuration.config, ...updates}};
       state.agent.title = state.configuration.title; state.agent.model = state.configuration.config.chat_model;
       state.agent.temporary_memory = state.configuration.config.temporary_memory; counts(); save();
-      return {valid: true, errors: {}, ...clone(state.configuration), agent: clone(state.agent)};
+      return {valid: true, errors: {}, ...clone(state.configuration), agent: {
+        ...clone(state.agent),
+        entry_id: message.entry_id || state.agent.entry_id,
+        subentry_id: message.subentry_id || state.agent.subentry_id,
+      }};
     }
 
     if (key === "memories/list") return {memories: clone(state.memories.filter((m) => !message.scope_id || m.scope_id === message.scope_id)), total: state.memories.length};
