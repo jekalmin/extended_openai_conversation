@@ -176,7 +176,12 @@ async def test_replayed_management_mutations_do_not_double_apply(
         "category": "replay",
     }
     added = await _commit_without_ack(
-        client, monkeypatch, entry=entry, section="memories", action="add", **memory_payload
+        client,
+        monkeypatch,
+        entry=entry,
+        section="memories",
+        action="add",
+        **memory_payload,
     )
     replayed_memory = await _management_call(
         client, entry=entry, section="memories", action="add", **memory_payload
@@ -194,6 +199,21 @@ async def test_replayed_management_mutations_do_not_double_apply(
     ]
     assert len(matching) == 1
 
+    # Knowledge create has a server-generated source ID. The HA Store commit
+    # succeeds, but the WebSocket success is lost before a config-entry reload.
+    # Reload is the safe reconciliation path for this ambiguous create.
+    knowledge_created = await _commit_without_ack(
+        client,
+        monkeypatch,
+        entry=entry,
+        section="knowledge",
+        action="create",
+        title="Lost acknowledgement source",
+        content="Knowledge committed before reload",
+        enabled=True,
+    )
+    knowledge_id = knowledge_created["source"]["source_id"]
+
     await _fresh_reload(hass, entry)
     reloaded_config = await _management_call(
         client, entry=entry, section="configuration", action="get"
@@ -203,11 +223,37 @@ async def test_replayed_management_mutations_do_not_double_apply(
     reloaded_rules = await _management_call(
         client, entry=entry, section="request_rules", action="list"
     )
-    assert sum(rule["id"] == "replay-safe-rule" for rule in reloaded_rules["rules"]) == 1
+    assert (
+        sum(rule["id"] == "replay-safe-rule" for rule in reloaded_rules["rules"]) == 1
+    )
     reloaded_memories = await _management_call(
         client, entry=entry, section="memories", action="list"
     )
-    assert sum(item["content"] == memory_payload["content"] for item in reloaded_memories["memories"]) == 1
+    assert (
+        sum(
+            item["content"] == memory_payload["content"]
+            for item in reloaded_memories["memories"]
+        )
+        == 1
+    )
+    reloaded_knowledge = await _management_call(
+        client, entry=entry, section="knowledge", action="list"
+    )
+    assert (
+        sum(
+            source["source_id"] == knowledge_id
+            for source in reloaded_knowledge["sources"]
+        )
+        == 1
+    )
+    knowledge_detail = await _management_call(
+        client,
+        entry=entry,
+        section="knowledge",
+        action="get",
+        source_id=knowledge_id,
+    )
+    assert knowledge_detail["source"]["content"] == "Knowledge committed before reload"
 
     # Replaying a destructive mutation after the object is already gone is
     # harmless and must not affect unrelated records.
@@ -232,7 +278,7 @@ async def test_replayed_management_mutations_do_not_double_apply(
         stress_trace,
         "summary",
         layer="Real HA WebSocket",
-        replayed_management_mutations=4,
+        replayed_management_mutations=5,
         rejected_stale_replays=2,
         deduplicated_replays=1,
         harmless_delete_replays=1,

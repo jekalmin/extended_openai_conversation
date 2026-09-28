@@ -32,6 +32,7 @@ from .parallel_tool_execution import (
     async_execute_parallel_safe_batch_outcomes,
     resolve_parallel_safe_batch,
 )
+from .tool_replay_guard import was_unacknowledged_equivalent
 
 _MAX_ERROR_TEXT = 512
 
@@ -505,6 +506,13 @@ async def async_execute_tool_exchange(
     }
     if any(call.id in prior_results for call in pending_tool_calls):
         raise HomeAssistantError("Provider repeated a completed tool call id")
+    if any(
+        was_unacknowledged_equivalent(entity, chat_log, call)
+        for call in pending_tool_calls
+    ):
+        raise HomeAssistantError(
+            "Provider repeated a tool call whose prior result was not acknowledged"
+        )
     if recovery_state is not None and recovery_state.enabled:
         await _async_execute_with_recovery(
             entity,
