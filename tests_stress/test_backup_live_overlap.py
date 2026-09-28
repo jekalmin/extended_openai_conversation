@@ -314,7 +314,7 @@ async def test_restore_wins_after_committed_management_write_loses_ack(
     reload_client = await _admin_client(
         hass,
         hass_ws_client,
-        user_id="restore-ack-reload-admin",
+        user_id="restore-ack-admin",
         name="Restore Ack Reload Admin",
     )
     reloaded = await _management_call(
