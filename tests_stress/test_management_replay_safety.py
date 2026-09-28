@@ -366,7 +366,8 @@ async def test_lost_rule_create_ack_then_same_id_delete_recreate_rejects_old_ret
     authoritative = await _management_call(
         client, entry=entry, section="request_rules", action="list"
     )
-    assert authoritative["rules"] == [created["rule"]]
+    expected_rule = {**created["rule"], "sensitive_matching_warning": False}
+    assert authoritative["rules"] == [expected_rule]
     assert authoritative["revision"] != original_payload["revision"]
 
     stale_retry = await _management_response(
@@ -381,7 +382,7 @@ async def test_lost_rule_create_ack_then_same_id_delete_recreate_rejects_old_ret
     final = await _management_call(
         client, entry=entry, section="request_rules", action="list"
     )
-    assert final["rules"] == [created["rule"]]
+    assert final["rules"] == [expected_rule]
     record(
         stress_trace,
         "compound_durable_ack_aba",
