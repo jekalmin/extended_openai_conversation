@@ -91,7 +91,7 @@ def envelope(**specific: Any) -> dict[str, Any]:
         sha = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL
         ).strip()
-    except OSError, subprocess.CalledProcessError:
+    except (OSError, subprocess.CalledProcessError):
         sha = os.environ.get("GITHUB_SHA", "unknown")
     manifest = Path(
         "custom_components/extended_openai_conversation_responses/manifest.json"

@@ -6,9 +6,14 @@ import json
 from pathlib import Path
 import re
 
+from tests_stress.test_management_action_inventory import production_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "tests_stress" / "management_ws_contract.json"
 FRONTEND = ROOT / "tests_browser" / "real-ha-backend.spec.mjs"
+NIGHTLY_FRONTEND = ROOT / "tests_browser" / "real-ha-nightly-management.spec.mjs"
+SEEDED_FRONTEND = ROOT / "tests_browser" / "real-ha-seeded-management.spec.mjs"
+REPAIR_FRONTEND = ROOT / "tests_browser" / "real-ha-function-repair.spec.mjs"
 MANAGEMENT = (
     ROOT
     / "custom_components"
@@ -23,12 +28,17 @@ TRANSFER = (
 )
 EXPECTED_JOURNEYS = {
     "configuration",
+    "configuration_extended",
+    "seeded_owners",
+    "function_repair",
     "memory",
     "request_rules",
+    "request_rules_empty",
     "rule_pack",
     "functions",
     "knowledge",
     "guest_quiet",
+    "guest_operations",
     "backup",
 }
 CRITICAL_ACTIONS = {
@@ -54,6 +64,66 @@ CRITICAL_ACTIONS = {
     ("guest_mode", "save_policy"),
     ("quiet_hours", "update"),
 }
+
+FRONTEND_DIR = ROOT / "custom_components/extended_openai_conversation_responses/frontend"
+# Reviewed literal calls in the shipped source. A new mutation must change this
+# snapshot and receive genuine-HA browser evidence before the matrix is complete.
+REVIEWED_FRONTEND_MUTATIONS = {
+    ("configuration", "duplicate"), ("configuration", "import"),
+    ("configuration", "save"), ("conversations", "delete"),
+    ("conversations", "end_active"), ("function_repair", "delete_one"),
+    ("function_repair", "save"), ("function_repair", "save_one"),
+    ("guest_mode", "disable"), ("guest_mode", "update"),
+    ("knowledge", "delete"), ("knowledge", "set_enabled"),
+    ("memories", "delete"), ("memories", "reassign_legacy"),
+    ("memories", "temporary_clear"), ("memories", "temporary_delete"),
+    ("memories", "temporary_update"), ("request_rules", "delete"),
+    ("request_rules", "duplicate"), ("request_rules", "groups"),
+    ("request_rules", "move"), ("request_rules", "rule_pack_import"),
+    ("request_rules", "settings"), ("request_rules", "update"),
+    ("tools", "delete"), ("tools", "delete_group"),
+    ("tools", "ha_add"), ("tools", "save"),
+    ("tools", "save_group"), ("tools", "set_enabled"),
+    ("usage", "clear_details"),
+}
+OPEN_FRONTEND_CONTRACT_GAPS: set[tuple[str, str]] = set()
+
+
+def test_shipped_frontend_mutation_actions_are_reviewed() -> None:
+    """A newly wired literal mutation must not escape nightly contract review."""
+    production = production_actions()
+    inventory = json.loads(
+        (ROOT / "tests_stress/management_action_inventory.json").read_text(encoding="utf-8")
+    )
+    mutations = {
+        (section, action)
+        for section, contract in inventory["sections"].items()
+        for action, semantic in contract["semantic_classes"].items()
+        if semantic in {
+            "durable_mutation", "ephemeral_mutation", "destructive_mutation",
+            "transfer/session_operation",
+        }
+    }
+    assert all(action in production[section] for section, action in mutations)
+    actual = set()
+    for source in FRONTEND_DIR.glob("*.js"):
+        actual.update(
+            (section, action)
+            for section, action in re.findall(
+                r'_call\(\s*["\'`]([^"\'`]+)["\'`]\s*,\s*["\'`]([^"\'`]+)["\'`]',
+                source.read_text(encoding="utf-8"),
+            )
+            if (section, action) in mutations
+        )
+    assert actual == REVIEWED_FRONTEND_MUTATIONS
+    panel = (FRONTEND_DIR / "management-panel.js").read_text(encoding="utf-8")
+    assert re.search(r'save:"configuration_save", update:"configuration_save"', panel)
+    covered = {
+        (item.get("section"), item["action"])
+        for item in json.loads(CONTRACT.read_text(encoding="utf-8"))["actions"]
+    }
+    assert REVIEWED_FRONTEND_MUTATIONS - covered == OPEN_FRONTEND_CONTRACT_GAPS
+    assert ("function_repair", "configuration_save") in covered
 
 
 def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
@@ -89,12 +159,18 @@ def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
     assert "groups" in management_keys  # Regression for the original browser rejection.
     for item in actions:
         assert item["keys"] and len(item["keys"]) == len(set(item["keys"])), item
+        assert not (set(item["keys"]) & set(item.get("optional_keys", []))), item
+        assert len(item.get("optional_keys", [])) == len(set(item.get("optional_keys", []))), item
         assert set(item.get("equals", {})) <= set(item["keys"]), item
+        assert set(item.get("contains", {})) <= set(item["keys"]), item
         schema_keys = transfer_keys if "type" in item else management_keys
         assert set(item["keys"]) <= schema_keys, item
+        assert set(item.get("optional_keys", [])) <= schema_keys, item
         assert item.get("min_calls", 1) >= 1, item
 
-    frontend = FRONTEND.read_text(encoding="utf-8")
+    frontend = "\n".join(path.read_text(encoding="utf-8") for path in (
+        FRONTEND, NIGHTLY_FRONTEND, SEEDED_FRONTEND, REPAIR_FRONTEND,
+    ))
     assert "expectContractCalls" in frontend
     assert {
         match

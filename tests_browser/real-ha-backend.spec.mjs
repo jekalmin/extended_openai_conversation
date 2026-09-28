@@ -120,6 +120,7 @@ test("real browser creates, edits, reloads, and deletes a Memory through HA", as
   await panel.locator("#memory-content").fill("Real HA browser memory edited");
   await panel.locator("#memory-category").fill("browser-acceptance-edited");
   await panel.locator("#memory-save").click();
+  await expect(panel.locator("#memory-dialog")).toHaveJSProperty("open", false);
 
   await page.goto(realFixtureUrl("data-memory/memories"));
   panel = page.locator("extended-openai-management-panel");

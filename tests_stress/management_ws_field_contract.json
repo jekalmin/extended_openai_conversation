@@ -112,6 +112,10 @@
       "required": false,
       "kind": "boolean"
     },
+    "index": {
+      "required": false,
+      "kind": "nonnegative_integer"
+    },
     "key": {
       "required": false,
       "kind": "string"
