@@ -395,7 +395,9 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
         executions.append(deepcopy(function_tool))
         return await current_execute(function_tool, *args)
 
-    monkeypatch.setattr(current_agent, "_execute_function_tool", track_current_execution)
+    monkeypatch.setattr(
+        current_agent, "_execute_function_tool", track_current_execution
+    )
     current_raw = _raw_client(current_agent)
     monkeypatch.setattr(current_raw, "max_retries", 0)
     monkeypatch.setattr(current_raw._client, "send", send)
