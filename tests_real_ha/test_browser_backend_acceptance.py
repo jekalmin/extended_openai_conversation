@@ -159,6 +159,86 @@ async def test_shipped_browser_frontend_talks_to_real_management_websocket(
 
 
 @pytest.mark.asyncio
+async def test_seeded_management_mutations_cross_real_websocket(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+) -> None:
+    """Seed durable and active owners, then mutate them through the shipped panel."""
+    from datetime import timedelta
+
+    from custom_components.extended_openai_conversation_responses.const import (
+        CONVERSATION_CONTINUITY_USER,
+    )
+    from custom_components.extended_openai_conversation_responses.continuity import (
+        async_get_continuity,
+    )
+    from custom_components.extended_openai_conversation_responses.conversation_archive import (
+        async_get_archive,
+    )
+    from custom_components.extended_openai_conversation_responses.memory import (
+        ANONYMOUS_USER_ID,
+        async_get_memory,
+    )
+    from custom_components.extended_openai_conversation_responses.scope import (
+        user_scope,
+    )
+    from custom_components.extended_openai_conversation_responses.temporary_memory import (
+        async_get_temporary_memory,
+    )
+    from homeassistant.util import dt as dt_util
+    from tests_real_ha.test_management_backend_acceptance import ADMIN_ID
+
+    entry = _entry("Seeded Management Browser Acceptance")
+    await _setup_entry(hass, entry)
+    subentry = next(item for item in entry.subentries.values() if item.subentry_type == "conversation")
+    owner_scope = f"user:{ADMIN_ID}"
+
+    temporary = await async_get_temporary_memory(hass, entry.entry_id, subentry.subentry_id)
+    expiry = (dt_util.utcnow() + timedelta(hours=1)).isoformat()
+    for index in range(3):
+        await temporary.async_add(
+            f"conversation:nightly-{index}", f"Nightly temporary fact {index}", expiry,
+            owner_scope_id=owner_scope,
+        )
+
+    memory = await async_get_memory(hass, entry.entry_id, subentry.subentry_id)
+    await memory.async_add(ANONYMOUS_USER_ID, "Nightly legacy memory", "nightly", "explicit")
+
+    archive = await async_get_archive(hass, entry.entry_id, subentry.subentry_id)
+    scope = user_scope(ADMIN_ID, source="authenticated_user")
+    session = await archive.async_begin_session(
+        "nightly-archive", scope, "ha-nightly-archive",
+        archive_enabled=True, shared_archive_enabled=True, inactivity_minutes=30,
+    )
+    assert session is not None
+    await archive.async_record_turn(
+        session.session_id, run_id="nightly-archive-run",
+        user_text="Nightly archived question", assistant_text="Nightly archived answer",
+        successful=True,
+    )
+
+    continuity = async_get_continuity(hass, entry.entry_id, subentry.subentry_id)
+    resolved = await continuity.async_resolve(
+        CONVERSATION_CONTINUITY_USER, scope, None, None, 30,
+    )
+    assert resolved.key and resolved.claim_token
+    await continuity.async_record_success(resolved.key, resolved.claim_token, [])
+
+    client = await _admin_client(hass, hass_ws_client)
+    runner, backend_url = await _start_ws_bridge(client)
+    try:
+        await _run_playwright(
+            repo_root=Path(__file__).resolve().parent.parent,
+            spec="tests_browser/real-ha-seeded-management.spec.mjs",
+            config="playwright.config.mjs",
+            env={"REAL_HA_BACKEND_URL": backend_url},
+            failure_label="Seeded Playwright genuine-HA management acceptance failed",
+        )
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_shipped_browser_frontend_loads_inside_real_home_assistant_shell(
     hass: HomeAssistant,
     aiohttp_client: Any,

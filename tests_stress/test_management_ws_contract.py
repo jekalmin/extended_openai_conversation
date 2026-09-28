@@ -11,6 +11,7 @@ from tests_stress.test_management_action_inventory import production_actions
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "tests_stress" / "management_ws_contract.json"
 FRONTEND = ROOT / "tests_browser" / "real-ha-backend.spec.mjs"
+SEEDED_FRONTEND = ROOT / "tests_browser" / "real-ha-seeded-management.spec.mjs"
 MANAGEMENT = (
     ROOT
     / "custom_components"
@@ -26,6 +27,7 @@ TRANSFER = (
 EXPECTED_JOURNEYS = {
     "configuration",
     "configuration_extended",
+    "seeded_owners",
     "memory",
     "request_rules",
     "rule_pack",
@@ -80,6 +82,12 @@ REVIEWED_FRONTEND_MUTATIONS = {
     ("tools", "save_group"), ("tools", "set_enabled"),
     ("usage", "clear_details"),
 }
+OPEN_FRONTEND_CONTRACT_GAPS = {
+    ("function_repair", "delete_one"), ("function_repair", "save"),
+    ("function_repair", "save_one"),
+    ("tools", "ha_add"),
+    ("usage", "clear_details"),
+}
 
 
 def test_shipped_frontend_mutation_actions_are_reviewed() -> None:
@@ -109,6 +117,11 @@ def test_shipped_frontend_mutation_actions_are_reviewed() -> None:
             if (section, action) in mutations
         )
     assert actual == REVIEWED_FRONTEND_MUTATIONS
+    covered = {
+        (item.get("section"), item["action"])
+        for item in json.loads(CONTRACT.read_text(encoding="utf-8"))["actions"]
+    }
+    assert REVIEWED_FRONTEND_MUTATIONS - covered == OPEN_FRONTEND_CONTRACT_GAPS
 
 
 def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
@@ -150,7 +163,7 @@ def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
         assert set(item["keys"]) <= schema_keys, item
         assert item.get("min_calls", 1) >= 1, item
 
-    frontend = FRONTEND.read_text(encoding="utf-8")
+    frontend = FRONTEND.read_text(encoding="utf-8") + SEEDED_FRONTEND.read_text(encoding="utf-8")
     assert "expectContractCalls" in frontend
     assert {
         match

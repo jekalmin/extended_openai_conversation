@@ -102,6 +102,7 @@ test("real browser saves General Settings through the genuine HA backend", async
 test("shipped frontend duplicates, updates, and imports agents through genuine HA", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(realFixtureUrl("assistant/basics"));
+  await expect(page.locator('extended-openai-management-panel [data-config="__title"]')).toBeVisible();
   const result = await page.evaluate(async () => {
     const panel = window.browserHarness.panel;
     const original = await panel._call("configuration", "get");
@@ -121,6 +122,7 @@ test("shipped frontend duplicates, updates, and imports agents through genuine H
   expect(result.duplicate.subentry_id).not.toBe(result.imported.subentry_id);
 
   await page.goto(realFixtureUrl("assistant/basics"));
+  await expect(page.locator('extended-openai-management-panel [data-config="__title"]')).toBeVisible();
   const persisted = await page.evaluate(async ({duplicateId, importedId}) => {
     const panel = window.browserHarness.panel;
     await panel._loadAgents(duplicateId);
@@ -488,16 +490,19 @@ test("real browser saves Guest and Quiet Hours policy payloads through HA", asyn
 test("shipped frontend starts and ends Guest Mode through genuine HA", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
   const started = await page.evaluate(() => window.browserHarness.panel._call(
     "guest_mode", "update", {indefinite: true},
   ));
   expect(started.status.state).toBe("active_indefinitely");
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
   const active = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
   expect(active.status.state).toBe("active_indefinitely");
   const ended = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "disable"));
   expect(ended.status.state).toBe("inactive");
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
   const inactive = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
   expect(inactive.status.state).toBe("inactive");
   await expectContractCalls(page, "guest_operations");
