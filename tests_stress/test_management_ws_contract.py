@@ -11,6 +11,7 @@ from tests_stress.test_management_action_inventory import production_actions
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "tests_stress" / "management_ws_contract.json"
 FRONTEND = ROOT / "tests_browser" / "real-ha-backend.spec.mjs"
+NIGHTLY_FRONTEND = ROOT / "tests_browser" / "real-ha-nightly-management.spec.mjs"
 SEEDED_FRONTEND = ROOT / "tests_browser" / "real-ha-seeded-management.spec.mjs"
 REPAIR_FRONTEND = ROOT / "tests_browser" / "real-ha-function-repair.spec.mjs"
 MANAGEMENT = (
@@ -165,7 +166,7 @@ def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
         assert item.get("min_calls", 1) >= 1, item
 
     frontend = "\n".join(path.read_text(encoding="utf-8") for path in (
-        FRONTEND, SEEDED_FRONTEND, REPAIR_FRONTEND,
+        FRONTEND, NIGHTLY_FRONTEND, SEEDED_FRONTEND, REPAIR_FRONTEND,
     ))
     assert "expectContractCalls" in frontend
     assert {

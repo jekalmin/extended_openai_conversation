@@ -13,7 +13,7 @@ test("quarantined Function Tools repair through shipped frontend and genuine HA"
   const before = await page.evaluate(() => window.browserHarness.panel._call("function_repair", "get"));
   expect(before.invalid_tools.map((item) => item.index)).toEqual([0, 2, 3]);
 
-  const safeEdit = await page.evaluate(() => window.browserHarness.panel._call("configuration", "save", {
+  const safeEdit = await page.evaluate(() => window.browserHarness.panel._call("function_repair", "configuration_save", {
     config: {prompt: "Nightly safe edit while tools need repair"},
   }));
   expect(safeEdit.valid).toBe(true);

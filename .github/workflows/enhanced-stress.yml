@@ -295,7 +295,7 @@ jobs:
           pytest
           tests_stress/test_management_ws_contract.py
           tests_real_ha/test_browser_backend_acceptance.py::test_shipped_browser_frontend_talks_to_real_management_websocket
-          tests_real_ha/test_nightly_management_contract.py
+          tests_stress/test_browser_management_contract.py
           tests_stress/test_browser_backend_resilience.py
           -v -s --asyncio-mode=auto --timeout=600 --log-cli-level=WARNING
       - name: Verify controlled Playwright failure artifacts

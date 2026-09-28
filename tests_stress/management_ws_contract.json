@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Reviewed browser actions that cross the genuine Home Assistant management WebSocket schema. Each journey is exercised by real-ha-backend.spec.mjs.",
+  "description": "Reviewed browser actions that cross the genuine Home Assistant management WebSocket schema. Journeys are exercised by genuine-HA browser specs; extended mutations run only in Enhanced nightly/manual.",
   "actions": [
     {"journey": "configuration", "section": "configuration", "action": "save", "keys": ["config", "revision", "title"]},
     {"journey": "configuration_extended", "section": "configuration", "action": "update", "keys": ["config", "revision"], "contains": {"config": {"current_datetime_enabled": false}}},

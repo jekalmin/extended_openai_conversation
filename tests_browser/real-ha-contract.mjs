@@ -24,6 +24,18 @@ export async function expectContractCalls(page, journey) {
   }));
   const expected = contract.actions.filter((action) => action.journey === journey);
   expect(expected.length, `No reviewed WebSocket contract entries for ${journey}`).toBeGreaterThan(0);
+  if (process.env.RUN_ENHANCED_MANAGEMENT_CONTRACT === "1") {
+    const envelope = new Set(["type", "section", "action", "entry_id", "subentry_id"]);
+    for (const [index, call] of observed.entries()) {
+      const reviewed = contract.actions.filter((item) =>
+        (item.type ? call.type === item.type : call.section === item.section)
+        && call.action === item.action);
+      if (!reviewed.length || outcomes[index]?.success !== true) continue;
+      const fields = Object.keys(call).filter((key) => !envelope.has(key)).sort();
+      expect(reviewed.some((item) => JSON.stringify([...item.keys].sort()) === JSON.stringify(fields)),
+        `${journey}: unreviewed fields on ${call.section}/${call.action}: ${JSON.stringify(fields)}`).toBe(true);
+    }
+  }
   for (const action of expected) {
     const matching = observed.filter((call, index) => outcomes[index]?.success === true
       && (action.type ? call.type === action.type : call.section === action.section)

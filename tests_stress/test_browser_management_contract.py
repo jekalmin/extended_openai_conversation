@@ -26,6 +26,28 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.asyncio
+async def test_nightly_management_mutations_cross_real_websocket(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+) -> None:
+    """Run extended shipped-panel mutations only in the Enhanced campaign."""
+    entry = _entry("Nightly Management Browser Acceptance")
+    await _setup_entry(hass, entry)
+    client = await _admin_client(hass, hass_ws_client)
+    runner, backend_url = await _start_ws_bridge(client)
+    try:
+        await _run_playwright(
+            repo_root=Path(__file__).resolve().parent.parent,
+            spec="tests_browser/real-ha-nightly-management.spec.mjs",
+            config="playwright.config.mjs",
+            env={"REAL_HA_BACKEND_URL": backend_url},
+            failure_label="Nightly Playwright genuine-HA management acceptance failed",
+        )
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_seeded_management_mutations_cross_real_websocket(
     hass: HomeAssistant,
     hass_ws_client: Any,
