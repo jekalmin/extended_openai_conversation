@@ -35,7 +35,7 @@ from homeassistant.helpers.chat_session import async_get_chat_session
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 
-from . import ExtendedOpenAIConfigEntry
+from . import ExtendedOpenAIConfigEntry, ha_actions
 from .agent_config import function_tool_enabled
 from .agent_configuration import (
     _archive_runtime_required,
@@ -119,7 +119,12 @@ from .debug import (
     record_system_prompt,
 )
 from .entity import ExtendedOpenAIBaseLLMEntity
-from .exceptions import FunctionLoadFailed, FunctionNotFound, InvalidFunction
+from .exceptions import (
+    EntityNotExposed,
+    FunctionLoadFailed,
+    FunctionNotFound,
+    InvalidFunction,
+)
 from .function_groups import (
     FunctionGroupRuntime,
     FunctionGroupSession,
@@ -1589,6 +1594,26 @@ class ExtendedOpenAIAgentEntity(
             and allows(str(entity["entity_id"]))
         ]
 
+    def _require_current_action_targets(
+        self, hass: HomeAssistant, entity_ids: set[str]
+    ) -> None:
+        """Require each pending native target to remain in the live tool scope."""
+        if hass is not self.hass:
+            raise HomeAssistantError("Home Assistant action context changed; retry")
+        live_entities = self._filter_guest_entities(
+            get_exposed_entities(hass), control=True
+        )
+        live_ids = {
+            str(entity["entity_id"])
+            for entity in live_entities
+            if isinstance(entity.get("entity_id"), str)
+        }
+        if missing := entity_ids - live_ids:
+            entity_id = sorted(missing)[0]
+            if hass.states.get(entity_id) is None:
+                raise HomeAssistantError(f"Target entity {entity_id} no longer exists")
+            raise EntityNotExposed(entity_id)
+
     def _get_function_tools(self) -> list[dict[str, Any]]:
         """Get the effective configured and integration-owned function tools."""
         assembly_started = time.monotonic()
@@ -1896,9 +1921,12 @@ class ExtendedOpenAIAgentEntity(
                     get_exposed_entities(self.hass), control=control
                 )
             try:
-                return await super()._execute_function_tool(
-                    resolved_tool, tool_input, llm_context, guest_entities
-                )
+                with ha_actions.action_target_revalidation(
+                    self._require_current_action_targets
+                ):
+                    return await super()._execute_function_tool(
+                        resolved_tool, tool_input, llm_context, guest_entities
+                    )
             except Exception:
                 if policy.guest_active:
                     _LOGGER.warning("Guest-permitted tool execution failed")

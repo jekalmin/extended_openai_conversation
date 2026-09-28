@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 import json
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
 
+from custom_components.extended_openai_conversation_responses import ha_actions
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     API_MODE_RESPONSES,
     CONF_API_MODE,
     CONF_CHAT_MODEL,
     CONF_FUNCTION_TOOLS,
+    CONF_GUEST_ALLOWED_FUNCTION_NAMES,
+    CONF_GUEST_FUNCTION_POLICY,
+    CONF_GUEST_MODE_ENABLED,
+    CONF_GUEST_POLICY_VERSION,
     DEFAULT_CONF_FUNCTION_TOOLS,
+    GUEST_POLICY_VERSION,
 )
 from homeassistant.components import conversation
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
@@ -580,3 +588,222 @@ async def test_second_provider_request_failure_does_not_repeat_side_effect(
     # serialized the real tool result; the side effect is never replayed/retried.
     tool_result = _tool_result_from_chat_request(wire.requests[1]["body"])
     assert tool_result["result"][0]["success"] is True
+
+
+@pytest.mark.parametrize("initially_exposed", [False, True])
+async def test_provider_tool_cannot_use_stale_guest_entity_exposure(
+    hass: HomeAssistant,
+    monkeypatch: Any,
+    initially_exposed: bool,
+) -> None:
+    """An old provider proposal cannot borrow exposure added or revoked in flight."""
+    entity_id = _ENTITY_ID
+    hass.states.async_set(entity_id, "on")
+    async_expose_entity(hass, conversation.DOMAIN, entity_id, initially_exposed)
+    tool = deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])
+    entry = _make_entry(
+        title="Guest exposure provider race",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [tool],
+            CONF_GUEST_MODE_ENABLED: True,
+            CONF_GUEST_FUNCTION_POLICY: "custom",
+            CONF_GUEST_ALLOWED_FUNCTION_NAMES: ["execute_services"],
+            CONF_GUEST_POLICY_VERSION: GUEST_POLICY_VERSION,
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    await agent._guest_mode.async_update_trusted(indefinite=True)
+
+    calls: list[Any] = []
+
+    async def turn_off(call: Any) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_off", turn_off)
+    provider_entered = asyncio.Event()
+    release_provider = asyncio.Event()
+    permission_entered = asyncio.Event()
+    release_permission = asyncio.Event()
+    real_permission = ha_actions.async_require_control_permission
+
+    async def pause_permission(
+        permission_hass: HomeAssistant,
+        entity_ids: set[str],
+        *,
+        context=None,
+    ) -> None:
+        permission_entered.set()
+        await release_permission.wait()
+        await real_permission(permission_hass, entity_ids, context=context)
+
+    monkeypatch.setattr(
+        ha_actions, "async_require_control_permission", pause_permission
+    )
+
+    wire = _ScriptedWire(
+        [_chat_sse_tool_call(), _chat_sse_text("The request was handled safely.")]
+    )
+
+    async def gated_send(
+        request: httpx.Request, *args: Any, **kwargs: Any
+    ) -> httpx.Response:
+        del args, kwargs
+        body = json.loads(request.content.decode())
+        wire.requests.append({"path": request.url.path, "body": body})
+        provider_entered.set()
+        await release_provider.wait()
+        index = len(wire.requests) - 1
+        body = (
+            _chat_sse_tool_call()
+            if index == 0
+            else _chat_sse_text("The request was handled safely.")
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=body,
+            request=request,
+        )
+
+    raw = _raw_client(agent)
+    monkeypatch.setattr(raw, "max_retries", 0)
+    monkeypatch.setattr(raw._client, "send", gated_send)
+    pending = asyncio.create_task(
+        conversation.async_converse(
+            hass=hass,
+            text="Turn off the provider wire test light",
+            conversation_id=None,
+            context=Context(),
+            language="en",
+            agent_id=agent.entry.entry_id,
+        )
+    )
+    await asyncio.wait_for(provider_entered.wait(), timeout=10)
+
+    if initially_exposed:
+        release_provider.set()
+        await asyncio.wait_for(permission_entered.wait(), timeout=10)
+        async_expose_entity(hass, conversation.DOMAIN, entity_id, False)
+        await hass.async_block_till_done()
+        release_permission.set()
+    else:
+        # The model request was built while this target was forbidden. Making it
+        # visible now must not expand the authorization carried by that request.
+        async_expose_entity(hass, conversation.DOMAIN, entity_id, True)
+        await hass.async_block_till_done()
+        release_provider.set()
+
+    result = await asyncio.wait_for(pending, timeout=10)
+    assert _speech(result) == "The request was handled safely."
+    assert calls == []
+    assert len(wire.requests) == 2
+    tool_result = _tool_result_from_chat_request(wire.requests[1]["body"])
+    tool_results = tool_result.get("result")
+    assert not (
+        isinstance(tool_results, list)
+        and any(
+            isinstance(item, dict) and item.get("success") is True
+            for item in tool_results
+        )
+    )
+
+
+async def test_lost_tool_ack_replay_does_not_reuse_revoked_guest_exposure(
+    hass: HomeAssistant,
+    monkeypatch: Any,
+) -> None:
+    """A committed guest action stays singular after exposure is revoked and replayed."""
+    hass.states.async_set(_ENTITY_ID, "on")
+    async_expose_entity(hass, conversation.DOMAIN, _ENTITY_ID, True)
+    entry = _make_entry(
+        title="Guest exposure replay",
+        include_ai_task=False,
+        conversation_options={
+            CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
+            CONF_CHAT_MODEL: "gpt-5.6",
+            CONF_FUNCTION_TOOLS: [deepcopy(DEFAULT_CONF_FUNCTION_TOOLS[0])],
+            CONF_GUEST_MODE_ENABLED: True,
+            CONF_GUEST_FUNCTION_POLICY: "custom",
+            CONF_GUEST_ALLOWED_FUNCTION_NAMES: ["execute_services"],
+            CONF_GUEST_POLICY_VERSION: GUEST_POLICY_VERSION,
+        },
+    )
+    await _setup_entry(hass, entry)
+    agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert agent is not None
+    await agent._guest_mode.async_update_trusted(indefinite=True)
+
+    calls: list[Any] = []
+
+    async def turn_off(call: Any) -> None:
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_off", turn_off)
+    requests: list[dict[str, Any]] = []
+
+    async def send(request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
+        del args, kwargs
+        requests.append(
+            {"path": request.url.path, "body": json.loads(request.content.decode())}
+        )
+        index = len(requests) - 1
+        if index in {0, 2}:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=_chat_sse_tool_call(),
+                request=request,
+            )
+        if index == 1:
+            assert (
+                _tool_result_from_chat_request(requests[1]["body"])["result"][0][
+                    "success"
+                ]
+                is True
+            )
+            raise httpx.ConnectError(
+                "provider lost completed tool result", request=request
+            )
+        if index == 3:
+            replay_result = _tool_result_from_chat_request(requests[3]["body"])
+            assert replay_result["result"][0]["success"] is False
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=_chat_sse_text("Recovered without repeating the action."),
+            request=request,
+        )
+
+    raw = _raw_client(agent)
+    monkeypatch.setattr(raw, "max_retries", 0)
+    monkeypatch.setattr(raw._client, "send", send)
+    conversation_id = uuid4().hex
+
+    async def turn(text: str) -> conversation.ConversationResult:
+        return await conversation.async_converse(
+            hass=hass,
+            text=text,
+            conversation_id=conversation_id,
+            context=Context(),
+            language="en",
+            agent_id=agent.entry.entry_id,
+        )
+
+    first = await turn("Turn off the provider wire test light")
+    assert first.response.error_code is not None
+    assert len(calls) == 1
+    async_expose_entity(hass, conversation.DOMAIN, _ENTITY_ID, False)
+    await hass.async_block_till_done()
+
+    replay = await turn("Retry the interrupted action")
+    assert replay.response.error_code is not None
+    assert len(calls) == 1
+    recovered = await turn("Continue without repeating that action")
+    assert _speech(recovered) == "Recovered without repeating the action."
+    assert len(calls) == 1
+    assert len(requests) == 5

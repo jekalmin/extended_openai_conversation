@@ -80,6 +80,42 @@ async def test_variables_delay_and_action_keep_one_ha_script_context(hass, monke
     await hass.async_block_till_done()
 
 
+async def test_removed_service_stops_later_request_rule_action(hass, monkeypatch):
+    """HA Script resolves each service at execution, after prior steps complete."""
+    agent = await _agent(hass)
+    _provider(monkeypatch, agent, [])
+    first_actions = []
+    later_actions = []
+
+    async def remove_later_service(call):
+        first_actions.append(call.data["step"])
+        hass.services.async_remove("rule_probe", "later")
+
+    async def later_service(call):
+        later_actions.append(call.data["step"])
+
+    hass.services.async_register("rule_probe", "remove_later", remove_later_service)
+    hass.services.async_register("rule_probe", "later", later_service)
+    await agent._request_rules.async_create(
+        _local(
+            [
+                {
+                    "action": "rule_probe.remove_later",
+                    "data": {"step": "first"},
+                },
+                {"action": "rule_probe.later", "data": {"step": "second"}},
+            ],
+            failure="The second action stopped safely.",
+        )
+    )
+
+    result = await _say(hass, agent, "run rule")
+
+    assert _speech(result) == "The second action stopped safely."
+    assert first_actions == ["first"]
+    assert later_actions == []
+
+
 async def test_wait_template_blocks_then_resumes_once_with_variables(hass, monkeypatch):
     agent = await _agent(hass)
     _provider(monkeypatch, agent, [])
