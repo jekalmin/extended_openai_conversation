@@ -17,6 +17,8 @@ from custom_components.extended_openai_conversation_responses.const import (
     CONF_CHAT_MODEL,
     CONF_FUNCTION_TOOLS,
     CONF_REASONING_EFFORT,
+    DOMAIN,
+    SERVICE_CALL_FUNCTION,
 )
 from custom_components.extended_openai_conversation_responses.request_rule_match_preview import (
     request_rule_match_preview,
@@ -29,17 +31,98 @@ from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
+from tests_real_ha.test_cross_feature_acceptance import (
+    _agent as _cross_feature_agent,
+    _provider as _cross_feature_provider,
+    _say as _cross_feature_say,
+    _speech as _cross_feature_speech,
+)
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
     _install_wire,
     _responses_sse_text,
     _speech,
 )
+from tests_real_ha.test_request_rules_script_semantics import _local, _record_action
 from tests_stress.conftest import record
 from tests_stress.test_request_rules_matrix import CLASSIFIED_MATCHERS
 
 MATCHERS = sorted(CLASSIFIED_MATCHERS)
 API_MODES = [API_MODE_CHAT_COMPLETIONS, API_MODE_RESPONSES]
+
+
+async def test_referenced_function_recreation_cannot_rebind_inflight_rule(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A same-name Function replacement cannot satisfy an old local rule turn."""
+    name = "nightly_rule_function"
+    tool = {
+        "spec": {
+            "name": name,
+            "description": "Return the reference generation",
+            "parameters": {"type": "object", "properties": {}},
+        },
+        "function": {"type": "template", "value_template": "original generation"},
+        "enabled": True,
+    }
+    agent = await _cross_feature_agent(hass, **{CONF_FUNCTION_TOOLS: [tool]})
+    assert agent is not None
+    old_wire = _cross_feature_provider(monkeypatch, agent, [])
+    calls = []
+
+    async def record_call(call):
+        calls.append(call)
+
+    hass.services.async_register("rule_probe", "record", record_call)
+    await agent._request_rules.async_create(_local([
+        {
+            "action": f"{DOMAIN}.{SERVICE_CALL_FUNCTION}",
+            "data": {"function": name, "arguments": {}},
+        },
+        _record_action("executed"),
+    ]))
+    entered, release = asyncio.Event(), asyncio.Event()
+    validate = rules_module.async_validate_actions_config
+
+    async def paused_validate(*args, **kwargs):
+        result = await validate(*args, **kwargs)
+        entered.set()
+        await release.wait()
+        return result
+
+    monkeypatch.setattr(rules_module, "async_validate_actions_config", paused_validate)
+    pending = asyncio.create_task(_cross_feature_say(hass, agent, "run rule"))
+    await asyncio.wait_for(entered.wait(), timeout=10)
+    entry = agent.entry
+
+    def replace(tools: list[dict]) -> None:
+        subentry = next(item for item in entry.subentries.values() if item.subentry_type == "conversation")
+        hass.config_entries.async_update_subentry(
+            entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: tools},
+        )
+
+    before = agent.subentry.data
+    replace([])
+    replace([tool])
+    after = next(item for item in entry.subentries.values() if item.subentry_type == "conversation").data
+    assert after == before and after is not before
+    release.set()
+    stale = await asyncio.wait_for(pending, timeout=10)
+    assert stale.response.error_code is not None or stale.response.as_dict()["speech"]["plain"]["speech"] != "Done"
+    assert not calls
+    assert not old_wire
+
+    await hass.async_block_till_done()
+    new_agent = conversation.async_get_agent(hass, entry.entry_id)
+    assert new_agent is not None and new_agent is not agent
+    fresh_wire = _cross_feature_provider(monkeypatch, new_agent, [])
+    fresh = await _cross_feature_say(hass, new_agent, "run rule")
+    assert _cross_feature_speech(fresh) == "Done"
+    assert len(calls) == 1
+    assert not fresh_wire
+    record(stress_trace, "summary", same_name_recreation=True, stale_function_calls=0)
 
 
 @pytest.mark.parametrize("phase", ["matching", "validation"])
@@ -63,6 +146,7 @@ async def test_inflight_rule_identity_rejects_replacement_and_aba(
 
     hass.services.async_register("light", "turn_off", turn_off)
     hass.states.async_set("light.enhanced_rule", "on")
+    hass.states.async_set("light.replacement_rule", "on")
     original = await rules.async_create({
         **_rule(
             "equals",
@@ -113,6 +197,10 @@ async def test_inflight_rule_identity_rejects_replacement_and_aba(
             **original,
             "action": {
                 **original["action"],
+                "actions": [{
+                    "domain": "light", "service": "turn_off",
+                    "target": {"entity_id": ["light.replacement_rule"]}, "data": {},
+                }],
                 "success_response": "Replacement rule must not execute",
             },
         }

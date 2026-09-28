@@ -96,12 +96,14 @@ async def test_config_entry_removal_during_provider_turn_leaves_no_runtime(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("overlap_recreation", [False, True])
 async def test_conversation_subentry_removal_retires_old_turn_and_replacement_is_fresh(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
+    overlap_recreation: bool,
 ) -> None:
-    """A removed conversation subentry cannot leak into its replacement."""
+    """A removed subentry cannot leak into a same-title replacement runtime."""
     entry = _make_entry(
         "Active subentry removal",
         include_ai_task=True,
@@ -118,31 +120,41 @@ async def test_conversation_subentry_removal_retires_old_turn_and_replacement_is
     turn = asyncio.create_task(
         _say(hass, entry.entry_id, "Begin before conversation subentry removal")
     )
+    replacement = ConfigSubentry(
+        data=MappingProxyType(old_data),
+        subentry_type="conversation",
+        title=old_subentry.title if overlap_recreation else "Replacement conversation",
+        unique_id=None,
+    )
     try:
         await asyncio.wait_for(response_ready.wait(), timeout=10)
+        assert len(wire.requests) == 1
         assert hass.config_entries.async_remove_subentry(entry, old_subentry_id)
         await hass.async_block_till_done()
         assert old_subentry_id not in entry.subentries
         assert conversation.async_get_agent(hass, entry.entry_id) is None
+        if overlap_recreation:
+            assert hass.config_entries.async_add_subentry(entry, replacement)
+            await hass.async_block_till_done()
+            assert replacement.subentry_id != old_subentry_id
+            assert conversation.async_get_agent(hass, entry.entry_id) is not old_agent
+            release.set()
+            await asyncio.wait_for(asyncio.gather(turn, return_exceptions=True), 10)
     finally:
-        turn.cancel()
+        if not turn.done():
+            turn.cancel()
         release.set()
-        with suppress(asyncio.CancelledError):
-            await turn
+        await asyncio.gather(turn, return_exceptions=True)
 
-    replacement = ConfigSubentry(
-        data=MappingProxyType(old_data),
-        subentry_type="conversation",
-        title="Replacement conversation",
-        unique_id=None,
-    )
-    assert hass.config_entries.async_add_subentry(entry, replacement)
-    await hass.async_block_till_done()
+    if not overlap_recreation:
+        assert hass.config_entries.async_add_subentry(entry, replacement)
+        await hass.async_block_till_done()
     assert replacement.subentry_id != old_subentry_id
     new_agent = conversation.async_get_agent(hass, entry.entry_id)
     assert new_agent is not None
     assert new_agent is not old_agent
     assert new_agent.subentry.subentry_id == replacement.subentry_id
+    assert len(wire.requests) == 1
 
     fresh_wire = _install_wire(
         monkeypatch, new_agent, [_chat_sse_text("Replacement runtime is healthy.")]
@@ -156,5 +168,6 @@ async def test_conversation_subentry_removal_retires_old_turn_and_replacement_is
         layer="Real HA",
         active_subentry_removals=1,
         replacement_subentries=1,
+        overlap_recreation=overlap_recreation,
         provider_requests=2,
     )
