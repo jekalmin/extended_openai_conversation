@@ -387,7 +387,7 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
     assert replay.response.error_code is not None
     assert len(calls) == len(executions) == 1
     recovered = await turn("Report the result")
-    assert recovered.response.error_code is None
+    assert recovered.response.error_code is None, recovered.response.as_dict()
     assert len(calls) == len(executions) == 1
     intentional = await turn("Turn off the test light again")
     assert intentional.response.error_code is None
