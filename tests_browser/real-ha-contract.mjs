@@ -32,7 +32,11 @@ export async function expectContractCalls(page, journey) {
         && call.action === item.action);
       if (!reviewed.length || outcomes[index]?.success !== true) continue;
       const fields = Object.keys(call).filter((key) => !envelope.has(key)).sort();
-      expect(reviewed.some((item) => JSON.stringify([...item.keys].sort()) === JSON.stringify(fields)),
+      expect(reviewed.some((item) => {
+        const required = item.keys.filter((key) => !envelope.has(key));
+        const allowed = new Set([...required, ...(item.optional_keys || [])]);
+        return required.every((key) => fields.includes(key)) && fields.every((key) => allowed.has(key));
+      }),
         `${journey}: unreviewed fields on ${call.section}/${call.action}: ${JSON.stringify(fields)}`).toBe(true);
     }
   }
