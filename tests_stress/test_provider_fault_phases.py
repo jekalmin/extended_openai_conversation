@@ -287,13 +287,7 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
         "functions": [tool_a["spec"]["name"]],
         "enabled": True,
     }
-    original_data[CONF_FUNCTION_GROUPS] = [group_a]
-    hass.config_entries.async_update_subentry(
-        agent.entry, agent.subentry, data=original_data
-    )
-    await hass.async_block_till_done()
-    agent = conversation.async_get_agent(hass, agent.entry.entry_id)
-    assert agent is not None
+    state_a = {**original_data, CONF_FUNCTION_GROUPS: [group_a]}
     tool_b = deepcopy(tool_a)
     tool_b["spec"]["description"] = "Replacement Tool B"
     group_b = {**group_a, "id": "compound-group-b", "name": "Compound B"}
@@ -350,11 +344,13 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
             assert len(calls) == 1
             # The local effect is complete; A→B→A happens while the result awaits
             # provider acknowledgement.
+            replace_config([tool_a], [group_a])
+            first_a = agent.entry.subentries[agent.subentry.subentry_id].data
             replace_config([tool_b], [group_b])
             replace_config([tool_a], [group_a])
             restored = agent.entry.subentries[agent.subentry.subentry_id].data
-            assert restored == original_data
-            assert restored is not original_data
+            assert restored == state_a
+            assert restored is not first_a
             raise httpx.ConnectError("provider lost tool result", request=request)
         if index in {3, 5}:
             text = (
