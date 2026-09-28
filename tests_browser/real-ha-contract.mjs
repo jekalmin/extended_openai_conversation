@@ -3,18 +3,33 @@ import {expect} from "@playwright/test";
 
 const contract = JSON.parse(readFileSync(new URL("../tests_stress/management_ws_contract.json", import.meta.url), "utf8"));
 
+function containsShape(actual, expected) {
+  if (expected === null || typeof expected !== "object") return Object.is(actual, expected);
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && expected.length === actual.length
+      && expected.every((value, index) => containsShape(actual[index], value));
+  }
+  return actual !== null && typeof actual === "object"
+    && Object.entries(expected).every(([key, value]) => Object.hasOwn(actual, key)
+      && containsShape(actual[key], value));
+}
+
 // The bridge records the browser's exact callWS payload before HA validates it.
 // A passing UI assertion alone does not prove that every intended action crossed
 // the WebSocket command schema, especially when a failed click leaves old UI.
 export async function expectContractCalls(page, journey) {
-  const observed = await page.evaluate(() => window.browserHarness.calls);
+  const {calls: observed, outcomes} = await page.evaluate(() => ({
+    calls: window.browserHarness.calls,
+    outcomes: window.browserHarness.outcomes,
+  }));
   const expected = contract.actions.filter((action) => action.journey === journey);
   expect(expected.length, `No reviewed WebSocket contract entries for ${journey}`).toBeGreaterThan(0);
   for (const action of expected) {
-    const matching = observed.filter((call) => (action.type ? call.type === action.type : call.section === action.section)
+    const matching = observed.filter((call, index) => outcomes[index]?.success === true
+      && (action.type ? call.type === action.type : call.section === action.section)
       && call.action === action.action
       && action.keys.every((key) => Object.hasOwn(call, key))
-      && Object.entries(action.equals || {}).every(([key, value]) => Object.is(call[key], value)));
-    expect(matching.length, `${journey}: ${action.section}/${action.action} with ${action.keys.join(", ")}`).toBeGreaterThanOrEqual(action.min_calls || 1);
+      && containsShape(call, action.contains || action.equals || {}));
+    expect(matching.length, `${journey}: successful ${action.section}/${action.action} with ${action.keys.join(", ")}`).toBeGreaterThanOrEqual(action.min_calls || 1);
   }
 }

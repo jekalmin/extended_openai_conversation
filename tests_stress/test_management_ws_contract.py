@@ -23,12 +23,14 @@ TRANSFER = (
 )
 EXPECTED_JOURNEYS = {
     "configuration",
+    "configuration_extended",
     "memory",
     "request_rules",
     "rule_pack",
     "functions",
     "knowledge",
     "guest_quiet",
+    "guest_operations",
     "backup",
 }
 CRITICAL_ACTIONS = {
@@ -90,6 +92,7 @@ def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
     for item in actions:
         assert item["keys"] and len(item["keys"]) == len(set(item["keys"])), item
         assert set(item.get("equals", {})) <= set(item["keys"]), item
+        assert set(item.get("contains", {})) <= set(item["keys"]), item
         schema_keys = transfer_keys if "type" in item else management_keys
         assert set(item["keys"]) <= schema_keys, item
         assert item.get("min_calls", 1) >= 1, item

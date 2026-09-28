@@ -99,6 +99,42 @@ test("real browser saves General Settings through the genuine HA backend", async
   await expectHarnessClean(page, pageErrors);
 });
 
+test("shipped frontend duplicates, updates, and imports agents through genuine HA", async ({page}) => {
+  const pageErrors = trackPageErrors(page);
+  await page.goto(realFixtureUrl("assistant/basics"));
+  const result = await page.evaluate(async () => {
+    const panel = window.browserHarness.panel;
+    const original = await panel._call("configuration", "get");
+    const exported = await panel._call("configuration", "export");
+    const updated = await panel._call("configuration", "update", {
+      config: {current_datetime_enabled: false}, revision: original.revision,
+    });
+    const duplicate = await panel._call("configuration", "duplicate", {title: "Nightly duplicate"});
+    const imported = await panel._call("configuration", "import", {
+      document: {...exported.document, title: "Nightly imported"}, mode: "new", confirm: false,
+    });
+    return {updated, duplicate, imported};
+  });
+  expect(result.updated.config.current_datetime_enabled).toBe(false);
+  expect(result.duplicate.status).toBe("created");
+  expect(result.imported.status).toBe("created");
+  expect(result.duplicate.subentry_id).not.toBe(result.imported.subentry_id);
+
+  await page.goto(realFixtureUrl("assistant/basics"));
+  const persisted = await page.evaluate(async ({duplicateId, importedId}) => {
+    const panel = window.browserHarness.panel;
+    await panel._loadAgents(duplicateId);
+    const duplicate = await panel._call("configuration", "get");
+    await panel._loadAgents(importedId);
+    const imported = await panel._call("configuration", "get");
+    return {duplicate, imported};
+  }, {duplicateId: result.duplicate.subentry_id, importedId: result.imported.subentry_id});
+  expect(persisted.duplicate.title).toBe("Nightly duplicate");
+  expect(persisted.imported.title).toBe("Nightly imported");
+  await expectContractCalls(page, "configuration_extended");
+  await expectHarnessClean(page, pageErrors);
+});
+
 test("real browser creates, edits, reloads, and deletes a Memory through HA", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(realFixtureUrl("data-memory/memories"));
@@ -446,6 +482,25 @@ test("real browser saves Guest and Quiet Hours policy payloads through HA", asyn
   panel = page.locator("extended-openai-management-panel");
   await expect(panel.locator("#qh-wake")).toHaveValue(wakeValue);
   await expectContractCalls(page, "guest_quiet");
+  await expectHarnessClean(page, pageErrors);
+});
+
+test("shipped frontend starts and ends Guest Mode through genuine HA", async ({page}) => {
+  const pageErrors = trackPageErrors(page);
+  await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  const started = await page.evaluate(() => window.browserHarness.panel._call(
+    "guest_mode", "update", {indefinite: true},
+  ));
+  expect(started.status.state).toBe("active_indefinitely");
+  await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  const active = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
+  expect(active.status.state).toBe("active_indefinitely");
+  const ended = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "disable"));
+  expect(ended.status.state).toBe("inactive");
+  await page.goto(realFixtureUrl("capabilities/guest-mode"));
+  const inactive = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
+  expect(inactive.status.state).toBe("inactive");
+  await expectContractCalls(page, "guest_operations");
   await expectHarnessClean(page, pageErrors);
 });
 

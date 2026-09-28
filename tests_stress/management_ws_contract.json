@@ -3,6 +3,9 @@
   "description": "Reviewed browser actions that cross the genuine Home Assistant management WebSocket schema. Each journey is exercised by real-ha-backend.spec.mjs.",
   "actions": [
     {"journey": "configuration", "section": "configuration", "action": "save", "keys": ["config", "revision", "title"]},
+    {"journey": "configuration_extended", "section": "configuration", "action": "update", "keys": ["config", "revision"], "contains": {"config": {"current_datetime_enabled": false}}},
+    {"journey": "configuration_extended", "section": "configuration", "action": "duplicate", "keys": ["title"]},
+    {"journey": "configuration_extended", "section": "configuration", "action": "import", "keys": ["document", "mode", "confirm"], "contains": {"mode": "new", "confirm": false, "document": {"title": "Nightly imported"}}},
     {"journey": "memory", "section": "memories", "action": "add", "keys": ["scope_id", "content", "category"]},
     {"journey": "memory", "section": "memories", "action": "update", "keys": ["scope_id", "memory_id", "expected_revision", "content"]},
     {"journey": "memory", "section": "memories", "action": "delete", "keys": ["scope_id", "memory_id"]},
@@ -27,6 +30,8 @@
     {"journey": "knowledge", "section": "knowledge", "action": "delete", "keys": ["source_id", "confirm"]},
     {"journey": "knowledge", "section": "knowledge", "action": "set_enabled", "keys": ["enabled"], "min_calls": 2},
     {"journey": "guest_quiet", "section": "guest_mode", "action": "save_policy", "keys": ["config"]},
+    {"journey": "guest_operations", "section": "guest_mode", "action": "update", "keys": ["indefinite"], "contains": {"indefinite": true}},
+    {"journey": "guest_operations", "section": "guest_mode", "action": "disable", "keys": ["entry_id", "subentry_id"]},
     {"journey": "guest_quiet", "section": "quiet_hours", "action": "update", "keys": ["config"]},
     {"journey": "backup", "type": "extended_openai_conversation_responses/management/backup_transfer", "action": "export_start", "keys": ["data"]},
     {"journey": "backup", "type": "extended_openai_conversation_responses/management/backup_transfer", "action": "import_start", "keys": ["data"]},
