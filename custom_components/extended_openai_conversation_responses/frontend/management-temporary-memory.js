@@ -198,13 +198,14 @@ async function saveTemporaryMemory(panel) {
   } finally { panel._temporaryMemorySaving = false; panel._setSaving(save, false); }
 }
 
-async function deleteTemporaryMemory(panel, memoryId) {
+async function deleteTemporaryMemory(panel, memoryId, button = null) {
   if (!memoryId || !await panel._confirm(
     "Delete temporary memory?",
     "This short-lived fact will no longer be included in later requests.",
     "Delete",
   )) return false;
   const owner = panel._retainedMutationOwner();
+  panel._setSaving(button, true, "Deleting…");
   try {
     const response = await panel._call("memories", "temporary_delete", {
       scope_id: owner.scope,
@@ -223,6 +224,8 @@ async function deleteTemporaryMemory(panel, memoryId) {
   } catch (err) {
     panel._toast(`Unable to delete temporary memory: ${err.message || String(err)}`, true);
     return false;
+  } finally {
+    panel._setSaving(button, false);
   }
 }
 
@@ -237,8 +240,8 @@ export function bindTemporaryMemory(panel) {
     host.querySelector("#list-search").addEventListener("input", event => { panel._query = event.target.value; filterTemporaryMemories(panel); });
   }
   delegateCollectionActions(host, ".edit-temporary-memory,.delete-temporary,.memory-kind,#clear-temporary", control => {
-    if (control.matches("#clear-temporary")) { void clearTemporaryMemories(panel); return; }
-    if (control.matches(".delete-temporary")) void deleteTemporaryMemory(panel, control.dataset.id);
+    if (control.matches("#clear-temporary")) { void clearTemporaryMemories(panel, control); return; }
+    if (control.matches(".delete-temporary")) void deleteTemporaryMemory(panel, control.dataset.id, control);
     else if (control.matches(".memory-kind")) {
       panel._memoryKind = control.dataset.kind; panel._query = "";
       void panel._loadSection();
@@ -251,7 +254,7 @@ export function bindTemporaryMemory(panel) {
   form.addEventListener("click", event => {
     const control = event.target.closest("button");
     if (control?.matches(".close-temporary-editor")) void closeTemporaryMemory(panel, !control.classList.contains("icon"));
-    if (control?.id === "temporary-memory-delete" && panel._temporaryMemoryDraft?.memory_id) void deleteTemporaryMemory(panel, panel._temporaryMemoryDraft.memory_id);
+    if (control?.id === "temporary-memory-delete" && panel._temporaryMemoryDraft?.memory_id) void deleteTemporaryMemory(panel, panel._temporaryMemoryDraft.memory_id, control);
   });
 }
 
@@ -271,10 +274,11 @@ export {
   validOwnerScope,
 };
 
-export async function clearTemporaryMemories(panel) {
+export async function clearTemporaryMemories(panel, button = null) {
   const scope = panel._scopeId, agent = panel._agentId;
   if (!await panel._confirm("Clear short-term memories?", `All short-term memories belonging to ${ownerLabel(panel, scope)} for the selected agent will be permanently removed. Search does not limit this action. Long-term memories are unchanged.`, "Clear memories")) return;
   if (scope !== panel._scopeId || agent !== panel._agentId || panel._memoryKind !== "temporary") return;
+  panel._setSaving(button, true, "Clearing…");
   try {
     const owner = panel._retainedMutationOwner();
     const response = await panel._call("memories", "temporary_clear", {scope_id: scope, confirm: true});
@@ -285,4 +289,5 @@ export async function clearTemporaryMemories(panel) {
     panel._render();
     panel._toast("Short-term memories cleared");
   } catch (err) { panel._toast(`Unable to clear short-term memories: ${err.message || String(err)}`, true); }
+  finally { panel._setSaving(button, false); }
 }

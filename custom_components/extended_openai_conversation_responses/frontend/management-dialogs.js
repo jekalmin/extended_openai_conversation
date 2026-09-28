@@ -16,10 +16,10 @@ export function bindPanelDialogs(panel) {
     const actions = {
       "confirm-cancel": () => panel._resolveConfirm(false),
       "confirm-accept": () => panel._resolveConfirm(true),
-      "knowledge-delete": () => panel._deleteSource(panel._editingSource?.source_id, true),
-      "memory-delete": () => panel._deleteMemory(panel._editingMemory?.memory_id, true),
+      "knowledge-delete": () => panel._deleteSource(panel._editingSource?.source_id, true, button),
+      "memory-delete": () => panel._deleteMemory(panel._editingMemory?.memory_id, true, button),
       "reassign-cancel": () => dialog.close(),
-      "reassign-save": () => panel._saveReassign(),
+      "reassign-save": () => panel._saveReassign(button),
     };
     if (actions[button.id]) actions[button.id]();
     else if (button.classList.contains("close-editor")) {

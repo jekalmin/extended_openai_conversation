@@ -1849,6 +1849,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       if (!await this._confirm("End active conversation?", "The next matching Assist request will start with fresh model context.", "End conversation")) return;
       if (agentId !== this._agentId || loadToken !== this._loadToken
           || this._viewKey() !== "data-memory/conversations") return;
+      this._setSaving(button, true, "Ending…");
       try {
         const response = await this._call("conversations", "end_active", { continuity_key: button.dataset.key });
         if (response?.ended && agentId === this._agentId && loadToken === this._loadToken
@@ -1865,6 +1866,8 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
         this._toast("Conversation will start fresh next time");
       } catch (err) {
         this._toast(`Unable to end conversation: ${err.message || String(err)}`, true);
+      } finally {
+        this._setSaving(button, false);
       }
     }));
   }
@@ -1880,9 +1883,9 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     if (view === "data-memory/conversations") getRouteFeature(view)?.bindConversationActions(this);
     if (view === "data-memory/conversations") {
       this._bindActiveConversationActions();
-      root.querySelectorAll(".delete-session").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); this._deleteSession(button.dataset.id); }));
+      root.querySelectorAll(".delete-session").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); this._deleteSession(button.dataset.id, button); }));
     }
-    if (view === "usage-maintenance/usage") q("#clear-details")?.addEventListener("click", () => this._clearUsageDetails());
+    if (view === "usage-maintenance/usage") q("#clear-details")?.addEventListener("click", (event) => this._clearUsageDetails(event.currentTarget));
     q("#test-agent")?.addEventListener("click", () => this._testAgent());
     if (view === "capabilities/guest-mode") {
       q("#guest-indefinite")?.addEventListener("change", (event) => { const end = q("#guest-end"); if (end) end.disabled = event.target.checked; });
@@ -2133,9 +2136,10 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     } finally { this._setSaving(button, false); }
   }
 
-  async _deleteSource(sourceId, fromDialog = false) {
+  async _deleteSource(sourceId, fromDialog = false, button = null) {
     if (!sourceId || !await this._confirm("Delete Knowledge source?", "This permanently removes the selected source from this agent's local Knowledge Library.", "Delete")) return;
     const owner = this._retainedMutationOwner();
+    this._setSaving(button, true, "Deleting…");
     try {
       const response = await this._call("knowledge", "delete", { source_id: sourceId, confirm: true });
       if (!this._ownsRetainedMutation(owner)) return;
@@ -2147,11 +2151,13 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       this._render();
       this._toast("Knowledge source deleted");
     } catch (err) { this._toast(`Unable to delete source: ${err.message || String(err)}`, true); }
+    finally { this._setSaving(button, false); }
   }
 
-  async _deleteMemory(memoryId, fromDialog = false) {
+  async _deleteMemory(memoryId, fromDialog = false, button = null) {
     if (!memoryId || !await this._confirm("Delete memory?", "This memory will be permanently removed from the selected scope.", "Delete")) return;
     const owner = this._retainedMutationOwner();
+    this._setSaving(button, true, "Deleting…");
     try {
       const response = await this._call("memories", "delete", { scope_id: owner.scope, memory_id: memoryId });
       if (!this._ownsRetainedMutation(owner)) return;
@@ -2163,6 +2169,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       this._toast("Memory deleted");
       this.shadowRoot.querySelector("#add-memory")?.focus({preventScroll: true});
     } catch (err) { this._toast(`Unable to delete memory: ${err.message || String(err)}`, true); }
+    finally { this._setSaving(button, false); }
   }
 
   _adjustConversationScopeCount(delta) {
@@ -2176,13 +2183,14 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     }
   }
 
-  async _deleteSession(sessionId) {
+  async _deleteSession(sessionId, button = null) {
     const agentId = this._agentId;
     const scopeId = this._scopeId;
     const loadToken = this._loadToken;
     if (!await this._confirm("Delete conversation?", "This retained conversation and its turns will be permanently removed.", "Delete")) return;
     if (agentId !== this._agentId || scopeId !== this._scopeId || loadToken !== this._loadToken
         || this._viewKey() !== "data-memory/conversations") return;
+    this._setSaving(button, true, "Deleting…");
     try {
       const response = await this._call("conversations", "delete", { scope_id: scopeId, session_id: sessionId });
       if (response?.deleted_sessions && agentId === this._agentId && scopeId === this._scopeId
@@ -2208,6 +2216,8 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       this._toast("Conversation deleted");
     } catch (err) {
       this._toast(`Unable to delete conversation: ${err.message || String(err)}`, true);
+    } finally {
+      this._setSaving(button, false);
     }
   }
 
@@ -2218,20 +2228,23 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     this.shadowRoot.querySelector("#reassign-dialog").showModal();
   }
 
-  async _saveReassign() {
+  async _saveReassign(button = null) {
     const target = this.shadowRoot.querySelector("#reassign-scope").value;
     if (!target) return;
+    this._setSaving(button, true, "Assigning…");
     try {
       const result = await this._call("memories", "reassign_legacy", { scope_id: "__anonymous__", target_scope_id: target, memory_ids: [this._reassignMemoryId] });
       this.shadowRoot.querySelector("#reassign-dialog").close();
       await this._refreshAfterMutation();
       this._toast(`Reassigned ${formatUsageNumber(result.reassigned)} memory record${result.reassigned === 1 ? "" : "s"}`);
     } catch (err) { this._toast(`Unable to reassign memory: ${err.message || String(err)}`, true); }
+    finally { this._setSaving(button, false); }
   }
 
-  async _clearUsageDetails() {
+  async _clearUsageDetails(button = null) {
     if (!await this._confirm("Clear recent usage details?", "Request and run details will be removed. Daily, monthly, and lifetime totals remain.", "Clear details")) return;
     const owner = this._retainedMutationOwner();
+    this._setSaving(button, true, "Clearing…");
     try {
       await this._call("usage", "clear_details", { confirm: true });
       if (!this._ownsRetainedMutation(owner)) return;
@@ -2248,6 +2261,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       this._toast("Recent usage details cleared");
     }
     catch (err) { this._toast(`Unable to clear details: ${err.message || String(err)}`, true); }
+    finally { this._setSaving(button, false); }
   }
 
   _testAgent() {

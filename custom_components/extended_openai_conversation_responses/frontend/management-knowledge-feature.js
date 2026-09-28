@@ -151,7 +151,7 @@ export function bindKnowledge(panel) {
     host.querySelector("#list-search").addEventListener("input", event => { panel._query = event.target.value; filterKnowledge(panel); });
   }
   delegateCollectionActions(host, "#add-source,.edit-source,.source-edit-button,.delete-source", control => {
-    if (control.matches(".delete-source")) void panel._deleteSource(control.dataset.id);
+    if (control.matches(".delete-source")) void panel._deleteSource(control.dataset.id, false, control);
     else void panel._openKnowledge(control.dataset.id);
   });
 }

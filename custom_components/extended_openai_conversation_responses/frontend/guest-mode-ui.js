@@ -257,7 +257,7 @@ function bindPersistentMemories(panel) {
     host.querySelector("#list-search").addEventListener("input", event => { panel._query = event.target.value; filterPersistentMemories(panel); });
   }
   delegateCollectionActions(host, "#add-memory,.edit-memory,.memory-edit-button,.delete-memory,.reassign-memory,.memory-kind,#load-more-memories", control => {
-    if (control.matches(".delete-memory")) void panel._deleteMemory(control.dataset.id);
+    if (control.matches(".delete-memory")) void panel._deleteMemory(control.dataset.id, false, control);
     else if (control.matches(".reassign-memory")) panel._openReassign(control.dataset.id);
     else if (control.matches("#load-more-memories")) void loadMoreMemories(panel, control);
     else if (control.matches(".memory-kind")) {
