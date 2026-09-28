@@ -1611,9 +1611,7 @@ class ExtendedOpenAIAgentEntity(
         if missing := entity_ids - live_ids:
             entity_id = sorted(missing)[0]
             if hass.states.get(entity_id) is None:
-                raise HomeAssistantError(
-                    f"Target entity {entity_id} no longer exists"
-                )
+                raise HomeAssistantError(f"Target entity {entity_id} no longer exists")
             raise EntityNotExposed(entity_id)
 
     def _get_function_tools(self) -> list[dict[str, Any]]:
