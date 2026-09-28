@@ -712,15 +712,38 @@ function bindToolCollection(panel) {
       return openTool(panel, null, copy);
     }
     if (button.matches(".delete-tool")) {
+      const functionName = tool.spec?.name;
+      panel._eocDeletingFunctions ||= new Set();
+      if (!functionName || panel._eocDeletingFunctions.has(functionName)) return;
       if (!await panel._confirm(isHALlmTool(tool) ? "Remove HA LLM Tool?" : "Delete function tool?", isHALlmTool(tool)
         ? `Remove “${haToolName(tool)}” from this agent and its groups? The underlying Home Assistant capability remains unchanged. Saved dependencies must be removed first.`
         : `The Function Tool “${tool.spec?.name || "Unnamed"}” will be deleted and removed from any Function Group. Deletion is refused while Request Rules or Guest Mode still reference it.`, isHALlmTool(tool) ? "Remove tool" : "Delete function")) return;
+      if (panel._eocDeletingFunctions.has(functionName)) return;
+      panel._eocDeletingFunctions.add(functionName);
+      const idleLabel = button.textContent;
+      button.disabled = true;
+      button.textContent = "Deleting…";
+      button.setAttribute("aria-busy", "true");
       try {
-        const result = await panel._call("tools", "delete", {name: tool.spec.name, confirm: true});
+        const result = await panel._call("tools", "delete", {name: functionName, confirm: true});
+        const syncStarted = globalThis.performance?.now?.() ?? Date.now();
         synchronizePersistedFunctions(panel, result);
+        const syncCompleted = globalThis.performance?.now?.() ?? Date.now();
         panel._toast("Function deleted");
         panel._render();
-      } catch (err) { panel._toast(`Unable to delete function: ${err.message || String(err)}`, true); }
+        const renderCompleted = globalThis.performance?.now?.() ?? Date.now();
+        panel._recordFunctionMutationUi?.(result, {
+          syncMs: syncCompleted - syncStarted,
+          renderAndReconcileMs: renderCompleted - syncCompleted,
+        });
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = idleLabel;
+        button.removeAttribute("aria-busy");
+        panel._toast(`Unable to delete function: ${err.message || String(err)}`, true);
+      } finally {
+        panel._eocDeletingFunctions.delete(functionName);
+      }
     }
   });
   host.addEventListener("change", async event => {

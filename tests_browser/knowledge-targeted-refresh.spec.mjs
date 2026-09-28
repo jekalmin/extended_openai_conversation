@@ -16,6 +16,9 @@ test("Knowledge availability patches selected agent and route without broad relo
 
   await panel.evaluate((host) => {
     const original = host._hass.callWS;
+    const overviewKey = `${host._agentId}|overview`;
+    host._sectionCache.set(overviewKey, {stale:true});
+    host._eocSectionCacheTimes.set(overviewKey, Date.now());
     window.knowledgeTargetedCalls = [];
     host._hass.callWS = async (message) => {
       if (message.section === "knowledge" && message.action === "set_enabled") {
@@ -44,12 +47,16 @@ test("Knowledge availability patches selected agent and route without broad relo
     agentFeatureEnabled:host._selectedAgent()?.feature_status?.knowledge?.enabled,
     configData:host._configData,
     draft:host._draft,
+    overviewCached:host._sectionCache.has(`${host._agentId}|overview`),
+    mutationCount:host._eocAgentMutations,
   }));
   expect(state.routeEnabled).toBe(!initialChecked);
   expect(state.agentEnabled).toBe(!initialChecked);
   expect(state.agentFeatureEnabled).toBe(!initialChecked);
   expect(state.configData).toBeNull();
   expect(state.draft).toBeNull();
+  expect(state.overviewCached).toBe(false);
+  expect(state.mutationCount).toBe(0);
 
   const after = await page.evaluate(() => ({
     agents: browserHarness.calls.filter((call) => call.action === "agents").length,

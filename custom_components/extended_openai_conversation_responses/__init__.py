@@ -93,6 +93,7 @@ from .delayed_tools import async_setup_delayed_tools
 from .ha_permissions import async_setup_ha_permissions
 from .helpers import get_authenticated_client, supports_openai_hosted_tools
 from .intercom_services import async_setup_intercom_services
+from .live_subentry_updates import is_live_subentry_update
 from .management_function_repair import async_prewarm_persisted_config_projection
 from .management_ui import async_setup_management_ui
 from .memory import get_memory_mode
@@ -272,6 +273,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
+    if is_live_subentry_update():
+        # Live management writes replace subentry.data in place. Conversation,
+        # AI Task and sensor runtimes already consume that live object, while each
+        # request boundary reconciles optional managers. Reloading here needlessly
+        # reauthenticates the provider and rebuilds every platform.
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 

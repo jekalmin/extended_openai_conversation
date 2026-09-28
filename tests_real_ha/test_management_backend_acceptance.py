@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -493,10 +494,6 @@ async def test_function_tools_and_groups_round_trip_through_management_websocket
         for item in tool_saved["functions"]
     )
 
-    # The Function Tool write may trigger the config-entry update listener. Wait for
-    # that normal lifecycle work before issuing the dependent group mutation.
-    await hass.async_block_till_done()
-
     group = {
         "id": "acceptance_group",
         "name": "Acceptance Group",
@@ -539,6 +536,125 @@ async def test_function_tools_and_groups_round_trip_through_management_websocket
     )
     assert reloaded_group["functions"] == ["acceptance_user_lookup"]
     assert reloaded_group["loading_mode"] == FUNCTION_GROUP_LOADING_ON_DEMAND
+
+
+@pytest.mark.asyncio
+async def test_consecutive_live_management_writes_do_not_reload_or_block_overview(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+) -> None:
+    """Live subentry writes leave the next WS operation immediately available."""
+    entry = _entry("Consecutive Live Management Write Acceptance")
+    await _setup_entry(hass, entry)
+    client = await _admin_client(hass, hass_ws_client)
+    reload_entry = AsyncMock(return_value=True)
+    hass.config_entries.async_reload = reload_entry
+
+    revision: str | None = None
+    for name in ("delete_probe_a", "delete_probe_b"):
+        saved = await _management_call(
+            client,
+            entry=entry,
+            section="tools",
+            action="save",
+            **({"revision": revision} if revision is not None else {}),
+            tool={
+                "spec": {
+                    "name": name,
+                    "description": "Consecutive deletion lifecycle probe.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+                "function": {"type": "native", "name": "get_user_from_user_id"},
+            },
+        )
+        revision = saved["revision"]
+
+    group_saved = await _management_call(
+        client,
+        entry=entry,
+        section="tools",
+        action="save_group",
+        revision=revision,
+        group={
+            "id": "delete_probe_group",
+            "name": "Delete probe group",
+            "description": "Exercises the shared Function Tool persistence boundary.",
+            "loading_mode": FUNCTION_GROUP_LOADING_ON_DEMAND,
+            "functions": ["delete_probe_a"],
+            "enabled": True,
+        },
+    )
+    revision = group_saved["revision"]
+    group_deleted = await _management_call(
+        client,
+        entry=entry,
+        section="tools",
+        action="delete_group",
+        group_id="delete_probe_group",
+        confirm=True,
+        revision=revision,
+    )
+    revision = group_deleted["revision"]
+
+    results = []
+    for name in ("delete_probe_a", "delete_probe_b"):
+        deleted = await _management_call(
+            client,
+            entry=entry,
+            section="tools",
+            action="delete",
+            name=name,
+            confirm=True,
+            revision=revision,
+        )
+        revision = deleted["revision"]
+        results.append(deleted)
+
+    knowledge = await _management_call(
+        client,
+        entry=entry,
+        section="knowledge",
+        action="set_enabled",
+        enabled=True,
+    )
+    assert knowledge["knowledge_enabled"] is True
+
+    guest = await _management_call(
+        client, entry=entry, section="guest_mode", action="get"
+    )
+    guest_saved = await _management_call(
+        client,
+        entry=entry,
+        section="guest_mode",
+        action="save_policy",
+        revision=guest["revision"],
+        config=guest["config"],
+    )
+    settings_saved = await _management_call(
+        client,
+        entry=entry,
+        section="settings",
+        action="update",
+        settings={},
+    )
+
+    overview = await _management_call(
+        client, entry=entry, section="overview", action="summary"
+    )
+    await hass.async_block_till_done()
+
+    assert overview["agent"]["subentry_id"] == _conversation_subentry(entry).subentry_id
+    assert reload_entry.await_count == 0
+    assert guest_saved["revision"]
+    assert "settings" in settings_saved
+    assert all(result["_performance"]["live_runtime_update"] for result in results)
+    assert all(
+        result["_performance"]["maintenance_lease_ms"] >= 0 for result in results
+    )
+    assert all(
+        result["_performance"]["dependency_reference_lookup_ms"] >= 0
+        for result in results
+    )
 
 
 @pytest.mark.asyncio

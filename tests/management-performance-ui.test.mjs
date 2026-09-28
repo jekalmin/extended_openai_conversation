@@ -123,6 +123,39 @@ function panelFor(page = "assistant", subsection = "basics") {
   return panel;
 }
 
+{
+  const panel = panelFor("capabilities", "functions");
+  panel._configData = {revision:"r1", config:{functions:[], function_groups:[]}};
+  const calls = [];
+  const releases = [];
+  panel._hass = {callWS: (message) => {
+    calls.push(message);
+    return new Promise((resolve) => releases.push(resolve));
+  }};
+
+  const first = panel._call("tools", "delete", {name:"tool_a", confirm:true});
+  const second = panel._call("tools", "delete", {name:"tool_b", confirm:true});
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(calls.length, 1, "the second Function mutation waits for the first response");
+
+  releases.shift()({revision:"r2", functions:[], function_groups:[], _performance:{handler_ms:1}});
+  await first;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(calls.length, 2, "the mutation tail releases as soon as the first request settles");
+  assert.equal(calls[1].revision, "r1", "a request queued before the first response retains its submitted revision");
+
+  releases.shift()({revision:"r3", functions:[], function_groups:[], _performance:{handler_ms:2}});
+  await second;
+  assert.equal(panel._eocFunctionMutationTail, null);
+  assert.equal(panel._eocFunctionMutationDiagnostics.length, 2);
+  assert.deepEqual(panel._eocFunctionMutationDiagnostics.map((item) => item.status), ["fulfilled", "fulfilled"]);
+  assert.equal(panel._eocFunctionMutationDiagnostics[0].backend.handler_ms, 1);
+  assert.ok(panel._eocFunctionMutationDiagnostics[1].queueWaitMs >= 0);
+  assert.equal(panel._eocRequestDiagnostics.filter((item) => item.section === "tools").length, 2);
+}
+
 const configResult = (projection, title = "A") => ({
   projection, title, revision:`${title}-r1`, config:{usage_request_retention_days:30, chat_model:"gpt-4o"},
 });

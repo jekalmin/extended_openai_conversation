@@ -73,6 +73,7 @@ from .const import (
 from .guest_mode import async_get_guest_mode
 from .ha_tool_result_compat import tool_result_data
 from .helpers import get_api_mode, get_authenticated_client, get_token_param_for_model
+from .live_subentry_updates import update_live_subentry
 from .memory import async_get_memory, memory_as_dict, memory_user_id
 from .provider_errors import (
     ensure_successful_responses_result,
@@ -280,7 +281,7 @@ async def async_set_function_tools_enabled(
         normalized = merge_agent_config(
             dict(subentry.data), {CONF_FUNCTION_TOOLS: configured}
         )
-        hass.config_entries.async_update_subentry(entry, subentry, data=normalized)
+        update_live_subentry(hass, entry, subentry, data=normalized)
 
 
 async def async_set_function_groups_enabled(
@@ -314,7 +315,7 @@ async def async_set_function_groups_enabled(
         normalized = merge_agent_config(
             dict(subentry.data), {CONF_FUNCTION_GROUPS: groups}
         )
-        hass.config_entries.async_update_subentry(entry, subentry, data=normalized)
+        update_live_subentry(hass, entry, subentry, data=normalized)
 
 
 async def async_skill_source_ref(

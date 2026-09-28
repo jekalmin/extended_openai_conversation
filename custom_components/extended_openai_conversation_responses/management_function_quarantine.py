@@ -27,6 +27,7 @@ from .agent_test import (
     async_test_agent as async_test_configured_agent,
 )
 from .const import CONF_FUNCTION_GROUPS, CONF_FUNCTION_TOOLS, DEFAULT_FUNCTION_GROUPS
+from .live_subentry_updates import update_live_subentry
 from .management_function_repair import (
     editable_function_tools,
     function_tools_issue,
@@ -212,7 +213,7 @@ def _tolerant_persist_function_configuration(
     if extra_updates:
         persisted.update(deepcopy(extra_updates))
     persisted = preserve_legacy_guest_policy(raw, persisted)
-    hass.config_entries.async_update_subentry(entry, subentry, data=persisted)
+    update_live_subentry(hass, entry, subentry, data=persisted)
     return {
         "functions": deepcopy(tools),
         "function_groups": deepcopy(groups),

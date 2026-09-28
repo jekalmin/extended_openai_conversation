@@ -42,6 +42,8 @@ const MAX_MEASURE_ENTRIES = 100;
 const COLD_MARK_PREFIX = "extended-openai:cold";
 // Performance entries are global to the document, not to a panel instance.
 let performanceSequence = 0;
+let functionMutationSequence = 0;
+const functionMutationResults = new WeakMap();
 let navigationSearchModule = null;
 let navigationSearchPromise = null;
 
@@ -141,6 +143,11 @@ const CRITICAL_STYLE = `
 function performanceApi() {
   const api = globalThis.performance;
   return api && typeof api.mark === "function" && typeof api.measure === "function" ? api : null;
+}
+
+function performanceNow() {
+  const api = globalThis.performance;
+  return typeof api?.now === "function" ? api.now() : Date.now();
 }
 
 function startMeasure(panel, prefix) {
@@ -656,28 +663,58 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     const key = JSON.stringify([section, action, extra]);
     if (this._pendingMutations.has(key)) return this._pendingMutations.get(key);
 
+    const mutationTrace = section === "tools" ? {
+      id: ++functionMutationSequence,
+      section,
+      action,
+      queuedAt: performanceNow(),
+      status: "queued",
+    } : null;
     const previous = section === "tools"
       ? (this._eocFunctionMutationTail || Promise.resolve())
       : Promise.resolve();
     const pending = previous.catch(() => {}).then(
-      () => this._runAgentMutation(section, action, extra),
+      () => {
+        if (mutationTrace) {
+          mutationTrace.startedAt = performanceNow();
+          mutationTrace.queueWaitMs = mutationTrace.startedAt - mutationTrace.queuedAt;
+          mutationTrace.status = "running";
+        }
+        return this._runAgentMutation(section, action, extra, mutationTrace);
+      },
     );
     const tracked = pending.finally(() => {
       this._pendingMutations.delete(key);
       if (this._eocFunctionMutationTail === tracked) this._eocFunctionMutationTail = null;
+      if (mutationTrace) {
+        mutationTrace.tailReleasedAt = performanceNow();
+        mutationTrace.totalUntilTailReleaseMs = mutationTrace.tailReleasedAt - mutationTrace.queuedAt;
+        this._eocFunctionMutationDiagnostics ||= [];
+        this._eocFunctionMutationDiagnostics.push(mutationTrace);
+        if (this._eocFunctionMutationDiagnostics.length > 50) {
+          this._eocFunctionMutationDiagnostics.shift();
+        }
+      }
     });
     if (section === "tools") this._eocFunctionMutationTail = tracked;
     this._pendingMutations.set(key, tracked);
     return tracked;
   }
 
-  async _runAgentMutation(section, action, extra) {
+  async _runAgentMutation(section, action, extra, mutationTrace = null) {
     this._eocAgentMutations = Number(this._eocAgentMutations || 0) + 1;
     syncAgentPicker(this);
     try {
-      const result = await this._callCore(section, action, extra);
+      const result = await this._callCore(section, action, extra, mutationTrace);
       this._applyToolRevision(section, action, result);
+      if (mutationTrace) mutationTrace.status = "fulfilled";
       return result;
+    } catch (err) {
+      if (mutationTrace) {
+        mutationTrace.status = "rejected";
+        mutationTrace.error = err?.message || String(err);
+      }
+      throw err;
     } finally {
       this._eocAgentMutations = Math.max(0, Number(this._eocAgentMutations || 1) - 1);
       syncAgentPicker(this);
@@ -695,12 +732,12 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     }
   }
 
-  _callCore(section, action, extra = {}) {
+  _callCore(section, action, extra = {}, mutationTrace = null) {
     // Configuration remains editable even when persisted Function Tools need repair.
     const issue = this._selectedAgent()?.configuration_issue;
     if (section === "configuration" && issue?.field === "functions" && issue.repairable === true) {
       const repairAction = {validate:"configuration_validate", save:"configuration_save", update:"configuration_save"}[action];
-      if (repairAction) return this._request("function_repair", repairAction, extra);
+      if (repairAction) return this._request("function_repair", repairAction, extra, mutationTrace);
     }
     let payload = extra;
     if (section === "guest_mode" && action === "update") {
@@ -711,7 +748,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     }
     const ruleSave = section === "request_rules" && ["create", "update"].includes(action)
       && this.shadowRoot?.querySelector?.("#rule-dialog")?.open;
-    if (!ruleSave) return this._request(section, action, payload);
+    if (!ruleSave) return this._request(section, action, payload, mutationTrace);
     if (this._eocRuleSavePromise) return this._eocRuleSavePromise;
     const button = this.shadowRoot.querySelector("#rule-save");
     setControlPending(this, button, true);
@@ -724,25 +761,70 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     return tracked;
   }
 
-  async _request(section, action, extra = {}) {
+  async _request(section, action, extra = {}, mutationTrace = null) {
     if (!this._hass) return null;
     const agent = this._selectedAgent();
-    const result = await this._hass.callWS({
-      type: WS_TYPE,
+    const requestTrace = {
       section,
       action,
-      ...(agent ? { entry_id: agent.entry_id, subentry_id: agent.subentry_id } : {}),
-      ...extra,
-    });
-    this._invalidateAfterMutation(agent?.subentry_id, section, action);
-    pruneCacheTimes(this);
-    return result;
+      view: this._viewKey?.() || null,
+      sentAt: performanceNow(),
+      mutationId: mutationTrace?.id || null,
+    };
+    if (mutationTrace) mutationTrace.wsSentAt = requestTrace.sentAt;
+    try {
+      const result = await this._hass.callWS({
+        type: WS_TYPE,
+        section,
+        action,
+        ...(agent ? { entry_id: agent.entry_id, subentry_id: agent.subentry_id } : {}),
+        ...extra,
+      });
+      requestTrace.responseAt = performanceNow();
+      requestTrace.durationMs = requestTrace.responseAt - requestTrace.sentAt;
+      requestTrace.status = "fulfilled";
+      if (mutationTrace) {
+        mutationTrace.wsResponseAt = requestTrace.responseAt;
+        mutationTrace.wsDurationMs = requestTrace.durationMs;
+        mutationTrace.backend = result?._performance || null;
+        if (result && typeof result === "object") functionMutationResults.set(result, mutationTrace);
+      }
+      const invalidationStarted = performanceNow();
+      this._invalidateAfterMutation(agent?.subentry_id, section, action);
+      pruneCacheTimes(this);
+      requestTrace.invalidationMs = performanceNow() - invalidationStarted;
+      if (mutationTrace) mutationTrace.invalidationMs = requestTrace.invalidationMs;
+      return result;
+    } catch (err) {
+      requestTrace.responseAt = performanceNow();
+      requestTrace.durationMs = requestTrace.responseAt - requestTrace.sentAt;
+      requestTrace.status = "rejected";
+      if (mutationTrace) {
+        mutationTrace.wsResponseAt = requestTrace.responseAt;
+        mutationTrace.wsDurationMs = requestTrace.durationMs;
+      }
+      throw err;
+    } finally {
+      this._eocRequestDiagnostics ||= [];
+      this._eocRequestDiagnostics.push(requestTrace);
+      if (this._eocRequestDiagnostics.length > 100) this._eocRequestDiagnostics.shift();
+    }
+  }
+
+  _recordFunctionMutationUi(result, detail) {
+    if (!result || typeof result !== "object") return;
+    const trace = functionMutationResults.get(result);
+    if (!trace) return;
+    trace.ui = {...detail, completedAt: performanceNow()};
   }
 
   _invalidateAfterMutation(agentId, section, action) {
     if (agentId && ((section === "configuration" && ["save", "update", "import"].includes(action))
         || (section === "function_repair" && action === "configuration_save")
         || (section === "tools" && TOOL_MUTATIONS.has(action))
+        || (section === "knowledge" && action === "set_enabled")
+        || (section === "guest_mode" && action === "save_policy")
+        || (section === "settings" && action === "update")
         || (section === "backup" && action === "restore"))) {
       this._invalidateCleanConfiguration(agentId);
     }
@@ -766,8 +848,8 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     } else {
       const mutations = {
         request_rules: new Set(["defaults", "wording_groups", "create", "update", "delete", "duplicate"]),
-        knowledge: new Set(["create", "update", "delete"]),
-        memories: new Set(["add", "update", "delete", "temporary_update", "temporary_delete", "temporary_clear", "reassign_legacy"]),
+        knowledge: new Set(["create", "update", "delete", "set_enabled"]),
+        memories: new Set(["add", "update", "delete", "clear", "temporary_update", "temporary_delete", "temporary_clear", "reassign_legacy"]),
       };
       if (agentId && mutations[section]?.has(action)) {
         this._cacheGeneration += 1;

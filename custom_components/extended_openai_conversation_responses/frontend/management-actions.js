@@ -189,13 +189,14 @@ export {fieldErrorKey, normalizeGuestModeTimestamp, runFrontendMutation, validat
 export const MUTATIONS = new Map([
   ["backup", new Set(["restore"])],
   ["quiet_hours", new Set(["update"])],
-  ["configuration", new Set(["update", "save"])],
+  ["configuration", new Set(["update", "save", "import"])],
   ["conversations", new Set(["delete", "end_active"])],
   ["guest_mode", new Set(["save_policy", "update", "disable"])],
-  ["knowledge", new Set(["create", "update", "delete"])],
-  ["memories", new Set(["add", "update", "delete", "temporary_delete", "temporary_update", "reassign_legacy"])],
+  ["knowledge", new Set(["create", "update", "delete", "set_enabled"])],
+  ["memories", new Set(["add", "update", "delete", "clear", "temporary_delete", "temporary_update", "temporary_clear", "reassign_legacy"])],
   ["request_rules", new Set(["settings", "defaults", "wording_groups", "groups", "create", "update", "delete", "duplicate", "move"])],
-  ["tools", new Set(["save", "delete", "set_enabled", "save_group", "delete_group"])],
+  ["settings", new Set(["update"])],
+  ["tools", new Set(["save", "delete", "set_enabled", "save_group", "delete_group", "ha_add"])],
   ["usage", new Set(["clear_details"])],
 ]);
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 import json
 from types import SimpleNamespace
@@ -27,6 +28,9 @@ from custom_components.extended_openai_conversation_responses.conversation impor
 )
 from custom_components.extended_openai_conversation_responses.ha_tool_result_compat import (
     tool_result_data,
+)
+from custom_components.extended_openai_conversation_responses.live_subentry_updates import (
+    live_subentry_update,
 )
 from custom_components.extended_openai_conversation_responses.memory import (
     MEMORY_TOOL_NAMES,
@@ -441,6 +445,19 @@ async def test_options_update_reloads_runtime(hass) -> None:
     await update_listener(hass, SimpleNamespace(entry_id="entry-1"))
 
     hass.config_entries.async_reload.assert_awaited_once_with("entry-1")
+
+
+async def test_live_subentry_update_does_not_reload_runtime(hass) -> None:
+    """A live subentry write must not start provider reauthentication."""
+    hass.config_entries.async_reload = AsyncMock()
+
+    with live_subentry_update():
+        task = asyncio.create_task(
+            update_listener(hass, SimpleNamespace(entry_id="entry-1"))
+        )
+    await task
+
+    hass.config_entries.async_reload.assert_not_awaited()
 
 
 async def test_malformed_tool_input_is_rejected_before_storage() -> None:

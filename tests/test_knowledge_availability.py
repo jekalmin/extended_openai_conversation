@@ -16,6 +16,9 @@ from custom_components.extended_openai_conversation_responses.knowledge import (
     KnowledgeLibrary,
     KnowledgeStore,
 )
+from custom_components.extended_openai_conversation_responses.live_subentry_updates import (
+    is_live_subentry_update,
+)
 
 
 class FakeStorage:
@@ -266,6 +269,10 @@ async def test_management_set_enabled_updates_only_knowledge_config() -> None:
     )
     hass = MagicMock()
     hass.config_entries.async_get_entry.return_value = entry
+    live_update_contexts: list[bool] = []
+    hass.config_entries.async_update_subentry.side_effect = lambda *_args, **_kwargs: (
+        live_update_contexts.append(is_live_subentry_update())
+    )
     library = await _library()
     await library.async_create("Reference", "", "Content", enabled=True)
     base = {
@@ -293,6 +300,7 @@ async def test_management_set_enabled_updates_only_knowledge_config() -> None:
     args = hass.config_entries.async_update_subentry.call_args
     assert args.args[:2] == (entry, subentry)
     assert args.kwargs["data"][CONF_KNOWLEDGE_ENABLED] is False
+    assert live_update_contexts == [True]
 
 
 async def test_enabled_field_requires_boolean() -> None:

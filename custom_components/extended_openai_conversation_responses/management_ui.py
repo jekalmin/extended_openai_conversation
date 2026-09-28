@@ -96,6 +96,7 @@ from .ha_llm_tools import (
 )
 from .helpers import get_exposed_entities
 from .knowledge import async_get_knowledge, knowledge_source_as_dict
+from .live_subentry_updates import update_live_subentry
 from .local_intents import (
     CONF_LOCAL_INTENT_DELAYED_COMMANDS_TO_AI,
     CONF_LOCAL_INTENT_EXCLUSIONS,
@@ -955,7 +956,7 @@ async def async_guest_mode_command(request: _ManagementRequest) -> dict[str, Any
             raise HomeAssistantError("Guest policy contains unknown fields")
         updates[CONF_GUEST_POLICY_VERSION] = GUEST_POLICY_VERSION
         normalized = merge_agent_config(subentry.data, updates)
-        hass.config_entries.async_update_subentry(entry, subentry, data=normalized)
+        update_live_subentry(hass, entry, subentry, data=normalized)
         configured_tools = configured_function_tools_from_data(normalized)
         return {
             "revision": saved_agent_config_revision(
@@ -1824,6 +1825,7 @@ async def async_tools_command(request: _ManagementRequest) -> dict[str, Any]:
             result["references"] = references
         return result
     if action == "delete":
+        delete_started = perf_counter()
         if message.get("confirm") is not True:
             raise HomeAssistantError("Explicit confirmation is required")
         name = message.get("name")
@@ -1832,10 +1834,14 @@ async def async_tools_command(request: _ManagementRequest) -> dict[str, Any]:
         remaining = [tool for tool in tools if tool["spec"]["name"] != name]
         if len(remaining) == len(tools):
             raise HomeAssistantError("The Function Tool no longer exists")
+        phase = perf_counter()
         operation_revision = persisted_config_projection(subentry).revision
+        projection_lookup_ms = _elapsed_ms(phase)
+        phase = perf_counter()
         _rules, references = await _function_reference_state(
             hass, entry_id, subentry_id, subentry.data, name
         )
+        reference_lookup_ms = _elapsed_ms(phase)
         if references["request_rules"] or references["guest_mode"]:
             raise HomeAssistantError(_function_reference_error(name, references))
         groups = [
@@ -1845,7 +1851,8 @@ async def async_tools_command(request: _ManagementRequest) -> dict[str, Any]:
             }
             for group in groups
         ]
-        return _persist_function_configuration(
+        phase = perf_counter()
+        result = _persist_function_configuration(
             hass,
             entry,
             subentry,
@@ -1853,6 +1860,16 @@ async def async_tools_command(request: _ManagementRequest) -> dict[str, Any]:
             groups,
             expected_revision=operation_revision,
         )
+        performance = result.setdefault("_performance", {})
+        performance.update(
+            {
+                "delete_projection_lookup_ms": projection_lookup_ms,
+                "dependency_reference_lookup_ms": reference_lookup_ms,
+                "delete_persist_call_ms": _elapsed_ms(phase),
+                "delete_handler_total_ms": _elapsed_ms(delete_started),
+            }
+        )
+        return result
     if action == "save_group":
         group_candidate = message.get("group")
         if not isinstance(group_candidate, dict):
@@ -2343,8 +2360,8 @@ async def async_knowledge_command(request: _ManagementRequest) -> dict[str, Any]
         persisted = preserve_legacy_guest_policy(
             dict(request.subentry.data), deepcopy(normalized)
         )
-        request.hass.config_entries.async_update_subentry(
-            request.entry, request.subentry, data=persisted
+        update_live_subentry(
+            request.hass, request.entry, request.subentry, data=persisted
         )
         stats = library.stats()
         source_count = 0
@@ -2438,8 +2455,8 @@ async def async_settings_command(request: _ManagementRequest) -> dict[str, Any]:
         if not isinstance(updates, dict):
             raise HomeAssistantError("settings must be an object")
         normalized = _validate_settings(updates)
-        hass.config_entries.async_update_subentry(
-            entry, subentry, data={**subentry.data, **normalized}
+        update_live_subentry(
+            hass, entry, subentry, data={**subentry.data, **normalized}
         )
         return {"settings": settings_snapshot({**subentry.data, **normalized})}
 
@@ -2519,16 +2536,25 @@ async def async_management_command(
     authorization precedes agent lookup; section-specific authorization stays with
     its handler. No setup/feature installer replaces this function.
     """
-    trace_configuration = message.get("section") == "configuration" and message.get(
-        "action"
-    ) in {"get", "save", "update"}
-    started = perf_counter() if trace_configuration else None
+    action = message.get("action")
+    trace_configuration = (
+        message.get("section") == "configuration"
+        and isinstance(action, str)
+        and action in {"get", "save", "update"}
+    )
+    trace_tool_mutation = (
+        message.get("section") == "tools"
+        and isinstance(action, str)
+        and action in _TOOL_MUTATIONS
+    )
+    started = perf_counter() if trace_configuration or trace_tool_mutation else None
     async with management_command_lease(hass, message):
         lease_ms = _elapsed_ms(started) if started is not None else None
         result = await _async_management_request(hass, user_id, is_admin, message)
-    if started is not None and isinstance(result.get("_performance"), dict):
-        result["_performance"]["maintenance_lease_ms"] = lease_ms
-        result["_performance"]["command_total_ms"] = _elapsed_ms(started)
+    performance = result.get("_performance")
+    if started is not None and isinstance(performance, dict):
+        performance["maintenance_lease_ms"] = lease_ms
+        performance["command_total_ms"] = _elapsed_ms(started)
     return result
 
 
@@ -2590,15 +2616,16 @@ async def _async_management_request(
         _require_agent_config_revision(subentry, message.get("revision"))
 
     configuration_action = _configuration_action(message)
-    configuration_started = perf_counter() if configuration_action is not None else None
+    trace_tool_mutation = section == "tools" and action in _TOOL_MUTATIONS
+    handler_started = (
+        perf_counter()
+        if configuration_action is not None or trace_tool_mutation
+        else None
+    )
     dispatch_ms = _elapsed_ms(dispatch_started)
     with management_function_tools(section):
         result = await handler(request)
-    handler_ms = (
-        _elapsed_ms(configuration_started)
-        if configuration_started is not None
-        else None
-    )
+    handler_ms = _elapsed_ms(handler_started) if handler_started is not None else None
 
     if configuration_action is not None:
         decoration_started = perf_counter()
@@ -2609,8 +2636,8 @@ async def _async_management_request(
             action=configuration_action,
         )
         decoration_ms = _elapsed_ms(decoration_started)
-        assert configuration_started is not None
-        request_total_ms = _elapsed_ms(configuration_started)
+        assert handler_started is not None
+        request_total_ms = _elapsed_ms(handler_started)
         performance = result.get("_performance")
         if isinstance(performance, dict):
             performance["decoration_ms"] = decoration_ms
@@ -2619,6 +2646,12 @@ async def _async_management_request(
                 performance["dispatch_ms"] = dispatch_ms
                 performance["agent_resolution_ms"] = resolution_ms
                 performance["handler_ms"] = handler_ms
+    elif trace_tool_mutation:
+        performance = result.get("_performance")
+        if isinstance(performance, dict):
+            performance["dispatch_ms"] = dispatch_ms
+            performance["agent_resolution_ms"] = resolution_ms
+            performance["handler_ms"] = handler_ms
     return result
 
 
@@ -2719,23 +2752,26 @@ async def websocket_management(
     except (HomeAssistantError, RuntimeError, ValueError) as err:
         connection.send_error(msg["id"], "invalid_request", str(err))
         return
-    trace_configuration = msg.get("section") == "configuration" and msg.get(
-        "action"
-    ) in {"get", "save", "update"}
-    if trace_configuration:
+    trace_request = (
+        msg.get("section") == "configuration"
+        and msg.get("action") in {"get", "save", "update"}
+    ) or (msg.get("section") == "tools" and msg.get("action") in _TOOL_MUTATIONS)
+    if trace_request:
         performance = result.get("_performance")
         if isinstance(performance, dict):
             performance["websocket_pre_send_ms"] = _elapsed_ms(started)
-    send_started = perf_counter() if trace_configuration else None
+    send_started = perf_counter() if trace_request else None
     connection.send_result(msg["id"], result)
     # Home Assistant serializes inside send_result. Its duration cannot be
     # inserted into a payload that has already been serialized.
     if send_started is not None and _PERFORMANCE_LOGGER.isEnabledFor(logging.DEBUG):
         _PERFORMANCE_LOGGER.debug(
-            "configuration/%s send_result_ms=%.2f websocket_total_ms=%.2f",
+            "%s/%s send_result_ms=%.2f websocket_total_ms=%.2f phases=%s",
+            msg.get("section"),
             msg["action"],
             _elapsed_ms(send_started),
             _elapsed_ms(started),
+            performance if isinstance(performance, dict) else {},
         )
 
 
