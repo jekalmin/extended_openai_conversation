@@ -221,6 +221,7 @@ from .temporary_memory import (
     async_get_temporary_memory,
     temporary_memory_as_dict,
 )
+from .tool_replay_guard import clear_unacknowledged_calls, remember_unacknowledged_calls
 from .usage import async_get_usage
 from .voice_identity_runtime import voice_identity_scope
 
@@ -1056,6 +1057,7 @@ class ExtendedOpenAIAgentEntity(
 
         # Call the LLM
 
+        existing_content_ids = {id(content) for content in chat_log.content}
         try:
             check_aba = getattr(self, "_assert_no_aba_configuration", None)
             if callable(check_aba):
@@ -1078,6 +1080,7 @@ class ExtendedOpenAIAgentEntity(
                 request_options=request_options,
             )
         except (OpenAIError, HomeAssistantError, httpx.RequestError) as err:
+            remember_unacknowledged_calls(self, chat_log, existing_content_ids)
             return _conversation_error_result(
                 self,
                 user_input,
@@ -1091,6 +1094,8 @@ class ExtendedOpenAIAgentEntity(
                     else user_input.conversation_id
                 ),
             )
+
+        clear_unacknowledged_calls(self, chat_log.conversation_id)
 
         # Fire conversation finished event
         self._fire_conversation_finished(user_input, chat_log, status="success")

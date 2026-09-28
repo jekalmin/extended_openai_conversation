@@ -46,11 +46,11 @@ def _reply(mode: str, text: str) -> bytes:
     )
 
 
-def _tool(mode: str) -> bytes:
+def _tool(mode: str, call_id: str | None = None) -> bytes:
     return (
-        _chat_sse_tool_call()
+        _chat_sse_tool_call(**({"call_id": call_id} if call_id else {}))
         if mode == API_MODE_CHAT_COMPLETIONS
-        else _responses_sse_tool_call()
+        else _responses_sse_tool_call(**({"call_id": call_id} if call_id else {}))
     )
 
 
@@ -193,13 +193,15 @@ async def test_disconnect_after_tool_side_effect_never_replays_it(
 
 
 @pytest.mark.parametrize("mode", [API_MODE_CHAT_COMPLETIONS, API_MODE_RESPONSES])
+@pytest.mark.parametrize("replay_call_id", [None, "call-provider-wire-equivalent"])
 async def test_provider_replays_completed_call_id_after_lost_tool_result(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
     stress_trace: list[dict],
     mode: str,
+    replay_call_id: str | None,
 ) -> None:
-    """A same-ID replay on the same conversation cannot repeat a HA side effect."""
+    """Same-ID and equivalent new-ID replays cannot repeat a HA side effect."""
     MockUser(id=_OWNER, name="Provider replay owner", is_owner=True).add_to_hass(hass)
     agent = await _agent(hass, mode, tools=True)
     calls = await _prepare_service(hass)
@@ -207,7 +209,7 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
         [
             WireStep("sse", body=_tool(mode)),
             WireStep("transport", error="before_headers"),
-            WireStep("sse", body=_tool(mode)),
+            WireStep("sse", body=_tool(mode, replay_call_id)),
             WireStep("sse", body=_reply(mode, "Recovered after rejected replay.")),
         ]
     )
@@ -243,7 +245,7 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
         stress_trace,
         "post_tool_replay",
         mode=mode,
-        call_id="same",
+        call_id="same" if replay_call_id is None else "equivalent_new",
         service_calls=len(calls),
         recovered=True,
     )
