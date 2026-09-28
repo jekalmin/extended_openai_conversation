@@ -2443,6 +2443,14 @@ async def async_evaluate_rule(
     context: Context | None = None,
 ) -> RuleEvaluation | None:
     """Apply each eligible rule once, stopping on handoff or failure."""
+    matching_revision = rules.revision() if isinstance(rules, RequestRules) else None
+
+    def require_matching_revision() -> None:
+        if matching_revision is not None and rules.revision() != matching_revision:
+            raise HomeAssistantError(
+                "Request Rules changed during matching; please retry"
+            )
+
     if not isinstance(rules, RequestRules) or not rules._has_continuation:
         try:
             match = await rules.async_match(hass, text)
@@ -2451,9 +2459,10 @@ async def async_evaluate_rule(
                 "Skipping Request Rules for bounded matching failure: %s", err
             )
             return None
+        require_matching_revision()
         if match is None:
             return None
-        return await _async_evaluate_matched_rule(
+        evaluation = await _async_evaluate_matched_rule(
             hass,
             match,
             text,
@@ -2464,13 +2473,17 @@ async def async_evaluate_rule(
             timeout_minutes,
             function_executor,
             context,
+            require_matching_revision=require_matching_revision,
         )
+        require_matching_revision()
+        return evaluation
 
     last: RuleEvaluation | None = None
     request_override: dict[str, str] = {}
     skipped: list[dict[str, str]] = []
     try:
         async for match in rules.async_eligible_matches(hass, text, skipped):
+            require_matching_revision()
             evaluation = await _async_evaluate_matched_rule(
                 hass,
                 match,
@@ -2483,7 +2496,9 @@ async def async_evaluate_rule(
                 function_executor,
                 context,
                 request_override,
+                require_matching_revision=require_matching_revision,
             )
+            require_matching_revision()
             action = match.rule["action"]
             if match.rule["action_type"] == "model_routing":
                 if action["reset"]:
@@ -2528,6 +2543,7 @@ async def async_evaluate_rule(
         raise HomeAssistantError(
             "Request Rule matching could not safely continue"
         ) from err
+    require_matching_revision()
     return last
 
 
@@ -2543,10 +2559,13 @@ async def _async_evaluate_matched_rule(
     function_executor: Callable[[str, dict[str, Any]], Awaitable[Any]] | None,
     context: Context | None,
     prior_request_override: Mapping[str, str] | None = None,
+    require_matching_revision: Callable[[], None] | None = None,
 ) -> RuleEvaluation:
     """Execute one already matched and condition-eligible rule."""
     rule = match.rule
     action = rule["action"]
+    if require_matching_revision is not None:
+        require_matching_revision()
     if rule["action_type"] == "local_action":
         policy = guest_policy or GuestCapabilityPolicy.unrestricted()
         executable_actions = action["actions"]
@@ -2590,6 +2609,8 @@ async def _async_evaluate_matched_rule(
             validated_actions = await async_validate_actions_config(
                 hass, schema_actions
             )
+            if require_matching_revision is not None:
+                require_matching_revision()
             script = Script(
                 hass,
                 validated_actions,

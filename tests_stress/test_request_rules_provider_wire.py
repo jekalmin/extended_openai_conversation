@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 
+from custom_components.extended_openai_conversation_responses import (
+    request_rules as rules_module,
+)
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     API_MODE_RESPONSES,
@@ -19,9 +23,11 @@ from custom_components.extended_openai_conversation_responses.request_rule_match
 )
 from custom_components.extended_openai_conversation_responses.request_rules import (
     DEFAULT_MATCHING,
+    async_evaluate_rule,
 )
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from tests_real_ha.test_acceptance_lifecycle import _make_entry, _setup_entry
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
@@ -34,6 +40,101 @@ from tests_stress.test_request_rules_matrix import CLASSIFIED_MATCHERS
 
 MATCHERS = sorted(CLASSIFIED_MATCHERS)
 API_MODES = [API_MODE_CHAT_COMPLETIONS, API_MODE_RESPONSES]
+
+
+@pytest.mark.parametrize("phase", ["matching", "validation"])
+@pytest.mark.parametrize("mutation", ["delete_recreate_same", "rule_aba"])
+async def test_inflight_rule_identity_rejects_replacement_and_aba(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+    phase: str,
+    mutation: str,
+) -> None:
+    """A matched rule cannot run after its committed identity has changed."""
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    rules = agent._request_rules
+    runtime = agent._request_rule_runtime
+    assert rules is not None and runtime is not None
+    calls = []
+
+    async def turn_off(call):
+        calls.append(call)
+
+    hass.services.async_register("light", "turn_off", turn_off)
+    hass.states.async_set("light.enhanced_rule", "on")
+    original = await rules.async_create({
+        **_rule(
+            "equals",
+            "local_action",
+            {
+                "actions": [{
+                    "domain": "light", "service": "turn_off",
+                    "target": {"entity_id": ["light.enhanced_rule"]}, "data": {},
+                }],
+                "success_response": "Original rule executed",
+            },
+        ),
+        "id": "nightly-aba-rule",
+    })
+    before = rules.revision()
+    assert not rules._has_continuation
+    entered, release = asyncio.Event(), asyncio.Event()
+    if phase == "matching":
+        match = rules.async_match
+
+        async def paused_match(*args, **kwargs):
+            result = await match(*args, **kwargs)
+            entered.set()
+            await release.wait()
+            return result
+
+        monkeypatch.setattr(rules, "async_match", paused_match)
+    else:
+        validate = rules_module.async_validate_actions_config
+
+        async def paused_validate(*args, **kwargs):
+            result = await validate(*args, **kwargs)
+            entered.set()
+            await release.wait()
+            return result
+
+        monkeypatch.setattr(rules_module, "async_validate_actions_config", paused_validate)
+
+    pending = asyncio.create_task(async_evaluate_rule(
+        hass, rules, runtime, "think deeply", "nightly-aba-session",
+    ))
+    await asyncio.wait_for(entered.wait(), timeout=10)
+    if mutation == "delete_recreate_same":
+        await rules.async_delete(original["id"])
+        await rules.async_create(original)
+    else:
+        changed = {
+            **original,
+            "action": {
+                **original["action"],
+                "success_response": "Replacement rule must not execute",
+            },
+        }
+        await rules.async_update(original["id"], changed)
+        await rules.async_update(original["id"], original)
+    assert rules.revision() != before
+    assert rules.snapshot()["rules"] == [original]
+    release.set()
+    if phase == "matching":
+        with pytest.raises(HomeAssistantError, match="changed during matching"):
+            await asyncio.wait_for(pending, timeout=10)
+    else:
+        result = await asyncio.wait_for(pending, timeout=10)
+        assert result is not None and result.successful is False
+    assert calls == []
+
+    wire = _install_wire(monkeypatch, agent, [])
+    fresh = await _say(hass, agent, "think deeply")
+    assert _speech(fresh) == "Original rule executed"
+    assert len(calls) == 1
+    assert not wire.requests
+    record(stress_trace, "summary", phase=phase, mutation=mutation, stale_service_calls=0)
 
 
 async def _agent(hass: HomeAssistant, api_mode: str):
