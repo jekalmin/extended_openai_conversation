@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -282,4 +283,111 @@ async def test_replayed_management_mutations_do_not_double_apply(
         rejected_stale_replays=2,
         deduplicated_replays=1,
         harmless_delete_replays=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_lost_rule_create_ack_then_same_id_delete_recreate_rejects_old_retry(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A lost create reply stays stale after a durable same-ID A→B→A cycle."""
+    entry = _entry("Rule create acknowledgement ABA")
+    await _setup_entry(hass, entry)
+    client = await _admin_client(
+        hass,
+        hass_ws_client,
+        user_id="rule-ack-aba-admin",
+        name="Rule Acknowledgement ABA Admin",
+    )
+    before = await _management_call(
+        client, entry=entry, section="request_rules", action="list"
+    )
+    original_payload = {
+        "revision": before["revision"],
+        "rule": {
+            "id": "lost-ack-aba-rule",
+            "name": "Durable A",
+            "enabled": True,
+            "phrases": ["compound replay command"],
+            "match_type": "equals",
+            "action_type": "model_routing",
+            "action": {
+                "model": "gpt-5-mini",
+                "reasoning_effort": "medium",
+                "scope": "request",
+                "reset": False,
+                "continue_to_ai": True,
+                "success_response": "Compound route",
+            },
+            "matching_behavior": "defaults",
+            "matching": dict(DEFAULT_MATCHING),
+            "order": len(before["rules"]),
+        },
+    }
+    created = await _commit_without_ack(
+        client,
+        monkeypatch,
+        entry=entry,
+        section="request_rules",
+        action="create",
+        **original_payload,
+    )
+    assert created["rule"]["id"] == "lost-ack-aba-rule"
+
+    committed = await _management_call(
+        client, entry=entry, section="request_rules", action="list"
+    )
+    deleted = await _management_call(
+        client,
+        entry=entry,
+        section="request_rules",
+        action="delete",
+        revision=committed["revision"],
+        rule_id="lost-ack-aba-rule",
+        confirm=True,
+    )
+    replacement_payload = {
+        "revision": deleted["revision"],
+        "rule": deepcopy(original_payload["rule"]),
+    }
+    recreated = await _management_call(
+        client,
+        entry=entry,
+        section="request_rules",
+        action="create",
+        **replacement_payload,
+    )
+    assert recreated["rule"] == created["rule"]
+
+    await _fresh_reload(hass, entry)
+    authoritative = await _management_call(
+        client, entry=entry, section="request_rules", action="list"
+    )
+    assert authoritative["rules"] == [created["rule"]]
+    assert authoritative["revision"] != original_payload["revision"]
+
+    stale_retry = await _management_response(
+        client,
+        entry=entry,
+        section="request_rules",
+        action="create",
+        **original_payload,
+    )
+    assert stale_retry["success"] is False
+    assert "changed in another tab" in stale_retry["error"]["message"].lower()
+    final = await _management_call(
+        client, entry=entry, section="request_rules", action="list"
+    )
+    assert final["rules"] == [created["rule"]]
+    record(
+        stress_trace,
+        "compound_durable_ack_aba",
+        owner="request_rules",
+        lost_create_ack=True,
+        same_id_delete_recreate=True,
+        stale_retry_rejected=True,
+        duplicate_rules=0,
     )
