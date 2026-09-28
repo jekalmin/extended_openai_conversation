@@ -12,7 +12,8 @@ from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     API_MODE_RESPONSES,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.components import conversation
+from homeassistant.core import Context, HomeAssistant
 from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
     _chat_sse_tool_call,
@@ -188,6 +189,62 @@ async def test_disconnect_after_tool_side_effect_never_replays_it(
     assert len(wire.requests) == 3
     assert sorted(_archived_successes(agent)) == [False, True]
     record(stress_trace, "post_tool_disconnect", mode=mode, service_calls=len(calls))
+
+
+@pytest.mark.parametrize("mode", [API_MODE_CHAT_COMPLETIONS, API_MODE_RESPONSES])
+async def test_provider_replays_completed_call_id_after_lost_tool_result(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+    mode: str,
+) -> None:
+    """A same-ID replay on the same conversation cannot repeat a HA side effect."""
+    MockUser(id=_OWNER, name="Provider replay owner", is_owner=True).add_to_hass(hass)
+    agent = await _agent(hass, mode, tools=True)
+    calls = await _prepare_service(hass)
+    wire = ProviderFaultTransport(
+        [
+            WireStep("sse", body=_tool(mode)),
+            WireStep("transport", error="before_headers"),
+            WireStep("sse", body=_tool(mode)),
+            WireStep("sse", body=_reply(mode, "Recovered after rejected replay.")),
+        ]
+    )
+    wire.install(monkeypatch, agent)
+
+    failed = await _say(hass, agent, "Turn off the test light")
+    assert failed.response.error_code is not None
+    assert len(calls) == 1
+    assert failed.conversation_id
+
+    async def continue_turn(text: str) -> conversation.ConversationResult:
+        return await conversation.async_converse(
+            hass=hass,
+            text=text,
+            conversation_id=failed.conversation_id,
+            context=Context(),
+            language="en",
+            agent_id=agent.entry.entry_id,
+        )
+
+    replay = await continue_turn("Retry the interrupted request")
+    assert replay.response.error_code is not None
+    assert len(calls) == 1
+    recovered = await continue_turn("Report status")
+    assert recovered.response.error_code is None
+    assert recovered.response.as_dict()["speech"]["plain"]["speech"] == (
+        "Recovered after rejected replay."
+    )
+    assert len(calls) == 1
+    assert len(wire.requests) == 4
+    record(
+        stress_trace,
+        "post_tool_replay",
+        mode=mode,
+        call_id="same",
+        service_calls=len(calls),
+        recovered=True,
+    )
 
 
 async def test_unknown_responses_event_is_ignored_before_valid_completion(
