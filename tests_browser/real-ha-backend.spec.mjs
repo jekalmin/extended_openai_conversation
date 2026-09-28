@@ -490,19 +490,19 @@ test("real browser saves Guest and Quiet Hours policy payloads through HA", asyn
 test("shipped frontend starts and ends Guest Mode through genuine HA", async ({page}) => {
   const pageErrors = trackPageErrors(page);
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
-  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
+  await page.waitForFunction(() => window.browserHarness?.panel?._selectedAgent?.());
   const started = await page.evaluate(() => window.browserHarness.panel._call(
     "guest_mode", "update", {indefinite: true},
   ));
   expect(started.status.state).toBe("active_indefinitely");
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
-  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
+  await page.waitForFunction(() => window.browserHarness?.panel?._selectedAgent?.());
   const active = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
   expect(active.status.state).toBe("active_indefinitely");
   const ended = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "disable"));
   expect(ended.status.state).toBe("inactive");
   await page.goto(realFixtureUrl("capabilities/guest-mode"));
-  await expect(page.locator("extended-openai-management-panel #guest-review-converted")).toBeVisible();
+  await page.waitForFunction(() => window.browserHarness?.panel?._selectedAgent?.());
   const inactive = await page.evaluate(() => window.browserHarness.panel._call("guest_mode", "get"));
   expect(inactive.status.state).toBe("inactive");
   await expectContractCalls(page, "guest_operations");

@@ -185,7 +185,15 @@ async def test_seeded_management_mutations_cross_real_websocket(
     from custom_components.extended_openai_conversation_responses.temporary_memory import (
         async_get_temporary_memory,
     )
+    from custom_components.extended_openai_conversation_responses.usage import (
+        async_get_usage,
+    )
+    from homeassistant.helpers import llm
     from homeassistant.util import dt as dt_util
+    from tests_real_ha.test_ha_llm_tool_acceptance import (
+        AcceptanceAPI,
+        AcceptanceEchoTool,
+    )
     from tests_real_ha.test_management_backend_acceptance import ADMIN_ID
 
     entry = _entry("Seeded Management Browser Acceptance")
@@ -224,6 +232,16 @@ async def test_seeded_management_mutations_cross_real_websocket(
     assert resolved.key and resolved.claim_token
     await continuity.async_record_success(resolved.key, resolved.claim_token, [])
 
+    llm.async_register_api(hass, AcceptanceAPI(hass, AcceptanceEchoTool()))
+
+    usage = await async_get_usage(hass, entry.entry_id, subentry.subentry_id)
+    async with usage.async_run(home_assistant_conversation_id="nightly-usage"):
+        await usage.async_record_request(
+            successful=True, provider="openai", model="gpt-5-mini",
+            api_mode="responses", request_stage="initial",
+        )
+    assert usage.runs and usage.requests
+
     client = await _admin_client(hass, hass_ws_client)
     runner, backend_url = await _start_ws_bridge(client)
     try:
@@ -233,6 +251,48 @@ async def test_seeded_management_mutations_cross_real_websocket(
             config="playwright.config.mjs",
             env={"REAL_HA_BACKEND_URL": backend_url},
             failure_label="Seeded Playwright genuine-HA management acceptance failed",
+        )
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_function_repair_mutations_cross_real_websocket(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+) -> None:
+    """The shipped repair route edits a quarantined persisted tool collection."""
+    from copy import deepcopy
+
+    import yaml
+
+    from custom_components.extended_openai_conversation_responses.const import (
+        CONF_FUNCTION_TOOLS,
+    )
+    from tests.test_management_function_repair import _mixed_legacy_tool_data
+    from tests_real_ha.test_acceptance_lifecycle import _make_entry
+
+    data, mixed, _valid = _mixed_legacy_tool_data()
+    broken = []
+    for index in range(3):
+        tool = deepcopy(mixed[1])
+        tool["spec"]["name"] = f"nightly_broken_tool_{index}"
+        broken.append(tool)
+    data[CONF_FUNCTION_TOOLS] = yaml.safe_dump([mixed[0], *broken], sort_keys=False)
+    entry = _make_entry(
+        "Browser Function Repair Acceptance", include_ai_task=False,
+        conversation_options=data,
+    )
+    await _setup_entry(hass, entry)
+    client = await _admin_client(hass, hass_ws_client)
+    runner, backend_url = await _start_ws_bridge(client)
+    try:
+        await _run_playwright(
+            repo_root=Path(__file__).resolve().parent.parent,
+            spec="tests_browser/real-ha-function-repair.spec.mjs",
+            config="playwright.config.mjs",
+            env={"REAL_HA_BACKEND_URL": backend_url},
+            failure_label="Playwright genuine-HA Function repair acceptance failed",
         )
     finally:
         await runner.cleanup()

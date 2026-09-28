@@ -2651,6 +2651,7 @@ def _validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
         vol.Optional("config"): dict,
         vol.Optional("tools"): vol.Any(str, list),
         vol.Optional("tool"): dict,
+        vol.Optional("index"): vol.All(int, vol.Range(min=0)),
         vol.Optional("group"): dict,
         vol.Optional("name"): str,
         vol.Optional("original_name"): str,
