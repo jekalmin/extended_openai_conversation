@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import re
 
+from tests_stress.test_management_action_inventory import production_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "tests_stress" / "management_ws_contract.json"
 FRONTEND = ROOT / "tests_browser" / "real-ha-backend.spec.mjs"
@@ -56,6 +58,57 @@ CRITICAL_ACTIONS = {
     ("guest_mode", "save_policy"),
     ("quiet_hours", "update"),
 }
+
+FRONTEND_DIR = ROOT / "custom_components/extended_openai_conversation_responses/frontend"
+# Reviewed literal calls in the shipped source. A new mutation must change this
+# snapshot and receive genuine-HA browser evidence before the matrix is complete.
+REVIEWED_FRONTEND_MUTATIONS = {
+    ("configuration", "duplicate"), ("configuration", "import"),
+    ("configuration", "save"), ("conversations", "delete"),
+    ("conversations", "end_active"), ("function_repair", "delete_one"),
+    ("function_repair", "save"), ("function_repair", "save_one"),
+    ("guest_mode", "disable"), ("guest_mode", "update"),
+    ("knowledge", "delete"), ("knowledge", "set_enabled"),
+    ("memories", "delete"), ("memories", "reassign_legacy"),
+    ("memories", "temporary_clear"), ("memories", "temporary_delete"),
+    ("memories", "temporary_update"), ("request_rules", "delete"),
+    ("request_rules", "duplicate"), ("request_rules", "groups"),
+    ("request_rules", "move"), ("request_rules", "rule_pack_import"),
+    ("request_rules", "settings"), ("request_rules", "update"),
+    ("tools", "delete"), ("tools", "delete_group"),
+    ("tools", "ha_add"), ("tools", "save"),
+    ("tools", "save_group"), ("tools", "set_enabled"),
+    ("usage", "clear_details"),
+}
+
+
+def test_shipped_frontend_mutation_actions_are_reviewed() -> None:
+    """A newly wired literal mutation must not escape nightly contract review."""
+    production = production_actions()
+    inventory = json.loads(
+        (ROOT / "tests_stress/management_action_inventory.json").read_text(encoding="utf-8")
+    )
+    mutations = {
+        (section, action)
+        for section, contract in inventory["sections"].items()
+        for action, semantic in contract["semantic_classes"].items()
+        if semantic in {
+            "durable_mutation", "ephemeral_mutation", "destructive_mutation",
+            "transfer/session_operation",
+        }
+    }
+    assert all(action in production[section] for section, action in mutations)
+    actual = set()
+    for source in FRONTEND_DIR.glob("*.js"):
+        actual.update(
+            (section, action)
+            for section, action in re.findall(
+                r'_call\(\s*["\'`]([^"\'`]+)["\'`]\s*,\s*["\'`]([^"\'`]+)["\'`]',
+                source.read_text(encoding="utf-8"),
+            )
+            if (section, action) in mutations
+        )
+    assert actual == REVIEWED_FRONTEND_MUTATIONS
 
 
 def test_reviewed_browser_payloads_are_accepted_by_websocket_schemas() -> None:
