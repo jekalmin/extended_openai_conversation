@@ -26,7 +26,10 @@ from .const import DOMAIN
 from .function_tool_resolution import latest_function_tool_for_execution
 from .ha_permissions import bind_active_ha_context
 from .helpers import get_exposed_entities
-from .persistence_hardening import _async_repair_private_store_mode
+from .persistence_hardening import (
+    _async_repair_private_store_mode,
+    _async_settle_transactional_save,
+)
 from .strict_store import PropagatingWriteStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -215,13 +218,20 @@ class DelayedToolManager:
             user_id=getattr(context, "user_id", None),
             device_id=getattr(llm_context, "device_id", None),
         )
-        async with self._lock:
-            updated = dict(self._records)
-            updated[record.call_id] = record
-            await self._store.async_save(self._storage_payload(updated))
-            self._records = updated
-        if self._started:
-            self._arm(record.call_id)
+        try:
+            async with self._lock:
+                updated = dict(self._records)
+                updated[record.call_id] = record
+                await _async_settle_transactional_save(
+                    self._store.async_save(self._storage_payload(updated)),
+                    lambda: None,
+                    lambda: setattr(self, "_records", updated),
+                )
+        finally:
+            # A completed write remains scheduled even if cancellation hides the
+            # acknowledgement from the caller.
+            if self._started and record.call_id in self._records:
+                self._arm(record.call_id)
         return record
 
     @callback

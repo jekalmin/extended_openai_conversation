@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockUser
@@ -212,20 +213,21 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
     )
     wire.install(monkeypatch, agent)
 
-    failed = await _say(hass, agent, "Turn off the test light")
-    assert failed.response.error_code is not None
-    assert len(calls) == 1
-    assert failed.conversation_id
+    conversation_id = uuid4().hex
 
     async def continue_turn(text: str) -> conversation.ConversationResult:
         return await conversation.async_converse(
             hass=hass,
             text=text,
-            conversation_id=failed.conversation_id,
+            conversation_id=conversation_id,
             context=Context(),
             language="en",
             agent_id=agent.entry.entry_id,
         )
+
+    failed = await continue_turn("Turn off the test light")
+    assert failed.response.error_code is not None
+    assert len(calls) == 1
 
     replay = await continue_turn("Retry the interrupted request")
     assert replay.response.error_code is not None

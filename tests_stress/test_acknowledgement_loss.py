@@ -51,7 +51,9 @@ async def test_atomic_commit_survives_lost_acknowledgement(
             "ack-user", "Committed despite lost reply", "ack", "explicit"
         )
     elif owner == "request_rules":
-        store = RequestRuleStore(hass, RULES_VERSION, "extended_openai_conversation.ack_rules")
+        store = RequestRuleStore(
+            hass, RULES_VERSION, "extended_openai_conversation.ack_rules"
+        )
         manager = RequestRules(store)
         await manager.async_initialize()
         before_revision = manager.revision()
@@ -114,15 +116,22 @@ async def test_atomic_commit_survives_lost_acknowledgement(
         assert retry["memory"]["memory_id"] == disk[0].memory_id
     elif owner == "request_rules":
         reloaded = RequestRules(
-            RequestRuleStore(hass, RULES_VERSION, "extended_openai_conversation.ack_rules")
+            RequestRuleStore(
+                hass, RULES_VERSION, "extended_openai_conversation.ack_rules"
+            )
         )
         await reloaded.async_initialize()
-        assert manager.snapshot()["groups"] == reloaded.snapshot()["groups"] == [
-            {"id": "ack-group", "name": "Acknowledgement group"}
-        ]
-        assert manager.revision() == reloaded.revision() != before_revision
+        assert (
+            manager.snapshot()["groups"]
+            == reloaded.snapshot()["groups"]
+            == [{"id": "ack-group", "name": "Acknowledgement group"}]
+        )
+        assert manager.revision() != before_revision
+        assert reloaded.revision() != before_revision
         with pytest.raises(ValueError, match="changed in another tab"):
             await manager.async_set_groups([], expected_revision=before_revision)
+        with pytest.raises(ValueError, match="changed in another tab"):
+            await reloaded.async_set_groups([], expected_revision=before_revision)
     elif owner == "knowledge":
         reloaded = KnowledgeLibrary(
             HomeAssistantKnowledgeStorage(hass, entry_id, subentry_id)
@@ -132,7 +141,9 @@ async def test_atomic_commit_survives_lost_acknowledgement(
         disk = await reloaded.async_list()
         assert len(runtime) == len(disk) == 1
         assert runtime[0]["source_id"] == disk[0]["source_id"]
-        assert (await reloaded.async_get(disk[0]["source_id"])).content == "Persisted content"
+        assert (
+            await reloaded.async_get(disk[0]["source_id"])
+        ).content == "Persisted content"
     else:
         reloaded = DelayedToolManager(hass)
         await reloaded.async_setup()
