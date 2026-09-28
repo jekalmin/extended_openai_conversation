@@ -30,11 +30,22 @@ from tests_real_ha.test_provider_wire_e2e import (
 from tests_stress.conftest import record
 
 
-@pytest.mark.parametrize("recreate", [False, True])
-async def test_edited_tool_is_not_rebound_after_provider_reply(
-    hass: HomeAssistant, monkeypatch, stress_trace: list[dict], recreate: bool
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "edit",
+        "delete_recreate_changed",
+        "delete_recreate_same",
+        "tool_aba",
+        "group_rebind",
+        "group_aba",
+        "tool_group_aba",
+    ],
+)
+async def test_stale_function_identity_is_not_rebound_after_provider_reply(
+    hass: HomeAssistant, monkeypatch, stress_trace: list[dict], mutation: str
 ) -> None:
-    """Provider arguments advertised against A never dispatch edited B."""
+    """Provider arguments advertised against A never dispatch another generation."""
     name = "stale_provider_tool"
     original = {
         "spec": {
@@ -50,12 +61,27 @@ async def test_edited_tool_is_not_rebound_after_provider_reply(
         "spec": {**original["spec"], "description": "Edited"},
         "function": {"type": "template", "value_template": "MUST_NOT_EXECUTE"},
     }
+    group_a = {
+        "id": "stale-provider-group-a",
+        "name": "Original group",
+        "description": "Original binding",
+        "loading_mode": "always",
+        "functions": [name],
+        "enabled": True,
+    }
+    group_b = {
+        **group_a,
+        "id": "stale-provider-group-b",
+        "name": "Replacement group",
+    }
+    grouped = mutation.startswith("group") or mutation == "tool_group_aba"
     entry = _make_entry(
         "Stale provider tool",
         include_ai_task=False,
         conversation_options={
             CONF_API_MODE: API_MODE_CHAT_COMPLETIONS,
             CONF_FUNCTION_TOOLS: [original],
+            CONF_FUNCTION_GROUPS: [group_a] if grouped else [],
         },
     )
     await _setup_entry(hass, entry)
@@ -91,14 +117,40 @@ async def test_edited_tool_is_not_rebound_after_provider_reply(
     )
     await asyncio.wait_for(entered.wait(), timeout=10)
     subentry = next(iter(entry.subentries.values()))
-    if recreate:
+    original_data = subentry.data
+
+    def replace(tools: list[dict], groups: list[dict]) -> None:
+        current = next(iter(entry.subentries.values()))
         hass.config_entries.async_update_subentry(
-            entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: []}
+            entry,
+            current,
+            data={
+                **current.data,
+                CONF_FUNCTION_TOOLS: tools,
+                CONF_FUNCTION_GROUPS: groups,
+            },
         )
-        subentry = next(iter(entry.subentries.values()))
-    hass.config_entries.async_update_subentry(
-        entry, subentry, data={**subentry.data, CONF_FUNCTION_TOOLS: [edited]}
-    )
+
+    if mutation.startswith("delete_recreate"):
+        replace([], [])
+        replace([original if mutation.endswith("same") else edited], [])
+    elif mutation == "tool_aba":
+        replace([edited], [])
+        replace([original], [])
+    elif mutation == "group_rebind":
+        replace([original], [group_b])
+    elif mutation == "group_aba":
+        replace([original], [group_b])
+        replace([original], [group_a])
+    elif mutation == "tool_group_aba":
+        replace([edited], [group_b])
+        replace([original], [group_a])
+    else:
+        replace([edited], [])
+    latest_data = next(iter(entry.subentries.values())).data
+    assert latest_data is not original_data
+    if mutation in {"delete_recreate_same", "tool_aba", "group_aba", "tool_group_aba"}:
+        assert latest_data == original_data
     release.set()
     result = await asyncio.wait_for(turn, timeout=10)
     assert result.response.error_code is not None
@@ -106,7 +158,13 @@ async def test_edited_tool_is_not_rebound_after_provider_reply(
     await hass.async_block_till_done()
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    record(stress_trace, "summary", layer="real SDK wire", stale_tool_rejections=1)
+    record(
+        stress_trace,
+        "summary",
+        layer="real SDK wire",
+        mutation=mutation,
+        stale_tool_rejections=1,
+    )
 
 
 async def test_group_load_tool_execution_result_and_session_isolation(
