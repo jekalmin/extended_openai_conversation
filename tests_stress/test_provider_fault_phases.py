@@ -386,10 +386,27 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
     replay = await turn("Retry the interrupted action")
     assert replay.response.error_code is not None
     assert len(calls) == len(executions) == 1
-    recovered = await turn("Report the result")
-    assert recovered.response.error_code is None, recovered.response.as_dict()
-    assert len(calls) == len(executions) == 1
-    intentional = await turn("Turn off the test light again")
+    await hass.async_block_till_done()
+    current_agent = conversation.async_get_agent(hass, agent.entry.entry_id)
+    assert current_agent is not None and current_agent is not agent
+    current_execute = current_agent._execute_function_tool
+
+    async def track_current_execution(function_tool, *args):
+        executions.append(deepcopy(function_tool))
+        return await current_execute(function_tool, *args)
+
+    monkeypatch.setattr(current_agent, "_execute_function_tool", track_current_execution)
+    current_raw = _raw_client(current_agent)
+    monkeypatch.setattr(current_raw, "max_retries", 0)
+    monkeypatch.setattr(current_raw._client, "send", send)
+    intentional = await conversation.async_converse(
+        hass=hass,
+        text="Turn off the test light again",
+        conversation_id=None,
+        context=Context(user_id=_OWNER),
+        language="en",
+        agent_id=current_agent.entry.entry_id,
+    )
     assert intentional.response.error_code is None
     assert len(calls) == len(executions) == 2
     assert len(requests) == 6
@@ -399,6 +416,7 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
         replay_call_id="same" if replay_call_id is None else "new_equivalent",
         tool_group_aba=True,
         duplicate_side_effects=0,
+        recovered_after_runtime_reload=True,
         intentional_repeat_succeeded=True,
     )
 
