@@ -211,6 +211,8 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
             WireStep("transport", error="before_headers"),
             WireStep("sse", body=_tool(mode, replay_call_id)),
             WireStep("sse", body=_reply(mode, "Recovered after rejected replay.")),
+            WireStep("sse", body=_tool(mode, "call-provider-wire-new-request")),
+            WireStep("sse", body=_reply(mode, "Completed a new request.")),
         ]
     )
     wire.install(monkeypatch, agent)
@@ -240,13 +242,20 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
         "Recovered after rejected replay."
     )
     assert len(calls) == 1
-    assert len(wire.requests) == 4
+    new_request = await continue_turn("Turn off the test light again")
+    assert new_request.response.error_code is None
+    assert new_request.response.as_dict()["speech"]["plain"]["speech"] == (
+        "Completed a new request."
+    )
+    assert len(calls) == 2
+    assert len(wire.requests) == 6
     record(
         stress_trace,
         "post_tool_replay",
         mode=mode,
         call_id="same" if replay_call_id is None else "equivalent_new",
-        service_calls=len(calls),
+        service_calls_before_new_request=1,
+        service_calls_after_new_request=len(calls),
         recovered=True,
     )
 
