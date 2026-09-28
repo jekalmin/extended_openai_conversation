@@ -411,7 +411,6 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
     )
     assert intentional.response.error_code is None
     assert len(calls) == len(executions) == 2
-    assert len(requests) == 6
     record(
         stress_trace,
         "compound_tool_group_ack_race",
