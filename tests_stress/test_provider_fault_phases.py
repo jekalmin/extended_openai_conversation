@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockUser
 
 from custom_components.extended_openai_conversation_responses.const import (
     API_MODE_CHAT_COMPLETIONS,
     API_MODE_RESPONSES,
+    CONF_FUNCTION_GROUPS,
+    CONF_FUNCTION_TOOLS,
 )
 from homeassistant.components import conversation
 from homeassistant.core import Context, HomeAssistant
@@ -19,6 +23,7 @@ from tests_real_ha.test_provider_wire_e2e import (
     _chat_sse_text,
     _chat_sse_tool_call,
     _prepare_service,
+    _raw_client,
     _responses_sse_text,
     _responses_sse_tool_call,
     _tool_result_from_chat_request,
@@ -257,6 +262,163 @@ async def test_provider_replays_completed_call_id_after_lost_tool_result(
         service_calls_before_new_request=1,
         service_calls_after_new_request=len(calls),
         recovered=True,
+    )
+
+
+@pytest.mark.parametrize("replay_call_id", [None, "call-compound-new-id"])
+async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+    replay_call_id: str | None,
+) -> None:
+    """A→B→A after dispatch cannot make an unacknowledged call execute twice."""
+    MockUser(id=_OWNER, name="Compound race owner", is_owner=True).add_to_hass(hass)
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS, tools=True)
+    calls = await _prepare_service(hass)
+
+    original_data = deepcopy(dict(agent.subentry.data))
+    tool_a = deepcopy(original_data[CONF_FUNCTION_TOOLS][0])
+    group_a = {
+        "id": "compound-group-a",
+        "name": "Compound A",
+        "description": "Group generation A",
+        "loading_mode": "always",
+        "functions": [tool_a["spec"]["name"]],
+        "enabled": True,
+    }
+    state_a = {**original_data, CONF_FUNCTION_GROUPS: [group_a]}
+    tool_b = deepcopy(tool_a)
+    tool_b["spec"]["description"] = "Replacement Tool B"
+    group_b = {**group_a, "id": "compound-group-b", "name": "Compound B"}
+    executions: list[dict[str, Any]] = []
+    execute = agent._execute_function_tool
+
+    async def track_execution(function_tool, *args):
+        executions.append(deepcopy(function_tool))
+        return await execute(function_tool, *args)
+
+    monkeypatch.setattr(agent, "_execute_function_tool", track_execution)
+
+    conversation_id = uuid4().hex
+    requests: list[dict[str, Any]] = []
+
+    def replace_config(
+        tools: list[dict[str, Any]], groups: list[dict[str, Any]]
+    ) -> None:
+        current = agent.entry.subentries[agent.subentry.subentry_id]
+        hass.config_entries.async_update_subentry(
+            agent.entry,
+            current,
+            data={
+                **current.data,
+                CONF_FUNCTION_TOOLS: deepcopy(tools),
+                CONF_FUNCTION_GROUPS: deepcopy(groups),
+            },
+        )
+
+    async def send(request, *args, **kwargs):
+        del args, kwargs
+        body = json.loads(request.content.decode())
+        requests.append({"path": request.url.path, "body": body})
+        index = len(requests) - 1
+        if index in {0, 2, 4}:
+            call_id = (
+                replay_call_id
+                if index == 2 and replay_call_id is not None
+                else "call-compound-0"
+                if index == 2
+                else f"call-compound-{index}"
+            )
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=_chat_sse_tool_call(call_id=call_id),
+                request=request,
+            )
+        if index == 1:
+            tool_result = next(
+                item for item in body["messages"] if item.get("role") == "tool"
+            )
+            assert json.loads(tool_result["content"])["result"][0]["success"] is True
+            assert len(calls) == 1
+            # The local effect is complete; A→B→A happens while the result awaits
+            # provider acknowledgement.
+            replace_config([tool_a], [group_a])
+            first_a = agent.entry.subentries[agent.subentry.subentry_id].data
+            replace_config([tool_b], [group_b])
+            replace_config([tool_a], [group_a])
+            restored = agent.entry.subentries[agent.subentry.subentry_id].data
+            assert restored == state_a
+            assert restored is not first_a
+            raise httpx.ConnectError("provider lost tool result", request=request)
+        if index in {3, 5}:
+            text = (
+                "Recovered after replay rejection."
+                if index == 3
+                else "New call completed."
+            )
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=_chat_sse_text(text),
+                request=request,
+            )
+        raise AssertionError("Unexpected provider request")
+
+    raw = _raw_client(agent)
+    monkeypatch.setattr(raw, "max_retries", 0)
+    monkeypatch.setattr(raw._client, "send", send)
+
+    async def turn(text: str) -> conversation.ConversationResult:
+        return await conversation.async_converse(
+            hass=hass,
+            text=text,
+            conversation_id=conversation_id,
+            context=Context(user_id=_OWNER),
+            language="en",
+            agent_id=agent.entry.entry_id,
+        )
+
+    first = await turn("Turn off the test light")
+    assert first.response.error_code is not None
+    assert len(calls) == len(executions) == 1
+    replay = await turn("Retry the interrupted action")
+    assert replay.response.error_code is not None
+    assert len(calls) == len(executions) == 1
+    await hass.async_block_till_done()
+    current_agent = conversation.async_get_agent(hass, agent.entry.entry_id)
+    assert current_agent is not None and current_agent is not agent
+    current_execute = current_agent._execute_function_tool
+
+    async def track_current_execution(function_tool, *args):
+        executions.append(deepcopy(function_tool))
+        return await current_execute(function_tool, *args)
+
+    monkeypatch.setattr(
+        current_agent, "_execute_function_tool", track_current_execution
+    )
+    current_raw = _raw_client(current_agent)
+    monkeypatch.setattr(current_raw, "max_retries", 0)
+    monkeypatch.setattr(current_raw._client, "send", send)
+    intentional = await conversation.async_converse(
+        hass=hass,
+        text="Turn off the test light again",
+        conversation_id=None,
+        context=Context(user_id=_OWNER),
+        language="en",
+        agent_id=current_agent.entry.entry_id,
+    )
+    assert intentional.response.error_code is None
+    assert len(calls) == len(executions) == 2
+    record(
+        stress_trace,
+        "compound_tool_group_ack_race",
+        replay_call_id="same" if replay_call_id is None else "new_equivalent",
+        tool_group_aba=True,
+        duplicate_side_effects=0,
+        recovered_after_runtime_reload=True,
+        intentional_repeat_succeeded=True,
     )
 
 
