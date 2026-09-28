@@ -291,6 +291,7 @@ async def test_tool_group_aba_after_side_effect_keeps_lost_ack_replay_safe(
     hass.config_entries.async_update_subentry(
         agent.entry, agent.subentry, data=original_data
     )
+    await hass.async_block_till_done()
     agent = conversation.async_get_agent(hass, agent.entry.entry_id)
     assert agent is not None
     tool_b = deepcopy(tool_a)
