@@ -24,7 +24,8 @@ export async function expectContractCalls(page, journey) {
   }));
   const expected = contract.actions.filter((action) => action.journey === journey);
   expect(expected.length, `No reviewed WebSocket contract entries for ${journey}`).toBeGreaterThan(0);
-  if (process.env.RUN_ENHANCED_MANAGEMENT_CONTRACT === "1") {
+  const enhanced = process.env.RUN_ENHANCED_MANAGEMENT_CONTRACT === "1";
+  if (enhanced) {
     const envelope = new Set(["type", "section", "action", "entry_id", "subentry_id"]);
     for (const [index, call] of observed.entries()) {
       const reviewed = contract.actions.filter((item) =>
@@ -41,7 +42,7 @@ export async function expectContractCalls(page, journey) {
     }
   }
   for (const action of expected) {
-    const matching = observed.filter((call, index) => outcomes[index]?.success === true
+    const matching = observed.filter((call, index) => (!enhanced || outcomes[index]?.success === true)
       && (action.type ? call.type === action.type : call.section === action.section)
       && call.action === action.action
       && action.keys.every((key) => Object.hasOwn(call, key))

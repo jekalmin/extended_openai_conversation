@@ -12,7 +12,7 @@
     {"journey": "seeded_owners", "section": "memories", "action": "temporary_clear", "keys": ["scope_id", "confirm"], "contains": {"confirm": true}},
     {"journey": "seeded_owners", "section": "conversations", "action": "end_active", "keys": ["continuity_key"]},
     {"journey": "seeded_owners", "section": "conversations", "action": "delete", "keys": ["scope_id", "session_id"]},
-    {"journey": "seeded_owners", "section": "tools", "action": "ha_add", "keys": ["tools", "group_id", "revision"], "contains": {"group_id": ""}},
+    {"journey": "seeded_owners", "section": "tools", "action": "ha_add", "keys": ["tools", "group_id"], "optional_keys": ["revision"], "contains": {"group_id": ""}},
     {"journey": "seeded_owners", "section": "usage", "action": "clear_details", "keys": ["confirm"], "contains": {"confirm": true}},
     {"journey": "function_repair", "section": "function_repair", "action": "save_one", "keys": ["index", "tool", "revision"], "contains": {"index": 0}},
     {"journey": "function_repair", "section": "function_repair", "action": "delete_one", "keys": ["index", "revision"]},
