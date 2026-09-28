@@ -490,17 +490,20 @@ async def test_normalize_loaded_records_prunes_invalid_and_overflow_and_persists
 
 
 @pytest.mark.asyncio
-async def test_normalize_loaded_records_restores_original_on_save_failure() -> None:
-    invalid = _ownership_record("invalid", owner_scope_id="device:kitchen")
-    original = {"invalid": invalid}
+async def test_normalize_loaded_records_reconciles_after_save_failure() -> None:
+    legacy = _ownership_record("legacy", owner_scope_id=None)
     manager = TemporaryMemory(None)
-    manager._records = original
-    manager._async_save_locked = AsyncMock(side_effect=OSError("disk failed"))
+    manager._records = {"legacy": legacy}
+    manager._store = SimpleNamespace(
+        async_load=AsyncMock(return_value={"records": [asdict(legacy)]}),
+        async_save=AsyncMock(side_effect=OSError("disk failed")),
+    )
     with pytest.raises(OSError, match="disk failed"):
         async with manager._lock:
             await manager._async_normalize_loaded_records_locked()
 
-    assert manager._records is original
+    assert manager._records["legacy"].owner_scope_id == "user:one"
+    assert manager._initialized
 
 
 def test_records_for_owner_filters_expired_and_orders_deterministically() -> None:
@@ -560,4 +563,3 @@ async def test_backup_restore_enforces_global_record_ceiling_and_keeps_newest() 
     ids = {record.memory_id for record in restored}
     assert f"r{MAX_ACTIVE_RECORDS + 3}" in ids
     assert "r0" not in ids
-

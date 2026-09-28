@@ -9,6 +9,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 import yaml
 
+from custom_components.extended_openai_conversation_responses import request_rules
 from custom_components.extended_openai_conversation_responses.agent_config import (
     configured_function_tools_from_data,
 )
@@ -263,6 +264,9 @@ async def test_real_ha_unload_reload_cleans_and_recreates_runtime(
     template_manager_before = hass.data[DOMAIN][DATA_TEMPLATE_MANAGER]
 
     assert conversation.async_get_agent(hass, entry.entry_id) is not None
+    manager_before = conversation.async_get_agent(
+        hass, entry.entry_id
+    )._request_rules
     assert hass.states.get(guest_mode_entity_id) is not None
 
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -270,6 +274,9 @@ async def test_real_ha_unload_reload_cleans_and_recreates_runtime(
 
     assert entry.state is ConfigEntryState.NOT_LOADED
     assert conversation.async_get_agent(hass, entry.entry_id) is None
+    assert (entry.entry_id, conversation_id) not in hass.data.get(
+        request_rules._MANAGERS, {}
+    )
     unloaded_guest_mode = hass.states.get(guest_mode_entity_id)
     assert unloaded_guest_mode is not None
     # Registry-backed entities intentionally remain represented by HA as unavailable
@@ -282,6 +289,8 @@ async def test_real_ha_unload_reload_cleans_and_recreates_runtime(
 
     assert entry.state is ConfigEntryState.LOADED
     assert conversation.async_get_agent(hass, entry.entry_id) is not None
+    manager_after = conversation.async_get_agent(hass, entry.entry_id)._request_rules
+    assert manager_after is not manager_before
     reloaded_guest_mode = hass.states.get(guest_mode_entity_id)
     assert reloaded_guest_mode is not None
     assert reloaded_guest_mode.state != STATE_UNAVAILABLE

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -10,37 +11,36 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from homeassistant.components import conversation
-from homeassistant.core import Context
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import llm
-from homeassistant.util import dt as dt_util
-
 from custom_components.extended_openai_conversation_responses.const import DOMAIN
 from custom_components.extended_openai_conversation_responses.conversation import (
-    ExtendedOpenAIAgentEntity,
     _ACTIVE_GUEST_POLICY,
+    ExtendedOpenAIAgentEntity,
 )
 from custom_components.extended_openai_conversation_responses.delayed_tools import (
-    DelayedToolCall,
-    DelayedToolManager,
-    _DELAYED_EXECUTION_MARKER,
     _AGENT_RETRY_SECONDS,
+    _DELAYED_EXECUTION_MARKER,
     _EXECUTING,
     _MAX_AGENT_RETRIES,
     DATA_DELAYED_TOOL_MANAGER,
+    DelayedToolCall,
+    DelayedToolManager,
     _delay_as_timedelta,
     async_setup_delayed_tools,
 )
 from custom_components.extended_openai_conversation_responses.entity import (
     ExtendedOpenAIBaseLLMEntity,
 )
-from custom_components.extended_openai_conversation_responses.ha_tool_result_compat import (
-    tool_result_data,
-)
 from custom_components.extended_openai_conversation_responses.guest_mode import (
     GuestCapabilityPolicy,
 )
+from custom_components.extended_openai_conversation_responses.ha_tool_result_compat import (
+    tool_result_data,
+)
+from homeassistant.components import conversation
+from homeassistant.core import Context
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import llm
+from homeassistant.util import dt as dt_util
 
 
 def _entity(hass):
@@ -111,6 +111,71 @@ async def test_schedule_is_persisted_before_becoming_live(hass) -> None:
             context,
         )
     assert failing._records == {}
+
+
+async def test_schedule_reconciles_after_lost_store_acknowledgement(hass) -> None:
+    """A committed schedule remains operational after Store reports failure."""
+    persisted: dict[str, Any] = {}
+
+    async def save_then_fail(payload: dict[str, Any]) -> None:
+        persisted.clear()
+        persisted.update(payload)
+        raise OSError("directory fsync acknowledgement failed")
+
+    async def load() -> dict[str, Any]:
+        return persisted
+
+    manager = DelayedToolManager(hass)
+    manager._setup_complete = True
+    manager._store = SimpleNamespace(async_save=save_then_fail, async_load=load)
+    context = SimpleNamespace(
+        context=Context(user_id="user-1"), device_id="device-1"
+    )
+
+    with pytest.raises(OSError, match="directory fsync acknowledgement failed"):
+        await manager.async_schedule(
+            _entity(hass),
+            "control_light",
+            {"delay": {"seconds": 30}, "value": 1},
+            context,
+        )
+
+    assert len(manager._records) == 1
+    scheduled = next(iter(manager._records.values()))
+    assert persisted["calls"] == [scheduled.as_dict()]
+
+
+async def test_delayed_state_transitions_reconcile_after_lost_acknowledgement(
+    hass,
+) -> None:
+    """Execution tombstones and removals adopt the Store's replaced generation."""
+    pending = _record()
+    persisted: dict[str, Any] = {"calls": [pending.as_dict()]}
+
+    async def save_then_fail(payload: dict[str, Any]) -> None:
+        persisted.clear()
+        persisted.update(payload)
+        raise OSError("directory fsync acknowledgement failed")
+
+    async def load() -> dict[str, Any]:
+        return persisted
+
+    manager = DelayedToolManager(hass)
+    manager._records = {pending.call_id: pending}
+    manager._setup_complete = True
+    manager._store = SimpleNamespace(async_save=save_then_fail, async_load=load)
+
+    with pytest.raises(OSError, match="directory fsync acknowledgement failed"):
+        await manager._async_replace_record(replace(pending, status=_EXECUTING))
+    # Startup semantics discard an executing tombstone rather than replay it.
+    assert manager._records == {}
+    assert persisted["calls"][0]["status"] == _EXECUTING
+
+    persisted["calls"] = [pending.as_dict()]
+    manager._records = {pending.call_id: pending}
+    assert await manager._async_discard(pending.call_id, "test cancellation")
+    assert manager._records == {}
+    assert persisted["calls"] == []
 
 
 async def test_due_call_uses_current_tool_and_current_exposure(hass, monkeypatch) -> None:
@@ -303,7 +368,8 @@ async def test_execution_boundary_failure_never_runs_tool(hass, monkeypatch) -> 
 
     assert await manager._async_execute_due(record.call_id) is True
     agent._execute_function_tool.assert_not_awaited()
-    assert manager._records[record.call_id].status == "pending"
+    assert record.call_id not in manager._records
+    assert not manager._setup_complete
 
 
 async def test_interrupted_executing_calls_are_not_replayed(hass) -> None:
@@ -788,7 +854,8 @@ async def test_record_storage_helpers_preserve_durability_on_failures(hass) -> N
     manager._store.async_save.side_effect = OSError("storage unavailable")
 
     assert await manager._async_discard(record.call_id, "cancel") is False
-    assert manager._records[record.call_id] == record
+    assert record.call_id not in manager._records
+    assert not manager._setup_complete
 
     executing = DelayedToolCall.from_dict({**record.as_dict(), "status": _EXECUTING})
     manager._records = {record.call_id: executing}

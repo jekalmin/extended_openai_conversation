@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -85,7 +86,7 @@ def test_nested_function_references_cover_all_script_branches() -> None:
     assert recursive_function_references(manager, "other_tool") == []
 
 
-async def test_nested_function_rename_updates_every_reference_and_rolls_back_on_save_error(
+async def test_nested_function_rename_reconciles_after_lost_save_acknowledgement(
     monkeypatch,
 ) -> None:
     manager = RequestRules(SimpleNamespace(async_save=AsyncMock()))
@@ -94,7 +95,7 @@ async def test_nested_function_rename_updates_every_reference_and_rolls_back_on_
     manager._sort_and_compile()
     monkeypatch.setattr(
         "custom_components.extended_openai_conversation_responses.request_rules.validate_rule",
-        lambda value: value,
+        lambda value, **_kwargs: value,
     )
 
     assert (
@@ -123,19 +124,23 @@ async def test_nested_function_rename_updates_every_reference_and_rolls_back_on_
         {"id": "rule-1", "name": "Nested functions"}
     ]
 
-    manager._store.async_save = AsyncMock(side_effect=OSError("disk full"))
-    before = manager.revision()
-    with pytest.raises(OSError, match="disk full"):
+    async def save_then_lose_acknowledgement(candidate):
+        manager._store.async_load = AsyncMock(return_value=deepcopy(candidate))
+        raise OSError("directory fsync acknowledgement failed")
+
+    manager._store.async_save = AsyncMock(side_effect=save_then_lose_acknowledgement)
+    with pytest.raises(OSError, match="directory fsync acknowledgement failed"):
         await async_rename_function_reference_recursive(
             manager,
             "renamed_tool",
             "third_tool",
-            expected_revision=before,
+            expected_revision=manager.revision(),
         )
-    assert recursive_function_references(manager, "renamed_tool") == [
+    assert manager._initialized
+    assert recursive_function_references(manager, "renamed_tool") == []
+    assert recursive_function_references(manager, "third_tool") == [
         {"id": "rule-1", "name": "Nested functions"}
     ]
-    assert recursive_function_references(manager, "third_tool") == []
 
 
 async def test_static_request_rule_arguments_use_full_nested_function_schema(
@@ -683,4 +688,3 @@ async def test_function_management_mutations_reject_invalid_ids_before_resolutio
         await management_ui.async_management_command(hass, "admin", True, message)
 
     select.assert_not_called()
-

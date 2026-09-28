@@ -111,6 +111,7 @@ from .template import async_setup_templates, async_unload_templates
 _LOGGER = logging.getLogger(__name__)
 
 _REQUEST_RULE_RUNTIMES = "extended_openai_conversation_responses.request_rule_runtimes"
+_REQUEST_RULE_MANAGERS = "extended_openai_conversation_responses.request_rule_managers"
 
 PLATFORMS = [Platform.AI_TASK, Platform.CONVERSATION, Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -257,8 +258,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         from .management_function_repair import discard_persisted_config_projection
 
         runtimes = hass_data.get(_REQUEST_RULE_RUNTIMES, {})
+        managers = hass_data.get(_REQUEST_RULE_MANAGERS, {})
         for subentry in subentries.values():
-            runtimes.pop((entry.entry_id, subentry.subentry_id), None)
+            key = (entry.entry_id, subentry.subentry_id)
+            runtimes.pop(key, None)
+            # Durable managers belong to one loaded entry generation. Reload must
+            # hydrate them from HA Store instead of retaining cached rule state.
+            managers.pop(key, None)
             discard_persisted_config_projection(subentry)
     await async_unload_templates(hass, entry.entry_id)
     return True

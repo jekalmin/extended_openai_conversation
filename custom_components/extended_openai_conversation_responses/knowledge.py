@@ -593,14 +593,38 @@ class KnowledgeLibrary:
                     del self._token_index[token]
 
     async def _async_save_locked(self) -> None:
-        """Settle each Store write before propagating cancellation or rolling back."""
+        """Settle writes and rebuild the lexical index from persisted sources."""
         await _async_settle_transactional_save(
             self._storage.async_save(
                 {"sources": [asdict(source) for source in self._sources.values()]}
             ),
             self._restore_committed_state,
             self._remember_committed_state,
+            self._async_reconcile_failed_save,
+            self._invalidate_after_unreadable_store,
         )
+
+    async def _async_reconcile_failed_save(self) -> None:
+        """Reload validated sources and reconstruct every search index."""
+        disk_state = KnowledgeLibrary(self._storage)
+        await disk_state.async_initialize()
+        self._sources = dict(disk_state._sources)
+        self._chunks = dict(disk_state._chunks)
+        self._source_features = dict(disk_state._source_features)
+        self._token_index = defaultdict(
+            set, {token: set(keys) for token, keys in disk_state._token_index.items()}
+        )
+        self._initialized = True
+        self._remember_committed_state()
+
+    def _invalidate_after_unreadable_store(self) -> None:
+        """Block searches when persisted Knowledge cannot be validated."""
+        self._sources.clear()
+        self._chunks.clear()
+        self._source_features.clear()
+        self._token_index = defaultdict(set)
+        self._initialized = False
+        self._committed_state = None
 
     def _remember_committed_state(self) -> None:
         self._committed_state = {"sources": dict(self._sources)}

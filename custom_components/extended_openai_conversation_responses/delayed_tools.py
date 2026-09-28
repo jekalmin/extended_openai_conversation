@@ -222,17 +222,47 @@ class DelayedToolManager:
             async with self._lock:
                 updated = dict(self._records)
                 updated[record.call_id] = record
-                await _async_settle_transactional_save(
-                    self._store.async_save(self._storage_payload(updated)),
-                    lambda: None,
-                    lambda: setattr(self, "_records", updated),
-                )
+                await self._async_save_records_transactionally(updated)
         finally:
             # A completed write remains scheduled even if cancellation hides the
             # acknowledgement from the caller.
             if self._started and record.call_id in self._records:
                 self._arm(record.call_id)
         return record
+
+    async def _async_reconcile_failed_save(self) -> None:
+        """Reload validated calls after a failed write acknowledgement."""
+        raw_data = await self._store.async_load() or {}
+        raw_calls = raw_data.get("calls", []) if isinstance(raw_data, dict) else []
+        if not isinstance(raw_calls, list):
+            raise ValueError("persisted delayed Function Tools are malformed")
+        records: dict[str, DelayedToolCall] = {}
+        for raw in raw_calls:
+            record = DelayedToolCall.from_dict(raw)
+            # Startup recovery never replays a call interrupted in execution.
+            if record.status != _EXECUTING:
+                records[record.call_id] = record
+        self._records = records
+
+    def _invalidate_after_unreadable_store(self) -> None:
+        """Stop the scheduler rather than execute from unverified in-memory data."""
+        self._records.clear()
+        self._setup_complete = False
+        for task in self._tasks.values():
+            task.cancel()
+        self._tasks.clear()
+
+    async def _async_save_records_transactionally(
+        self, records: dict[str, DelayedToolCall]
+    ) -> None:
+        """Save a complete generation and reconcile any failed acknowledgement."""
+        await _async_settle_transactional_save(
+            self._store.async_save(self._storage_payload(records)),
+            lambda: None,
+            lambda: setattr(self, "_records", records),
+            self._async_reconcile_failed_save,
+            self._invalidate_after_unreadable_store,
+        )
 
     @callback
     def _handle_started(self, _event: Any = None) -> None:
@@ -428,12 +458,14 @@ class DelayedToolManager:
                 "Unable to persist retry state for delayed Function Tool `%s`",
                 record.tool_name,
             )
-        # Advance the live safety budget even if its durable update failed.
+        # Keep the in-process retry safety budget monotonic across a Store outage.
+        # The persisted record was reconciled above; this bounded retry counter is
+        # a runtime safety overlay and will be included in the next healthy write.
         current_record = self._records.get(record.call_id)
         if (
             current_record is not None
             and current_record.status == record.status
-            and current_record.retry_count == record.retry_count
+            and current_record.retry_count <= updated.retry_count
         ):
             self._records[record.call_id] = updated
         return True
@@ -462,8 +494,7 @@ class DelayedToolManager:
                 return
             updated = dict(self._records)
             updated[record.call_id] = record
-            await self._store.async_save(self._storage_payload(updated))
-            self._records = updated
+            await self._async_save_records_transactionally(updated)
 
     async def _async_discard(self, call_id: str, reason: str) -> bool:
         """Persist cancellation, returning whether the pending call was removed."""
@@ -474,14 +505,13 @@ class DelayedToolManager:
             async with self._lock:
                 updated = dict(self._records)
                 updated.pop(call_id, None)
-                await self._store.async_save(self._storage_payload(updated))
-                self._records = updated
+                await self._async_save_records_transactionally(updated)
         except Exception:
             _LOGGER.exception(
                 "Unable to persist cancellation for delayed Function Tool `%s`",
                 record.tool_name,
             )
-            return False
+            return self._setup_complete and call_id not in self._records
         _LOGGER.info(
             "Cancelled delayed Function Tool `%s`: %s", record.tool_name, reason
         )
@@ -496,8 +526,7 @@ class DelayedToolManager:
             async with self._lock:
                 updated = dict(self._records)
                 updated.pop(call_id, None)
-                await self._store.async_save(self._storage_payload(updated))
-                self._records = updated
+                await self._async_save_records_transactionally(updated)
         except Exception:
             # The persisted record is already marked executing. Drop the live copy;
             # startup recovery also discards executing records, so this cannot replay.

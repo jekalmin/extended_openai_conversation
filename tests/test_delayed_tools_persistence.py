@@ -41,7 +41,8 @@ async def test_failed_cancellation_keeps_due_call_retryable(hass, monkeypatch) -
     record = _record()
     manager._records = {record.call_id: record}
     manager._store = SimpleNamespace(
-        async_save=AsyncMock(side_effect=OSError("storage unavailable"))
+        async_save=AsyncMock(side_effect=OSError("storage unavailable")),
+        async_load=AsyncMock(return_value={"calls": [record.as_dict()]}),
     )
     hass.config_entries.async_get_entry = MagicMock(
         return_value=SimpleNamespace(

@@ -225,15 +225,11 @@ async def async_rename_function_reference_recursive(
         if not changed:
             return 0
 
-        original_rules = manager._rules
         manager._rules = updated_rules
         manager._sort_and_compile()
-        try:
-            await manager._async_save_locked()
-        except BaseException:
-            manager._rules = original_rules
-            manager._sort_and_compile()
-            raise
+        # RequestRules owns both pre-commit rollback and ambiguous-write
+        # reconciliation; a second rollback here could overwrite disk authority.
+        await manager._async_save_locked()
         return changed
 
 

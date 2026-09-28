@@ -118,7 +118,8 @@ async def test_owner_normalization_failure_retries_without_reloading_or_leaking(
     with pytest.raises(OSError, match="disk offline"):
         await manager.async_initialize()
     assert manager._initialized
-    assert manager.invalid_owners_pruned == 0
+    assert manager.invalid_owners_pruned == 1
+    assert manager._normalization_pending
     assert [
         r.memory_id for r in await manager.async_active_snapshot("other", "user:alice")
     ] == ["valid"]
@@ -127,7 +128,8 @@ async def test_owner_normalization_failure_retries_without_reloading_or_leaking(
     await manager.async_initialize()
     assert set(manager._records) == {"valid"}
     assert manager.invalid_owners_pruned == 1
-    assert store.loads == 1
+    assert not manager._normalization_pending
+    assert store.loads == 2
     await manager.async_initialize()
     assert manager.invalid_owners_pruned == 1
     assert store.saves == 2
@@ -156,6 +158,8 @@ async def test_failed_deferred_prune_restores_baseline_but_expiry_stays_invisibl
         manager._records["valid"],
         expires_at=(dt_util.utcnow() - timedelta(seconds=1)).isoformat(),
     )
+    # Model a record that was already expired in the committed Store snapshot.
+    store.data = {"records": [asdict(manager._records["valid"])]}
     manager._remember_committed_state()
     store.fail_save = True
     assert await manager.async_active("different-continuity", "user:alice") == []

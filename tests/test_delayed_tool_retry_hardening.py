@@ -34,7 +34,8 @@ async def test_retry_budget_advances_when_retry_state_persistence_fails(hass) ->
     record = _record()
     manager._records = {record.call_id: record}
     manager._store = SimpleNamespace(
-        async_save=AsyncMock(side_effect=OSError("storage unavailable"))
+        async_save=AsyncMock(side_effect=OSError("storage unavailable")),
+        async_load=AsyncMock(return_value={"calls": [record.as_dict()]}),
     )
     manager._async_discard = AsyncMock(return_value=True)
 
@@ -63,7 +64,10 @@ async def test_successful_retry_write_catches_up_after_previous_failure(hass) ->
     record = _record()
     manager._records = {record.call_id: record}
     save = AsyncMock(side_effect=[OSError("storage unavailable"), None])
-    manager._store = SimpleNamespace(async_save=save)
+    manager._store = SimpleNamespace(
+        async_save=save,
+        async_load=AsyncMock(return_value={"calls": [record.as_dict()]}),
+    )
 
     assert await manager._async_retry_agent(record) is True
     assert manager._records[record.call_id].retry_count == 1

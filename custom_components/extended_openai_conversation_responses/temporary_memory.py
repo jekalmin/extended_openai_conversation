@@ -71,6 +71,7 @@ class TemporaryMemory:
         self.expired_pruned = 0
         self.invalid_owners_pruned = 0
         self.overflow_pruned = 0
+        self._normalization_pending = False
         self._prune_save_task: asyncio.Task[None] | None = None
         self._committed_state: tuple[dict[str, TemporaryMemoryRecord], int] | None = (
             None
@@ -96,7 +97,7 @@ class TemporaryMemory:
                             continue
                     self._initialized = True
                     if self.expired_pruned:
-                        await self._async_save_locked()
+                        await self._async_save_locked(reconcile_failure=False)
             except Exception:
                 self._records.clear()
                 self.expired_pruned = 0
@@ -420,15 +421,62 @@ class TemporaryMemory:
         if self._prune_expired_locked():
             await self._async_save_locked()
 
-    async def _async_save_locked(self) -> None:
-        """Settle each Store write before propagating cancellation or rolling back."""
+    async def _async_save_locked(self, *, reconcile_failure: bool = True) -> None:
+        """Settle writes and reload validated records after ambiguous failures."""
         await _async_settle_transactional_save(
             self._store.async_save(
                 {"records": [asdict(record) for record in self._records.values()]}
             ),
             self._restore_committed_state,
             self._remember_committed_state,
+            self._async_reconcile_failed_save if reconcile_failure else None,
+            self._invalidate_after_unreadable_store,
         )
+
+    async def _async_reconcile_failed_save(self) -> None:
+        """Rebuild validated records without starting a second cleanup write."""
+        data = await self._store.async_load()
+        if data is not None and not isinstance(data, Mapping):
+            raise ValueError("Temporary Memory store has invalid structure")
+        raw_records = data.get("records", []) if isinstance(data, Mapping) else []
+        if not isinstance(raw_records, list):
+            raise ValueError("Temporary Memory records have invalid structure")
+        records: list[TemporaryMemoryRecord] = []
+        invalid_owners = 0
+        normalized_owners = 0
+        for raw in raw_records:
+            try:
+                record = _record_from_storage(raw)
+                _parse_expiry(record.expires_at)
+                normalized = _normalize_record_owner(record)
+            except TypeError, ValueError:
+                continue
+            if normalized is None:
+                invalid_owners += 1
+                continue
+            normalized_owners += normalized != record
+            records.append(normalized)
+        overflow = max(0, len(records) - MAX_ACTIVE_RECORDS)
+        if overflow:
+            records = sorted(records, key=_owner_record_sort_key, reverse=True)[
+                :MAX_ACTIVE_RECORDS
+            ]
+        self._records = {record.memory_id: record for record in records}
+        self.expired_pruned = 0
+        self.invalid_owners_pruned = invalid_owners
+        self.overflow_pruned = overflow
+        self._normalization_pending = bool(
+            invalid_owners or normalized_owners or overflow
+        )
+        self._initialized = True
+        self._remember_committed_state()
+
+    def _invalidate_after_unreadable_store(self) -> None:
+        """Block context reads if persisted temporary memory cannot be validated."""
+        self._records.clear()
+        self._initialized = False
+        self._committed_state = None
+        self._normalization_pending = False
 
     async def _async_normalize_loaded_records_locked(self) -> None:
         """Persist safe owner migration while retaining the pre-save retry state."""
@@ -449,18 +497,17 @@ class TemporaryMemory:
             ]
 
         replacement = {record.memory_id: record for record in normalized}
-        if replacement == original:
+        if replacement == original and not self._normalization_pending:
             return
 
+        already_counted = self._normalization_pending
         self._records = replacement
-        try:
-            await self._async_save_locked()
-        except BaseException:
-            self._records = original
-            raise
+        await self._async_save_locked()
+        self._normalization_pending = False
 
-        self.invalid_owners_pruned += invalid
-        self.overflow_pruned += overflow
+        if not already_counted:
+            self.invalid_owners_pruned += invalid
+            self.overflow_pruned += overflow
         if invalid:
             _LOGGER.warning(
                 "Removed %s Temporary Memory record(s) without a valid retained owner",

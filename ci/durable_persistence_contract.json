@@ -2,9 +2,9 @@
   {
     "owner": "persistent_memory",
     "classification": "transactional_durable",
-    "guarantee": "Facts and indexes roll back before a failed mutation returns; embedding vectors are separate regenerable data.",
+    "guarantee": "After a Store failure, facts and indexes reconcile from validated persisted data or become unavailable; embedding vectors are separate regenerable data.",
     "stores": [{"module": "memory.py", "constructor": "MemoryStore", "count": 1}],
-    "evidence": ["tests/test_memory_mutation_integrity.py::test_durable_save_failure_rolls_back_live_manager", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+    "evidence": ["tests/test_memory_mutation_integrity.py::test_durable_save_failure_rolls_back_live_manager", "tests/test_persistence_cancellation_hardening.py::test_failed_acknowledgement_reconciles_to_candidate_and_rebuilds_indexes", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
   },
   {
     "owner": "memory_embedding_cache",
@@ -16,23 +16,23 @@
   {
     "owner": "temporary_memory",
     "classification": "transactional_durable",
-    "guarantee": "Acknowledged temporary facts survive reload until expiry; failed writes restore the prior live generation.",
+    "guarantee": "Temporary facts and active selections reconcile from validated persisted data after write failures, or become unavailable until reload.",
     "stores": [{"module": "temporary_memory.py", "constructor": "TemporaryMemoryStore", "count": 1}],
-    "evidence": ["tests_stress/test_os_storage_faults.py::test_temporary_memory_failure_does_not_publish_or_reload_new_fact"]
+    "evidence": ["tests/test_persistence_cancellation_hardening.py::test_failed_acknowledgement_reconciles_to_candidate_and_rebuilds_indexes", "tests_stress/test_os_storage_faults.py::test_temporary_memory_failure_does_not_publish_or_reload_new_fact"]
   },
   {
     "owner": "knowledge",
     "classification": "transactional_durable",
-    "guarantee": "Library mutations publish only after the strict Store commits and roll back on writer failure.",
+    "guarantee": "Library mutations reconcile sources and search indexes from validated persisted data after writer failure, or become unavailable until reload.",
     "stores": [{"module": "knowledge.py", "constructor": "KnowledgeStore", "count": 1}],
-    "evidence": ["tests_stress/test_os_storage_faults.py::test_knowledge_fsync_enospc_rolls_back_and_recovers"]
+    "evidence": ["tests/test_persistence_cancellation_hardening.py::test_failed_acknowledgement_reconciles_to_candidate_and_rebuilds_indexes", "tests_stress/test_os_storage_faults.py::test_knowledge_fsync_enospc_rolls_back_and_recovers"]
   },
   {
     "owner": "request_rules",
     "classification": "transactional_durable",
-    "guarantee": "Rule revisions and compiled generations advance only after durable commit.",
+    "guarantee": "Rule revisions and compiled matchers reconcile from validated persisted data after writer failure; an unvalidated Store never leaves stale rules active.",
     "stores": [{"module": "request_rules.py", "constructor": "RequestRuleStore", "count": 1}],
-    "evidence": ["tests_stress/test_os_storage_faults.py::test_request_rules_atomic_replace_erofs_rolls_back_and_recovers"]
+    "evidence": ["tests/test_persistence_cancellation_hardening.py::test_failed_acknowledgement_reconciles_to_candidate_and_rebuilds_indexes", "tests/test_store_ambiguous_acknowledgement.py::test_ha_store_atomic_failure_reconciles_request_rules", "tests_stress/test_os_storage_faults.py::test_request_rules_atomic_replace_erofs_rolls_back_and_recovers"]
   },
   {
     "owner": "conversation_archive",
@@ -51,9 +51,9 @@
   {
     "owner": "delayed_function_tools",
     "classification": "transactional_durable",
-    "guarantee": "A scheduled call is acknowledged and armed only after its record commits; terminal tombstones prevent replay.",
+    "guarantee": "Scheduled calls reconcile from validated persisted records after write failure and are armed only when present there; terminal tombstones prevent replay.",
     "stores": [{"module": "delayed_tools.py", "constructor": "PropagatingWriteStore", "count": 1}],
-    "evidence": ["tests/test_delayed_tools.py::test_schedule_is_persisted_before_becoming_live", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
+    "evidence": ["tests/test_delayed_tools.py::test_schedule_is_persisted_before_becoming_live", "tests/test_delayed_tools.py::test_schedule_reconciles_after_lost_store_acknowledgement", "tests_stress/test_os_storage_faults.py::test_transactional_store_writer_failure_is_observable_and_retryable"]
   },
   {
     "owner": "model_catalogue",

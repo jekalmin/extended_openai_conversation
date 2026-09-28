@@ -33,6 +33,7 @@ class BlockingStorage:
         self.data: dict[str, Any] | None = None
         self.block_saves = False
         self.fail_saves = False
+        self.fail_after_write = False
         self.save_started = asyncio.Event()
         self.release_save = asyncio.Event()
 
@@ -47,6 +48,9 @@ class BlockingStorage:
         if self.fail_saves:
             raise RuntimeError("simulated Store failure")
         self.data = candidate
+        if self.fail_after_write:
+            self.fail_after_write = False
+            raise RuntimeError("simulated lost Store acknowledgement")
 
     def arm(self, *, fail: bool = False) -> None:
         """Pause subsequent saves until explicitly released."""
@@ -218,6 +222,31 @@ async def test_cancellation_waits_for_failed_commit_then_rolls_back(kind: str) -
     assert _committed_snapshot(kind, manager) == baseline
 
 
+@pytest.mark.parametrize("kind", _MANAGER_TYPES)
+async def test_cancelled_ambiguous_failure_reconciles_before_propagating_cancellation(
+    kind: str,
+) -> None:
+    """Pending cancellation keeps precedence after a post-write failure is settled."""
+    storage = BlockingStorage()
+    manager = await _create_manager(kind, storage)
+    baseline = _snapshot(kind, manager)
+    storage.arm()
+    storage.fail_after_write = True
+    mutation = asyncio.create_task(_mutate(kind, manager, "first"))
+    await asyncio.wait_for(storage.save_started.wait(), timeout=1)
+
+    mutation.cancel()
+    await asyncio.sleep(0)
+    assert not mutation.done()
+    storage.release_save.set()
+
+    with pytest.raises(asyncio.CancelledError) as cancelled:
+        await mutation
+    assert isinstance(cancelled.value.__cause__, RuntimeError)
+    assert _snapshot(kind, manager) != baseline
+    assert _committed_snapshot(kind, manager) == _snapshot(kind, manager)
+
+
 @pytest.mark.parametrize("kind", ["memory", "knowledge", "request_rules"])
 async def test_cancelled_store_restores_committed_state(kind):
     storage = BlockingStorage()
@@ -232,3 +261,64 @@ async def test_cancelled_store_restores_committed_state(kind):
     with pytest.raises(asyncio.CancelledError):
         await _mutate(kind, manager, "second")
     assert _snapshot(kind, manager) == committed
+
+
+@pytest.mark.parametrize("kind", _MANAGER_TYPES)
+async def test_failed_acknowledgement_reconciles_to_candidate_and_rebuilds_indexes(
+    kind: str,
+) -> None:
+    """A Store exception after candidate persistence must adopt that candidate."""
+    storage = BlockingStorage()
+    manager = await _create_manager(kind, storage)
+    storage.fail_after_write = True
+    with pytest.raises(RuntimeError, match="lost Store acknowledgement"):
+        await _mutate(kind, manager, "first")
+
+    if kind == "memory":
+        assert storage.data is not None
+        assert len(manager._memories) == len(storage.data["memories"]) == 1
+        memory = next(iter(manager._memories.values()))
+        assert set(manager._key_index.values()) <= set(manager._memories)
+        assert (await manager.async_search(memory.user_id, "Persistent memory first"))
+    elif kind == "knowledge":
+        assert storage.data is not None
+        assert len(manager._sources) == len(storage.data["sources"]) == 1
+        assert await manager.async_search("Knowledge body first")
+        assert all(
+            key[0] in manager._sources
+            for keys in manager._token_index.values()
+            for key in keys
+        )
+    elif kind == "temporary_memory":
+        assert storage.data is not None
+        assert len(manager._records) == len(storage.data["records"]) == 1
+        active = await manager.async_active("user-1", "user:test-owner")
+        assert [record.content for record in active] == ["Temporary memory first"]
+    else:
+        assert storage.data is not None
+        assert manager._defaults == storage.data["defaults"]
+        assert manager._matching_snapshot.phrases == ()
+
+
+@pytest.mark.parametrize("kind", _MANAGER_TYPES)
+async def test_unreadable_store_invalidates_manager_without_masking_write_error(
+    kind: str,
+) -> None:
+    """When disk cannot be read, managers fail closed and later reload safely."""
+    storage = BlockingStorage()
+    manager = await _create_manager(kind, storage)
+    storage.fail_after_write = True
+    original_load = storage.async_load
+
+    async def unreadable_load() -> dict[str, Any] | None:
+        raise OSError("simulated Store read failure")
+
+    storage.async_load = unreadable_load
+    with pytest.raises(RuntimeError, match="lost Store acknowledgement"):
+        await _mutate(kind, manager, "first")
+
+    assert not manager._initialized
+    storage.async_load = original_load
+    await manager.async_initialize()
+    assert manager._initialized
+    assert storage.data is not None

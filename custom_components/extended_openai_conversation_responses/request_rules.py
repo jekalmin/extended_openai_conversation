@@ -447,7 +447,7 @@ class RequestRules:
                         migrated = True
                 migrated = self._sort_and_compile() or migrated
                 if migrated:
-                    await self._async_save_locked()
+                    await self._async_save_locked(reconcile_failure=False)
                 self._remember_committed_state()
                 self._initialized = True
             except BaseException:
@@ -1149,8 +1149,8 @@ class RequestRules:
         self._diagnostics = diagnostics
         return order_changed
 
-    async def _async_save_locked(self) -> None:
-        """Settle each Store write before propagating cancellation or rolling back."""
+    async def _async_save_locked(self, *, reconcile_failure: bool = True) -> None:
+        """Settle each Store write before propagating failure or cancellation."""
         await _async_settle_transactional_save(
             self._store.async_save(
                 {
@@ -1163,7 +1163,58 @@ class RequestRules:
             ),
             self._restore_committed_state,
             self._remember_committed_state,
+            self._async_reconcile_failed_save if reconcile_failure else None,
+            self._invalidate_after_unreadable_store,
         )
+
+    async def _async_reconcile_failed_save(self) -> None:
+        """Adopt the validated Store state when a failed acknowledgement followed rename."""
+        disk_state = RequestRules(self._store)
+        await disk_state.async_initialize()
+        if not disk_state._initialized:
+            raise RuntimeError("persisted Request Rules could not be initialized")
+        disk_snapshot = {
+            "defaults": disk_state._defaults,
+            "wording_groups": disk_state._wording_groups,
+            "groups": disk_state._groups,
+            "rules": disk_state._rules,
+        }
+        matches_candidate = (
+            all(disk_snapshot[key] == getattr(self, f"_{key}") for key in disk_snapshot)
+            and disk_state._opaque_fields == self._opaque_fields
+        )
+        matches_committed = (
+            self._committed_state is not None
+            and disk_snapshot == self._committed_state
+            and disk_state._opaque_fields == self._committed_opaque_fields
+        )
+        self._defaults = deepcopy(disk_state._defaults)
+        self._opaque_fields = deepcopy(disk_state._opaque_fields)
+        self._wording_groups = deepcopy(disk_state._wording_groups)
+        self._groups = deepcopy(disk_state._groups)
+        self._rules = deepcopy(disk_state._rules)
+        self._sort_and_compile()
+        if matches_committed and not matches_candidate:
+            # The failed mutation did not reach disk. Keep its revision unchanged.
+            self._committed_state = deepcopy(disk_snapshot)
+            self._committed_opaque_fields = deepcopy(disk_state._opaque_fields)
+        else:
+            # The candidate, or another validated Store generation, is now the
+            # manager's committed baseline and receives a fresh revision.
+            self._remember_committed_state()
+
+    def _invalidate_after_unreadable_store(self) -> None:
+        """Fail closed when the authoritative Request Rules file cannot be read."""
+        self._initialized = False
+        self._committed_state = None
+        self._defaults = dict(DEFAULT_MATCHING)
+        self._opaque_fields = {}
+        self._committed_opaque_fields = {}
+        self._wording_groups = _copy_wording_groups(DEFAULT_WORDING_GROUPS)
+        self._groups = []
+        self._rules = []
+        self._condition_checkers.clear()
+        self._sort_and_compile()
 
     def _remember_committed_state(self) -> None:
         """Capture the exact last committed Request Rule configuration."""
@@ -2903,7 +2954,11 @@ _RUNTIMES = "extended_openai_conversation_responses.request_rule_runtimes"
 async def async_get_request_rules(
     hass: HomeAssistant, entry_id: str, subentry_id: str
 ) -> RequestRules:
-    """Return the shared initialized per-agent rule store."""
+    """Return the initialized per-agent manager for this config-entry load.
+
+    The manager is shared across platforms while its entry is loaded and evicted
+    when that entry unloads, so a later load always validates the persisted Store.
+    """
     managers = hass.data.setdefault(_MANAGERS, {})
     key = (entry_id, subentry_id)
     if key not in managers:

@@ -34,21 +34,22 @@ async def _async_settle_transactional_save(
     save: Awaitable[None],
     restore_committed_state: Callable[[], None],
     remember_committed_state: Callable[[], None],
+    reconcile_failed_state: Callable[[], Awaitable[None]] | None,
+    invalidate_state: Callable[[], None],
 ) -> None:
-    """Settle a durable write before propagating cancellation or rollback."""
+    """Settle a write and reconcile actual disk state before reporting failure."""
     save_task = asyncio.ensure_future(save)
     cancellation: asyncio.CancelledError | None = None
 
     # Once live manager state has changed, caller cancellation must not abandon an
     # in-flight Store write. Keep observing it to a known result, then preserve the
-    # original rollback and cancellation precedence.
+    # original persistence and cancellation precedence.
     while not save_task.done():
         try:
             await asyncio.shield(save_task)
         except asyncio.CancelledError as err:
             if save_task.cancelled():
-                restore_committed_state()
-                raise
+                break
             if cancellation is None:
                 cancellation = err
         except Exception:
@@ -58,11 +59,17 @@ async def _async_settle_transactional_save(
 
     try:
         save_task.result()
-    except asyncio.CancelledError:
-        restore_committed_state()
-        raise
-    except Exception as err:
-        restore_committed_state()
+    except BaseException as err:
+        if reconcile_failed_state is None:
+            # Initialization repairs do not yet have a usable validator for
+            # reloading. Preserve their established rollback/retry behavior.
+            restore_committed_state()
+        else:
+            try:
+                await reconcile_failed_state()
+            except BaseException:
+                # A failed read cannot establish which generation reached disk.
+                invalidate_state()
         if cancellation is not None:
             raise cancellation from err
         raise

@@ -1174,12 +1174,31 @@ class PersistentMemory:
         return True
 
     async def _async_save_locked(self) -> None:
-        """Settle each Store write before propagating cancellation or rolling back."""
+        """Settle writes and rebuild memory indexes from authoritative storage."""
         await _async_settle_transactional_save(
             self._async_persist_locked(),
             self._restore_committed_state,
             self._remember_committed_state,
+            self._async_reconcile_failed_save,
+            self._invalidate_after_unreadable_store,
         )
+
+    async def _async_reconcile_failed_save(self) -> None:
+        """Reload validated facts and rebuild indexes after an ambiguous write."""
+        disk_state = PersistentMemory(self._storage, self._embedding_cache_storage)
+        await disk_state.async_initialize()
+        self._restore_mutation_state(disk_state._snapshot_mutation_state())
+        self._initialized = True
+        self._committed_state = self._snapshot_mutation_state()
+
+    def _invalidate_after_unreadable_store(self) -> None:
+        """Block memory operations when persisted facts cannot be validated."""
+        self._memories.clear()
+        self._key_index.clear()
+        self._embedding_cache.clear()
+        self._embedding_cache_dirty = False
+        self._initialized = False
+        self._committed_state = None
 
     async def _async_persist_locked(self) -> None:
         """Write durable facts and then the regenerable embedding cache."""
