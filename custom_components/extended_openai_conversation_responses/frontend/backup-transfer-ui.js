@@ -413,6 +413,7 @@ export function bindBackupTransfer(panel, summaryFormatter = () => []) {
     }
     if (panel._backupTransferSession !== sessionId || panel._transferPreviewToken !== previewToken || root.querySelector(`#${APPLY_ID}`)?.disabled) return;
     const button = root.querySelector(`#${APPLY_ID}`);
+    let mustReselectFile = false;
     panel._setSaving(button, true);
     try {
       await callBackupTransfer(panel, "import_restore", {session_id: sessionId, sections, preview_token: serverPreviewToken});
@@ -426,10 +427,16 @@ export function bindBackupTransfer(panel, summaryFormatter = () => []) {
       panel._toast("Selected sections restored");
     } catch (err) {
       panel._backupTransferSession = null;
+      mustReselectFile = true;
       button.disabled = true;
       panel._toast(`Unable to restore: ${err.message || String(err)} Re-select the transfer file to retry.`, true);
     } finally {
-      panel._setSaving(button, false);
+      if (mustReselectFile) {
+        button.disabled = true;
+        button.textContent = button.dataset.label || "Restore selected sections";
+      } else {
+        panel._setSaving(button, false);
+      }
     }
   });
 }
