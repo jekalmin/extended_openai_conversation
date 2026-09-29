@@ -95,7 +95,7 @@ test("nightly Function Tool save failure preserves the editor and a corrected re
   await expect(panel.locator("#tool-dialog")).toHaveJSProperty("open", true);
   await expect(panel.locator("#tool-error")).toContainText("Function name already exists");
   await expect(panel.locator("#tool-save")).toBeEnabled();
-  await expect(editor).toContainText("baseline_tool");
+  await expect(editor).toHaveValue(/baseline_tool/);
 
   await editor.fill(validYaml("recovered_tool", "Recovered after duplicate"));
   await panel.locator("#tool-save").click();
@@ -154,30 +154,7 @@ test("nightly built-in preset loading and replacement failure paths remain recov
   await panel.evaluate((host) => {
     const original = host._call.bind(host);
     window.catalogAttempts = 0;
-    host._call = async (section, action, payload) => {
-      if (section === "tools" && action === "built_in_catalog") {
-        catalogAttempts += 1;
-        if (catalogAttempts === 1) throw new Error("Built-in catalogue unavailable");
-        return {
-          functions:[
-            {
-              implementation:"configured_preset",
-              label:"Configured preset",
-              yaml:validPresetYaml("configured_tool"),
-              already_configured:true,
-            },
-            {
-              implementation:"available_preset",
-              label:"Available preset",
-              yaml:validPresetYaml("preset_tool"),
-              already_configured:false,
-            },
-          ],
-        };
-      }
-      return original(section, action, payload);
-    };
-    window.validPresetYaml = (name) => `spec:
+    const presetYaml = (name) => `spec:
   name: ${name}
   description: Preset Function Tool
   parameters:
@@ -187,6 +164,29 @@ function:
   type: native
   name: get_user_from_user_id
 `;
+    host._call = async (section, action, payload) => {
+      if (section === "tools" && action === "built_in_catalog") {
+        window.catalogAttempts += 1;
+        if (window.catalogAttempts === 1) throw new Error("Built-in catalogue unavailable");
+        return {
+          functions:[
+            {
+              implementation:"configured_preset",
+              label:"Configured preset",
+              yaml:presetYaml("configured_tool"),
+              already_configured:true,
+            },
+            {
+              implementation:"available_preset",
+              label:"Available preset",
+              yaml:presetYaml("preset_tool"),
+              already_configured:false,
+            },
+          ],
+        };
+      }
+      return original(section, action, payload);
+    };
   });
 
   await panel.locator("#add-tool").click();
@@ -208,7 +208,7 @@ function:
 
   await panel.locator("#built-in-function").selectOption("available_preset");
   await panel.locator("#confirm-accept").click();
-  await expect(editor).toContainText("preset_tool");
+  await expect(editor).toHaveValue(/preset_tool/);
   await expect(panel.locator("#tool-error")).toHaveClass(/valid/);
   await panel.locator("#tool-save").click();
   await expect(panel.locator(".tool-card").filter({hasText:"preset_tool"})).toBeVisible();
