@@ -38,10 +38,10 @@ test("captured AI input stays valid only while every sentence pattern provides t
   await panel.locator("#rule-phrases").fill("deep think {question}\ncarefully answer {topic}");
   await expect(panel.locator("#rule-ai-input-capture")).toHaveValue("question");
   await expect(panel.locator("#rule-ai-input-capture")).toHaveAttribute("aria-invalid", "true");
-  await expect(panel.locator("#rule-ai-input-help")).toContainText("not available in every trigger");
+  await expect(panel.locator("#rule-ai-input-help")).toContainText("No captured values are available for every trigger");
   await panel.locator("#rule-save").click();
   await expect(panel.locator("#rule-dialog")).toHaveJSProperty("open", true);
-  await expect(panel.locator("#rule-error")).toContainText("not available in every trigger");
+  await expect(panel.locator("#rule-error")).toContainText("No captured values are available for every trigger");
 
   await panel.locator("#rule-ai-input-mode").selectOption("original");
   await expect(panel.locator("#rule-ai-capture-label")).toBeHidden();
