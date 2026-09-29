@@ -249,7 +249,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
       if(event.key==="Enter"){event.preventDefault();groupManager.querySelector("#rule-group-add")?.click();}
     });
     groupManager.addEventListener("click",async(event)=>{
-      const button=event.target.closest?.("button");if(!button||button.disabled)return;
+      const button=event.target.closest?.("button");if(!button||button.disabled||groupManager.dataset.eocMutationPending==="true")return;
       const groups=[...(panel._result?.groups||[])],id=button.dataset.id;
       if(button.id==="rule-group-add"){
         const name=groupManager.querySelector("#rule-new-group-name")?.value.trim();if(!name)return;
@@ -263,9 +263,9 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
         if(!await panel._confirm(`Delete “${group?.name || "this"}” group?`,`${count} rule${count===1?"":"s"} will become Ungrouped and keep their existing priority and order.`,"Delete"))return;
         const index=groups.findIndex((item)=>item.id===id);if(index<0)return;groups.splice(index,1);
       }else return;
-      button.disabled=true;
+      button.disabled=true;groupManager.dataset.eocMutationPending="true";
       try{
-        const result=await panel._call("request_rules","groups",{groups,revision:panel._result?.revision});
+        const result=await panel._call("request_rules","groups",{groups});
         panel._result={...(panel._result||{}),groups:result.groups,rules:result.rules,revision:result.revision};
         const cacheKey=panel._sectionCacheKey?.();if(cacheKey)panel._sectionCache?.delete(cacheKey);
         syncScopeRevision(panel,result);
@@ -275,7 +275,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
         if (!reconcileRequestRules(panel)) panel._render();
         panel._toast("Groups saved");
       }catch(err){await recoverRequestRuleMutation(panel,err,"Unable to save groups");}
-      finally{button.disabled=false;}
+      finally{delete groupManager.dataset.eocMutationPending;button.disabled=false;}
     });
   }
   if(list && !list.dataset.eocRuleCoreBound){
@@ -314,7 +314,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
     list.addEventListener("dragstart",event=>{const card=event.target.closest?.("[data-rule-key]");if(!card||!card.draggable){event.preventDefault();return;}dragging=card.dataset.ruleKey;event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",dragging);});
     list.addEventListener("dragover",event=>{if(dragging&&event.target.closest?.("[data-rule-key]"))event.preventDefault();});
     list.addEventListener("dragend",()=>{dragging=null;});
-    list.addEventListener("drop",async event=>{const card=event.target.closest?.("[data-rule-key]");const id=dragging;dragging=null;if(!id||!card||!card.draggable||card.dataset.ruleKey===id)return;event.preventDefault();const targetId=card.dataset.ruleKey,direction=event.clientY>card.getBoundingClientRect().top+card.getBoundingClientRect().height/2?"after":"before";try{const result=await panel._call("request_rules","move",{rule_id:id,direction,target_rule_id:targetId,revision:panel._result?.revision});applyRequestRuleMutation(panel,"move",result,{ruleId:id,direction,targetRuleId:targetId});}catch(err){await recoverRequestRuleMutation(panel,err,"Unable to move Request Rule");}});
+    list.addEventListener("drop",async event=>{const card=event.target.closest?.("[data-rule-key]");const id=dragging;dragging=null;if(!id||!card||!card.draggable||card.dataset.ruleKey===id)return;event.preventDefault();const targetId=card.dataset.ruleKey,direction=event.clientY>card.getBoundingClientRect().top+card.getBoundingClientRect().height/2?"after":"before";try{const result=await panel._call("request_rules","move",{rule_id:id,direction,target_rule_id:targetId});applyRequestRuleMutation(panel,"move",result,{ruleId:id,direction,targetRuleId:targetId});}catch(err){await recoverRequestRuleMutation(panel,err,"Unable to move Request Rule");}});
     list.addEventListener("click",async(event)=>{
       const button=event.target.closest?.("button");if(!button||button.disabled)return;
       if(button.id==="rule-empty-add"||button.matches(".rule-edit")){void openEditor?.(button.dataset.id||null);return;}
@@ -326,7 +326,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
         let restoreFocus = false;
         pendingRuleButtons.add(button);button.disabled=true;
         try{
-          const result=await panel._call("request_rules","move",{rule_id:id,direction:button.dataset.direction,revision:panel._result?.revision});
+          const result=await panel._call("request_rules","move",{rule_id:id,direction:button.dataset.direction});
           // Moving a keyed DOM node can drop focus. Do not steal it back if the
           // user intentionally focused another control while the save ran.
           restoreFocus = root.activeElement === trigger;
@@ -342,7 +342,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
       }
       if(button.matches(".rule-duplicate")){
         button.disabled=true;
-        try{const result=await panel._call("request_rules","duplicate",{rule_id:id,revision:panel._result?.revision});applyRequestRuleMutation(panel,"duplicate",result,{ruleId:id});panel._toast("Request Rule duplicated");}
+        try{const result=await panel._call("request_rules","duplicate",{rule_id:id});applyRequestRuleMutation(panel,"duplicate",result,{ruleId:id});panel._toast("Request Rule duplicated");}
         catch(err){await recoverRequestRuleMutation(panel,err,"Unable to duplicate Request Rule");} finally{button.disabled=false;} return;
       }
       if(button.matches(".rule-delete")){
@@ -350,7 +350,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
         panel._eocDecisionConfirmSubject=deleting?.name?`Request Rule “${deleting.name}”`:"Request Rule";
         if(!await panel._confirm("Delete Request Rule?","This cannot be undone.","Delete"))return;
         button.disabled=true;
-        try{const result=await panel._call("request_rules","delete",{rule_id:id,confirm:true,revision:panel._result?.revision});applyRequestRuleMutation(panel,"delete",result,{ruleId:id});panel._toast("Request Rule deleted");}
+        try{const result=await panel._call("request_rules","delete",{rule_id:id,confirm:true});applyRequestRuleMutation(panel,"delete",result,{ruleId:id});panel._toast("Request Rule deleted");}
         catch(err){await recoverRequestRuleMutation(panel,err,"Unable to delete Request Rule");} finally{button.disabled=false;}
       }
     });
@@ -358,7 +358,7 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
       const input=event.target;if(!input.matches?.(".rule-enabled")||input.disabled)return;
       const rule=(panel._result?.rules||[]).find(item=>item.id===input.dataset.id);if(!rule)return;
       const previous=!input.checked;input.disabled=true;
-      try{const result=await panel._call("request_rules","update",{rule_id:rule.id,revision:panel._result?.revision,rule:{...rule,enabled:input.checked,sensitive_matching_warning:undefined}});applyRequestRuleMutation(panel,"update",result,{ruleId:rule.id});panel._toast("Changes saved");}
+      try{const result=await panel._call("request_rules","update",{rule_id:rule.id,rule:{...rule,enabled:input.checked,sensitive_matching_warning:undefined}});applyRequestRuleMutation(panel,"update",result,{ruleId:rule.id});panel._toast("Changes saved");}
       catch(err){input.checked=previous;await recoverRequestRuleMutation(panel,err,"Unable to update Request Rule");}
       finally{input.disabled=false;}
     });

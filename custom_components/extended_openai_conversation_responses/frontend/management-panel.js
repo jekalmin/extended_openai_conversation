@@ -30,6 +30,7 @@ import {
 
 const WS_TYPE = "extended_openai_conversation_responses/management";
 const TOOL_MUTATIONS = new Set(["save", "set_enabled", "delete", "save_group", "delete_group", "ha_add"]);
+const REQUEST_RULE_MUTATIONS = new Set(["settings", "defaults", "wording_groups", "groups", "create", "update", "delete", "duplicate", "move"]);
 const REQUEST_RULE_CACHE_KEY = "capabilities/request-rules";
 
 const KNOWLEDGE_TITLE_LIMIT = 120;
@@ -663,7 +664,9 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     } : null;
     const previous = section === "tools"
       ? (this._eocFunctionMutationTail || Promise.resolve())
-      : Promise.resolve();
+      : section === "request_rules"
+        ? (this._eocRequestRuleMutationTail || Promise.resolve())
+        : Promise.resolve();
     const pending = previous.catch(() => {}).then(
       () => {
         if (mutationTrace) {
@@ -674,18 +677,30 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
         // Resolve implicit Function Tool revisions only after this serialized
         // operation reaches the head of the queue. Explicit caller revisions
         // remain concurrency guards and must never be rewritten.
-        const payload = section === "tools"
+        let payload = section === "tools"
           && TOOL_MUTATIONS.has(action)
           && extra.revision === undefined
           && typeof this._configData?.revision === "string"
           ? {revision: this._configData.revision, ...extra}
           : extra;
+        if (
+          section === "request_rules"
+          && REQUEST_RULE_MUTATIONS.has(action)
+          && extra.revision === undefined
+        ) {
+          const trackedRevision = this._eocRequestRuleRevision;
+          const revision = trackedRevision?.agentId === this._agentId
+            ? trackedRevision.value
+            : this._result?.revision;
+          if (revision !== undefined && revision !== null) payload = {revision, ...extra};
+        }
         return this._runAgentMutation(section, action, payload, mutationTrace);
       },
     );
     const tracked = pending.finally(() => {
       this._pendingMutations.delete(key);
       if (this._eocFunctionMutationTail === tracked) this._eocFunctionMutationTail = null;
+      if (this._eocRequestRuleMutationTail === tracked) this._eocRequestRuleMutationTail = null;
       if (mutationTrace) {
         mutationTrace.tailReleasedAt = performanceNow();
         mutationTrace.totalUntilTailReleaseMs = mutationTrace.tailReleasedAt - mutationTrace.queuedAt;
@@ -697,6 +712,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       }
     });
     if (section === "tools") this._eocFunctionMutationTail = tracked;
+    if (section === "request_rules") this._eocRequestRuleMutationTail = tracked;
     this._pendingMutations.set(key, tracked);
     return tracked;
   }
@@ -707,6 +723,14 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     try {
       const result = await this._callCore(section, action, extra, mutationTrace);
       this._applyToolRevision(section, action, result);
+      if (
+        section === "request_rules"
+        && REQUEST_RULE_MUTATIONS.has(action)
+        && result?.revision !== undefined
+        && result?.revision !== null
+      ) {
+        this._eocRequestRuleRevision = {agentId: this._agentId, value: result.revision};
+      }
       if (mutationTrace) mutationTrace.status = "fulfilled";
       return result;
     } catch (err) {
