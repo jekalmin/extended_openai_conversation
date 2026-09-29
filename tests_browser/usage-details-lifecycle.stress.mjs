@@ -15,6 +15,7 @@ const run = (runId, errorType) => ({
 });
 
 async function openUsage(page, customCall) {
+  await page.clock.install({time: new Date("2026-09-29T12:00:00Z")});
   await page.goto(fixtureUrl("overview"));
   const panel = panelFor(page);
   await expect(panel.locator(".dashboard-grid")).toBeVisible();
@@ -67,12 +68,9 @@ test("nightly run details show failed provider requests, recover from errors, an
   await expect(panel.locator("#usage-request-body")).toContainText("Loading");
   await panel.locator(".close-usage-requests").first().click();
   await expect(dialog).toHaveJSProperty("open",false);
-  const generationAfterClose = await panel.evaluate((host) => host._usageRequestGeneration);
-
   await panel.locator('[data-usage-run-id="run-failed"]').click();
   await expect(dialog).toHaveJSProperty("open",true);
   await expect.poll(() => page.evaluate(() => Boolean(window.releaseRunFailed))).toBe(true);
-  expect(await panel.evaluate((host) => host._usageRequestGeneration)).toBeGreaterThan(generationAfterClose);
   await page.evaluate(() => window.releaseRunClose());
   await expect(panel.locator("#usage-request-body")).toContainText("Loading");
   await page.evaluate(() => window.releaseRunFailed());

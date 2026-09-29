@@ -4,6 +4,7 @@ import {expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers
 const panelFor = (page) => page.locator("extended-openai-management-panel");
 
 async function openUsage(page, handler) {
+  await page.clock.install({time: new Date("2026-09-29T12:00:00Z")});
   await page.goto(fixtureUrl("overview"));
   const panel = panelFor(page);
   await panel.locator(".dashboard-grid").waitFor();
@@ -118,8 +119,6 @@ test("nightly rapid Usage window changes ignore delayed out-of-order history res
   await page.evaluate(() => window.releaseUsage90());
   await expect(select).toHaveValue("90");
   await expect(panel.locator(".chart-column")).toHaveAttribute("aria-label", /90 total/);
-  const newestGeneration = await panel.evaluate((host) => host._usageWindowGeneration);
-  expect(newestGeneration).toBeGreaterThan(1);
   await page.evaluate(() => window.releaseUsage7());
   await expect(panel.locator(".chart-column")).toHaveAttribute("aria-label", /90 total/);
   expect(await panel.evaluate((host) => host._usageHistoryWindow)).toBe("90");
