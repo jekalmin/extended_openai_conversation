@@ -81,9 +81,9 @@
     },
     "capabilities/quiet-hours": {
       "interactions": [
-        {"id":"schedule_controls","kind":"form","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["qh-enabled","qh-start","qh-end","qh-volume","qh-wake"],"coverage":{"unit":{"status":"covered","evidence":["tests/quiet-hours.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":9}}},
-        {"id":"satellite_overrides","kind":"dynamic_form","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["qh-override","data-qh-satellite"],"coverage":{"unit":{"status":"covered","evidence":["tests/quiet-hours.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":9}}},
-        {"id":"save_failure_stale_satellite_churn","kind":"concurrency","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["eoc-config-dirty-changed"],"coverage":{"unit":{"status":"covered","evidence":["tests/test_quiet_hours.py"]},"browser":{"status":"planned","roadmap_pr":9},"nightly":{"status":"planned","roadmap_pr":9}}}
+        {"id":"schedule_controls","kind":"form","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["qh-enabled","qh-start","qh-end","qh-volume","qh-wake"],"coverage":{"unit":{"status":"covered","evidence":["tests/quiet-hours.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/quiet-hours-lifecycle.stress.mjs"]}}},
+        {"id":"satellite_overrides","kind":"dynamic_form","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["qh-override","data-qh-satellite"],"coverage":{"unit":{"status":"covered","evidence":["tests/quiet-hours.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/quiet-hours-lifecycle.stress.mjs"]}}},
+        {"id":"save_failure_stale_satellite_churn","kind":"concurrency","risk":"high","backend_actions":["quiet_hours/update"],"source_markers":["eoc-config-dirty-changed"],"coverage":{"unit":{"status":"covered","evidence":["tests/test_quiet_hours.py"]},"browser":{"status":"planned","roadmap_pr":9},"nightly":{"status":"covered","evidence":["tests_browser/quiet-hours-lifecycle.stress.mjs"]}}}
       ]
     },
     "capabilities/guest-mode": {
