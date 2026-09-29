@@ -81,6 +81,30 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
 
   await panel.evaluate(async (host) => {
     await host._navigate("assistant", "model-responses");
+    const capabilities = {
+      supports_temperature: true,
+      supports_top_p: true,
+      supports_reasoning_effort: true,
+      supports_service_tier: true,
+      reasoning: {
+        supported: true,
+        efforts: ["low", "high"],
+        by_api: {
+          responses: {efforts: ["low", "high"]},
+          chat_completions: {efforts: ["low"]},
+        },
+      },
+      temperature: {support: "conditional", allowed_reasoning_efforts: ["low"]},
+      top_p: {support: "always"},
+      api: {responses: true, chat_completions: false},
+      evaluations: {
+        responses: {
+          low: {reasoning: true, function: true, web_search: true},
+          high: {reasoning: true, function: true, web_search: true},
+        },
+      },
+      recommended_profile: {reasoning_effort: "low"},
+    };
     Object.assign(host._draft, {
       chat_model: "dynamic-model",
       api_mode: "responses",
@@ -90,11 +114,15 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
       service_tier: "flex",
       shorten_tool_call_id: true,
     });
-    if (host._modelCatalogData?.model_capabilities) {
-      host._result.model_capabilities = host._modelCatalogData.model_capabilities;
-      host._result.options = host._configData.options;
-      host._render();
-    }
+    host._result.model_capabilities = capabilities;
+    host._result.options = host._configData.options;
+    host._modelCatalogData = {
+      requested_model: "dynamic-model",
+      model_capabilities: capabilities,
+      catalog_models: [{id:"dynamic-model", display_name:"Dynamic Model", status:"current"}],
+    };
+    host._eocMainMarkup = null;
+    host._render();
   });
   await expect(panel.locator("#reset-model-parameters")).toBeVisible();
   await expect(panel.locator("#config-temperature")).toBeVisible();
@@ -190,24 +218,9 @@ test("nightly exposed attribute preferences survive context disable and save", a
       }],
       saved_unexposed: [],
     };
+    host._exposedAttributeEntityId = "light.kitchen";
+    host._eocMainMarkup = null;
     host._render();
-  });
-
-  await panel.evaluate((host) => {
-    const root = host.shadowRoot;
-    const nativePicker = root.querySelector("#exposed-entity-picker");
-    const fallback = root.querySelector("#exposed-entity-picker-fallback");
-    if (nativePicker && !nativePicker.hidden) {
-      nativePicker.value = "light.kitchen";
-      nativePicker.dispatchEvent(new CustomEvent("value-changed", {
-        detail:{value:"light.kitchen"},
-        bubbles:true,
-        composed:true,
-      }));
-    } else {
-      fallback.value = "light.kitchen";
-      fallback.dispatchEvent(new Event("change", {bubbles:true}));
-    }
   });
   await expect(panel.locator('[data-exposed-attribute][data-attribute="brightness"]')).toBeVisible();
   await panel.locator('[data-exposed-attribute][data-attribute="brightness"]').check();
