@@ -3,7 +3,7 @@ import {expectHarnessClean, fixtureUrl, trackPageErrors} from "./browser-helpers
 
 test("nightly model capability transitions and dedicated reset stay coherent", async ({page}) => {
   const errors = trackPageErrors(page);
-  await page.goto(fixtureUrl("assistant/model-responses"));
+  await page.goto(fixtureUrl("assistant/basics"));
   const panel = page.locator("extended-openai-management-panel");
 
   await panel.evaluate((host) => {
@@ -77,11 +77,14 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
     host._render();
   });
 
+  await expect(panel.locator('#config-api_mode option[value="chat_completions"]')).toBeDisabled();
+
+  await panel.evaluate((host) => host._navigate("assistant", "model-responses"));
+  await expect(panel.locator("#reset-model-parameters")).toBeVisible();
   await expect(panel.locator("#config-temperature")).toBeVisible();
   await expect(panel.locator("#config-temperature")).toBeDisabled();
   await expect(panel.locator('[data-field="temperature"] .capability-note')).toContainText("inactive");
   await expect(panel.locator("#config-top_p")).toBeEnabled();
-  await expect(panel.locator('#config-api_mode option[value="chat_completions"]')).toBeDisabled();
 
   await panel.locator("#config-reasoning_effort").selectOption("low");
   await panel.evaluate((host) => host._render());
