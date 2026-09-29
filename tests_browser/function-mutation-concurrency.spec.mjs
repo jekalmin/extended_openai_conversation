@@ -281,7 +281,9 @@ test("nightly HA LLM catalogue handles scale, duplicate opening, filtering, add 
   expect(payloads[1].group_id).toBe("baseline-group");
   expect(payloads[1].tools.length).toBe(selectedCount);
   expect(payloads[1].revision).toBeTruthy();
-  await expect(panel.locator('[data-tool-key^="added_ha_"]').first()).toBeVisible();
+  const targetGroup = panel.locator('.function-group-card[data-group-id="baseline-group"]');
+  await targetGroup.locator("summary").click();
+  await expect(targetGroup.locator('[data-tool-key^="added_ha_"]').first()).toBeVisible();
   await expectHarnessClean(page, errors);
 });
 
