@@ -64,7 +64,7 @@ export function createDataCollectionBackend(size = 100) {
       return {memory: clone(item)};
     }
     if (action === "add") {
-      const memory = {memory_id: `memory-${nextId++}`, scope_id: message.target_scope_id || message.scope_id || "user:test-user", content: message.content, category: message.category, scope: message.scope === "household" ? "Shared household" : "Personal", importance: message.importance || "normal", source: "manual", revision: 1, updated_at: timestamp()};
+      const memory = {memory_id: `memory-${nextId++}`, scope_id: message.target_scope_id || message.scope_id || "user:test-user", content: message.content, category: message.category, scope: message.scope === "household" ? "Shared household" : "Personal", importance: message.importance || "normal", source: "manual", revision: 1, updated_at: timestamp(), ...Object.fromEntries(["subject", "key", "valid_from"].filter(key => message[key] !== undefined).map(key => [key, message[key]]))};
       state.memories.push(memory);
       return {status: "created", scope_id: memory.scope_id, memory: clone(memory)};
     }
