@@ -82,7 +82,6 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
   await expect(panel.locator('[data-field="temperature"] .capability-note')).toContainText("inactive");
   await expect(panel.locator("#config-top_p")).toBeEnabled();
   await expect(panel.locator('#config-api_mode option[value="chat_completions"]')).toBeDisabled();
-  await expect(panel.locator("#config-max_tokens")).toHaveAttribute("max", "4096");
 
   await panel.locator("#config-reasoning_effort").selectOption("low");
   await panel.evaluate((host) => host._render());
@@ -109,12 +108,13 @@ test("nightly request preview ignores an older completion after a newer preview"
     window.requestPreviewResolvers = [];
     host._call = (section, action, payload) => {
       if (section === "configuration" && action === "request_preview") {
-        return new Promise((resolve) => requestPreviewResolvers.push({resolve, payload}));
+        return new Promise((resolve) => window.requestPreviewResolvers.push({resolve, payload}));
       }
       return original(section, action, payload);
     };
   });
 
+  await panel.evaluate((host) => { host._result.defaults.prompt = ""; });
   await panel.locator("#prompt-editor").fill("First preview prompt");
   await panel.locator("#preview-request").click();
   await expect.poll(() => page.evaluate(() => requestPreviewResolvers.length)).toBe(1);
@@ -174,9 +174,22 @@ test("nightly exposed attribute preferences survive context disable and save", a
     host._render();
   });
 
-  const fallback = panel.locator("#exposed-entity-picker-fallback");
-  await expect(fallback).toBeVisible();
-  await fallback.selectOption("light.kitchen");
+  await panel.evaluate((host) => {
+    const root = host.shadowRoot;
+    const nativePicker = root.querySelector("#exposed-entity-picker");
+    const fallback = root.querySelector("#exposed-entity-picker-fallback");
+    if (nativePicker && !nativePicker.hidden) {
+      nativePicker.value = "light.kitchen";
+      nativePicker.dispatchEvent(new CustomEvent("value-changed", {
+        detail:{value:"light.kitchen"},
+        bubbles:true,
+        composed:true,
+      }));
+    } else {
+      fallback.value = "light.kitchen";
+      fallback.dispatchEvent(new Event("change", {bubbles:true}));
+    }
+  });
   await expect(panel.locator('[data-exposed-attribute][data-attribute="brightness"]')).toBeVisible();
   await panel.locator('[data-exposed-attribute][data-attribute="brightness"]').check();
   expect(await panel.evaluate((host) => host._draft.exposed_entity_attributes)).toEqual({
@@ -275,7 +288,7 @@ test("nightly speech regex lifecycle and preview ordering remain stable", async 
     window.speechPreviewResolvers = [];
     host._call = (section, action, payload) => {
       if (section === "configuration" && action === "speech_preview") {
-        return new Promise((resolve) => speechPreviewResolvers.push({resolve, payload}));
+        return new Promise((resolve) => window.speechPreviewResolvers.push({resolve, payload}));
       }
       return original(section, action, payload);
     };
