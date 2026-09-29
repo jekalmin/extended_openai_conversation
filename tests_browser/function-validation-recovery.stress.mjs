@@ -109,6 +109,7 @@ test("nightly saved-configuration validation reports mixed failures and recovers
   const errors = trackPageErrors(page);
   await page.goto(fixtureUrl("capabilities/functions"));
   const panel = page.locator("extended-openai-management-panel");
+  await expect(panel.locator(".tool-card").filter({hasText:"baseline_tool"})).toBeVisible();
   const baselineCount = await panel.locator(".tool-card").count();
 
   await panel.evaluate((host) => {
