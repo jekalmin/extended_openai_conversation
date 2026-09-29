@@ -14,46 +14,46 @@
     },
     "assistant/basics": {
       "interactions": [
-        {"id":"general_configuration","kind":"form","risk":"high","backend_actions":["configuration/save","configuration/validate"],"source_markers":["chat_model","max_tokens","max_function_calls_per_conversation","function_tool_error_recovery","continue_conversation"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":10}}},
+        {"id":"general_configuration","kind":"form","risk":"high","backend_actions":["configuration/save","configuration/validate"],"source_markers":["chat_model","max_tokens","max_function_calls_per_conversation","function_tool_error_recovery","continue_conversation"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}},
         {"id":"agent_title_save_revert","kind":"form","risk":"high","backend_actions":["configuration/save"],"source_markers":["__title"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-dirty-state-frontend.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/management-panel.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/stale-response-matrix.stress.mjs"]}}}
       ]
     },
     "assistant/model-responses": {
       "interactions": [
-        {"id":"model_parameters","kind":"form","risk":"high","backend_actions":["configuration/save","configuration/validate"],"source_markers":["temperature","top_p","reasoning_effort","service_tier","shorten_tool_call_id","reset-model-parameters"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-model-change.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs","tests_browser/configuration-edge-semantics.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}}
+        {"id":"model_parameters","kind":"form","risk":"high","backend_actions":["configuration/save","configuration/validate"],"source_markers":["temperature","top_p","reasoning_effort","service_tier","shorten_tool_call_id","reset-model-parameters"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-model-change.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs","tests_browser/configuration-edge-semantics.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "assistant/conversation": {
       "interactions": [
-        {"id":"continuity_and_timeout","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["conversation_continuity","conversation-timeout-preset","conversation_timeout_minutes"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":10}}},
-        {"id":"history_trimming","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["context_threshold","context_truncate_strategy"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"planned","roadmap_pr":10},"nightly":{"status":"planned","roadmap_pr":10}}}
+        {"id":"continuity_and_timeout","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["conversation_continuity","conversation-timeout-preset","conversation_timeout_minutes"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}},
+        {"id":"history_trimming","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["context_threshold","context_truncate_strategy"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"planned","roadmap_pr":10},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "assistant/prompt-context": {
       "interactions": [
-        {"id":"prompt_edit_reset_preview","kind":"form_action","risk":"high","backend_actions":["configuration/save"],"source_markers":["prompt-editor","preview-request","reset-prompt"],"coverage":{"unit":{"status":"covered","evidence":["tests_browser/configuration-edge-semantics.spec.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}},
-        {"id":"context_toggles_templates_attributes","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["current_datetime_enabled","exposed_entities_enabled","reset-context-template","exposed_entities_template"],"coverage":{"unit":{"status":"covered","evidence":["tests/exposed-attributes-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}}
+        {"id":"prompt_edit_reset_preview","kind":"form_action","risk":"high","backend_actions":["configuration/save"],"source_markers":["prompt-editor","preview-request","reset-prompt"],"coverage":{"unit":{"status":"covered","evidence":["tests_browser/configuration-edge-semantics.spec.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}},
+        {"id":"context_toggles_templates_attributes","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["current_datetime_enabled","exposed_entities_enabled","reset-context-template","exposed_entities_template"],"coverage":{"unit":{"status":"covered","evidence":["tests/exposed-attributes-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "assistant/voice": {
       "interactions": [
-        {"id":"voice_identity_policies","kind":"form","risk":"high","backend_actions":["configuration/save"],"source_markers":["voice_scope_policy","voice_unmapped_policy","voice_default_user_id","shared_memory_mode"],"coverage":{"unit":{"status":"covered","evidence":["frontend/test/voice-identity.test.ts"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs","tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}},
-        {"id":"voice_device_mappings","kind":"dynamic_form","risk":"high","backend_actions":["configuration/save"],"source_markers":["voice_device_mappings"],"coverage":{"unit":{"status":"covered","evidence":["frontend/test/voice-identity.test.ts"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}}
+        {"id":"voice_identity_policies","kind":"form","risk":"high","backend_actions":["configuration/save"],"source_markers":["voice_scope_policy","voice_unmapped_policy","voice_default_user_id","shared_memory_mode"],"coverage":{"unit":{"status":"covered","evidence":["frontend/test/voice-identity.test.ts"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs","tests_browser/frontend-decluttering.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}},
+        {"id":"voice_device_mappings","kind":"dynamic_form","risk":"high","backend_actions":["configuration/save"],"source_markers":["voice_device_mappings"],"coverage":{"unit":{"status":"covered","evidence":["frontend/test/voice-identity.test.ts"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "assistant/speech": {
       "interactions": [
-        {"id":"speech_processing","kind":"dynamic_form","risk":"high","backend_actions":["configuration/save"],"source_markers":["speech_processing_enabled","speech_strip_markdown","speech_strip_urls","add-regex","preview-speech"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"planned","roadmap_pr":11},"nightly":{"status":"planned","roadmap_pr":11}}}
+        {"id":"speech_processing","kind":"dynamic_form","risk":"high","backend_actions":["configuration/save"],"source_markers":["speech_processing_enabled","speech_strip_markdown","speech_strip_urls","add-regex","preview-speech"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"planned","roadmap_pr":11},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "capabilities/home-assistant": {
       "interactions": [
-        {"id":"home_assistant_capability_settings","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["local"],"coverage":{"unit":{"status":"covered","evidence":["tests/local-handling-frontend.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/feature-local-actions.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":19}}}
+        {"id":"home_assistant_capability_settings","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["local"],"coverage":{"unit":{"status":"covered","evidence":["tests/local-handling-frontend.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/feature-local-actions.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "capabilities/web-skills": {
       "interactions": [
-        {"id":"web_search_and_skills","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["web_search","web_search_context","skills"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs","tests_browser/configuration-edge-semantics.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":10}}}
+        {"id":"web_search_and_skills","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["web_search","web_search_context","skills"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-controls.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs","tests_browser/configuration-edge-semantics.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "capabilities/request-rules": {
@@ -93,7 +93,7 @@
     },
     "data-memory/memory-settings": {
       "interactions": [
-        {"id":"memory_configuration","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["memory_retrieval_mode","memory_embedding_model","memory_auto_retrieve_limit"],"coverage":{"unit":{"status":"covered","evidence":["tests/memory-management-parity-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":10}}}
+        {"id":"memory_configuration","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["memory_retrieval_mode","memory_embedding_model","memory_auto_retrieve_limit"],"coverage":{"unit":{"status":"covered","evidence":["tests/memory-management-parity-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/configuration-hot-path.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     },
     "data-memory/memories": {
@@ -143,7 +143,7 @@
     },
     "usage-maintenance/retention": {
       "interactions": [
-        {"id":"usage_retention","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["usage_request_retention_days","usage_run_retention_days"],"coverage":{"unit":{"status":"covered","evidence":["tests/retention-settings-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/route-settings-persistence.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":10}}}
+        {"id":"usage_retention","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["usage_request_retention_days","usage_run_retention_days"],"coverage":{"unit":{"status":"covered","evidence":["tests/retention-settings-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/route-settings-persistence.spec.mjs"]},"nightly":{"status":"covered","evidence":["tests_browser/assistant-config-control-matrix.stress.mjs"]}}}
       ]
     }
   }
