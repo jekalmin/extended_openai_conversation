@@ -371,6 +371,7 @@ async def test_native_time_conditions_agree_in_preview_and_request_execution(
     from custom_components.extended_openai_conversation_responses.request_rule_match_preview import (
         async_request_rule_match_preview,
     )
+
     freezer.move_to(datetime.fromisoformat(local_time))
     rule = local_rule("Time conditioned", phrases=["good night"])
     rule["conditions"] = [condition]
