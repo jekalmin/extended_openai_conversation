@@ -327,7 +327,7 @@ def test_only_when_validation_and_legacy_default() -> None:
 @pytest.mark.parametrize(
     ("condition", "local_time", "expected"),
     [
-        ({"condition": "time"}, "2026-09-28T12:00:00+00:00", True),
+        ({"condition": "time", "after": "00:00:00"}, "2026-09-28T12:00:00+00:00", True),
         (
             {"condition": "time", "after": "11:00:00", "before": "13:00:00"},
             "2026-09-28T12:00:00+00:00",
@@ -361,16 +361,13 @@ def test_only_when_validation_and_legacy_default() -> None:
     ],
 )
 async def test_native_time_conditions_agree_in_preview_and_request_execution(
-    hass, monkeypatch, condition, local_time, expected
+    hass, freezer, condition, local_time, expected
 ) -> None:
     """Saved Home Assistant time conditions execute consistently at runtime."""
     from custom_components.extended_openai_conversation_responses.request_rule_match_preview import (
         async_request_rule_match_preview,
     )
-    from homeassistant.util import dt as dt_util
-
-    fixed_now = datetime.fromisoformat(local_time)
-    monkeypatch.setattr(dt_util, "now", lambda *_args, **_kwargs: fixed_now)
+    freezer.move_to(datetime.fromisoformat(local_time))
     rule = local_rule("Time conditioned", phrases=["good night"])
     rule["conditions"] = [condition]
     saved_rule = validate_rule(rule)
