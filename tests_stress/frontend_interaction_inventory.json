@@ -31,7 +31,7 @@
     },
     "assistant/prompt-context": {
       "interactions": [
-        {"id":"prompt_edit_reset_preview","kind":"form_action","risk":"high","backend_actions":["configuration/save"],"source_markers":["prompt-editor","preview-request","reset-prompt"],"coverage":{"unit":{"status":"covered","evidence":["tests/configuration-edge-semantics.spec.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}},
+        {"id":"prompt_edit_reset_preview","kind":"form_action","risk":"high","backend_actions":["configuration/save"],"source_markers":["prompt-editor","preview-request","reset-prompt"],"coverage":{"unit":{"status":"covered","evidence":["tests_browser/configuration-edge-semantics.spec.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}},
         {"id":"context_toggles_templates_attributes","kind":"form","risk":"medium","backend_actions":["configuration/save"],"source_markers":["current_datetime_enabled","exposed_entities_enabled","reset-context-template","exposed_entities_template"],"coverage":{"unit":{"status":"covered","evidence":["tests/exposed-attributes-ui.test.mjs"]},"browser":{"status":"covered","evidence":["tests_browser/optional-configuration-features.spec.mjs"]},"nightly":{"status":"planned","roadmap_pr":11}}}
       ]
     },
