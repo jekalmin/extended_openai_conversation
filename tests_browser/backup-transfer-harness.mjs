@@ -105,6 +105,9 @@ export function createBackupTransferBackend(backend) {
     const action = message.action;
     const data = message.data || {};
 
+    if (action === "setup_export") {
+      return {json: JSON.stringify(backupDocument(backend)), filename: "browser-fixture-setup.json", content_type: "application/json"};
+    }
     if (action === "export_start") {
       const id = sessionId("export");
       const bytes = encoder.encode(JSON.stringify(backupDocument(backend)));
