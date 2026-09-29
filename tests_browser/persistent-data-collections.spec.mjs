@@ -17,6 +17,7 @@ for (const kind of ["knowledge", "persistent"]) {
       const panel = await openDataCollection(page, kind, 80, bundled);
       if (kind === "persistent") await panel.evaluate(host => {
         host._data.scopes.find(scope => scope.scope_id === host._scopeId).memory_count = 80;
+        host._selectedAgent().memory_count = 80;
       });
       const initialReads = await page.evaluate(() => ({
         lists: dataCollectionBackend.calls.filter(call => ["list", "search", "temporary_list"].includes(call.action)).length,
@@ -33,7 +34,15 @@ for (const kind of ["knowledge", "persistent"]) {
       await beginDataMeasure(page); await acceptConfirmation(panel);
       await expect(card(panel, kind, 20)).toHaveCount(0);
       if (kind === "knowledge") await expect(panel.locator("[data-source-count]")).toHaveText("79 sources");
-      expect(await finishDataMeasure(page)).toMatchObject({retainedCards: 79, mainChildReplacements: 0});
+      expect(await finishDataMeasure(page)).toMatchObject({
+        retainedCards: 79, mainChildReplacements: 0,
+        ...(kind === "persistent" ? {routeRenders: 0} : {}),
+      });
+      if (kind === "persistent") expect(await panel.evaluate(host => ({
+        selectedAgentCount: host._selectedAgent().memory_count,
+        scopeCount: host._data.scopes.find(scope => scope.scope_id === host._scopeId).memory_count,
+        localTotal: host._result.total,
+      }))).toEqual({selectedAgentCount: 79, scopeCount: 79, localTotal: 79});
       await panel.locator(kind === "knowledge" ? "#add-source" : "#add-memory").click();
       await panel.locator(field(kind)).fill("Brand new record");
       if (kind === "knowledge") await panel.locator("#knowledge-content").fill("Locally stored source content");

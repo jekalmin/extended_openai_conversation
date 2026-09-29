@@ -922,7 +922,7 @@ async function saveFunctionGroup(panel) {
   error.textContent="Saving...";
   panel._setSaving(button, true);
   try {
-    const result=await panel._call("tools","save_group",{revision:panel._groupRevision,group:{id,name,description,loading_mode,functions,guest_allowed},...(panel._groupOriginalId?{original_id:panel._groupOriginalId}:{})});
+    const result=await panel._call("tools","save_group",{group:{id,name,description,loading_mode,functions,guest_allowed},...(panel._groupOriginalId?{original_id:panel._groupOriginalId}:{})});
     synchronizePersistedFunctions(panel,result);
     root.querySelector("#group-dialog").close();
     panel._toast("Function group saved");
@@ -1017,7 +1017,7 @@ export function bindTools(panel) {
     try {
       const tool = await validateDialogTool(panel);
       if (!tool) return;
-      const result = await panel._call("tools", "save", {tool, revision: panel._toolRevision, ...(panel._toolOriginalName ? {original_name: panel._toolOriginalName} : {})});
+      const result = await panel._call("tools", "save", {tool, ...(panel._toolOriginalName ? {original_name: panel._toolOriginalName} : {})});
       synchronizePersistedFunctions(panel, result);
       root.querySelector("#tool-dialog").close();
       panel._toast("Changes saved");

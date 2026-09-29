@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 from custom_components.extended_openai_conversation_responses import speech
-
 from custom_components.extended_openai_conversation_responses.conversation import (
     ExtendedOpenAIAgentEntity,
 )
@@ -64,6 +63,16 @@ def test_custom_replacements_run_in_order_and_allow_empty_replacement() -> None:
         ]
     )
     assert process_speech_text("HA [12] is ready", config) == "the smart home is ready"
+
+
+def test_url_cleanup_precedes_custom_replacements() -> None:
+    config = _config(
+        speech_strip_urls=True,
+        speech_regex_replacements=[
+            {"pattern": r"https?://\S+", "replacement": "web link"}
+        ],
+    )
+    assert process_speech_text("Read https://example.com now", config) == "Read now"
 
 
 def test_runtime_invalid_regex_is_skipped_safely(caplog) -> None:

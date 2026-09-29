@@ -144,7 +144,7 @@ function panelFor(page = "assistant", subsection = "basics") {
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(calls.length, 2, "the mutation tail releases as soon as the first request settles");
-  assert.equal(calls[1].revision, "r1", "a request queued before the first response retains its submitted revision");
+  assert.equal(calls[1].revision, "r2", "a queued request uses the revision returned by the preceding mutation");
 
   releases.shift()({revision:"r3", functions:[], function_groups:[], _performance:{handler_ms:2}});
   await second;

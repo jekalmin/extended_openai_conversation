@@ -61,6 +61,19 @@ export function initializePageDraft(panel) {
         config: submitted, ...(current.revision ? {revision: current.revision} : {}),
       });
       panel._result = {...panel._result, ...saved, ...(view === GUEST ? {legacy_policy: false, migration_notice: null} : {})};
+      if (view === GUEST) {
+        const agentId = panel._agentId;
+        const details = await panel._call("guest_mode", "details");
+        if (panel._agentId === agentId && panel._viewKey?.() === GUEST && details?.policy) {
+          panel._result = {...panel._result, policy: details.policy};
+          const metrics = panel.shadowRoot?.querySelector(".metric-grid");
+          if (metrics) metrics.innerHTML = [
+            panel._metric("Guest-visible entities", details.policy.readable_entity_count ?? "—"),
+            panel._metric("Guest-controllable entities", details.policy.controllable_entity_count ?? "—"),
+            panel._metric("Guest functions", details.policy.configured_tool_count ?? "—"),
+          ].join("");
+        }
+      }
       current.result = panel._result;
       current.revision = saved.revision;
       if (view === GUEST) { panel._guestMigrationReview = false; panel._guestStartingFresh = false; }

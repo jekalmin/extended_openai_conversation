@@ -20,6 +20,8 @@ assert.equal(configurationChoiceLabel("conversation_continuity", {value: "ha_def
 assert.equal(configurationChoiceLabel("voice_scope_policy", {value: "shared", label: "Shared"}), "Use shared household data");
 assert.equal(configurationChoiceLabel("service_tier", {value: "flex", label: "Flex"}), "Flex");
 assert.equal(matchesFunctionSearch("Reminder", "Reminders Manage reminders"), true);
+assert.equal(matchesFunctionSearch("cafe", "Quick Reads / Café 📚"), true);
+assert.equal(matchesFunctionSearch("café", "Quick Reads / Cafe 📚"), true);
 assert.equal(matchesFunctionSearch("Reminder", "remind family native"), true);
 assert.equal(matchesFunctionSearch("manage calendar", "Calendar Manage calendars"), true);
 assert.equal(matchesFunctionSearch("weather", "Reminders Manage reminders"), false);

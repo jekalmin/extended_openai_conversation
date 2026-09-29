@@ -633,16 +633,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     ) {
       result = nonAdminOverviewKnowledgeSnapshot(this);
     } else {
-      let payload = extra;
-      if (
-        section === "tools"
-        && TOOL_MUTATIONS.has(action)
-        && extra.revision === undefined
-        && typeof this._configData?.revision === "string"
-      ) {
-        payload = {revision: this._configData.revision, ...extra};
-      }
-      result = await this._callWithMutationSafety(section, action, payload);
+      result = await this._callWithMutationSafety(section, action, extra);
       this._applyToolRevision(section, action, result);
     }
 
@@ -680,7 +671,16 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
           mutationTrace.queueWaitMs = mutationTrace.startedAt - mutationTrace.queuedAt;
           mutationTrace.status = "running";
         }
-        return this._runAgentMutation(section, action, extra, mutationTrace);
+        // Resolve implicit Function Tool revisions only after this serialized
+        // operation reaches the head of the queue. Explicit caller revisions
+        // remain concurrency guards and must never be rewritten.
+        const payload = section === "tools"
+          && TOOL_MUTATIONS.has(action)
+          && extra.revision === undefined
+          && typeof this._configData?.revision === "string"
+          ? {revision: this._configData.revision, ...extra}
+          : extra;
+        return this._runAgentMutation(section, action, payload, mutationTrace);
       },
     );
     const tracked = pending.finally(() => {
@@ -1692,16 +1692,16 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
   }
 
   _setupGuestSelectors() {
-    const config = this._guestDraft || {};
     const result = this._result || {};
     const select = (items, value, label) => ({select: {multiple: true, custom_value: false, options: items.map((item) => ({value: value(item), label: label(item)}))}});
     this.shadowRoot.querySelectorAll("ha-selector[data-guest-key]").forEach((element) => {
       const type = element.dataset.guestSelector;
       element.hass = this.hass;
-      element.value = config[element.dataset.guestKey] || [];
+      element.value = this._guestDraft?.[element.dataset.guestKey] || [];
       element.selector = type === "entity" ? {entity: {multiple: true}} : type === "area" ? {area: {multiple: true}} : type === "label" ? {label: {multiple: true}} : type === "domain" ? select(result.domains || [], (item) => item, (item) => item) : type === "knowledge" ? select(result.knowledge_sources || [], (item) => item.source_id, (item) => `${item.title} — ${item.description || "No description"}`) : type === "group" ? select(result.function_groups || [], (item) => item.id, (item) => `${item.name} — ${item.description}`) : select((result.functions || []).filter((item) => !item.unsafe_in_guest_mode), (item) => item.name, (item) => `${item.name}${item.enabled ? "" : " (disabled)"} — ${item.description || "No description"}`);
       element.addEventListener("value-changed", (event) => {
-        config[element.dataset.guestKey] = event.detail.value || [];
+        if (!this._guestDraft) return;
+        this._guestDraft[element.dataset.guestKey] = event.detail.value || [];
         queueMicrotask(() => refreshPageSaveBar(this));
       });
     });
@@ -2165,7 +2165,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       if (fromDialog) this.shadowRoot.querySelector("#memory-dialog").close();
       this._patchScopeCount(owner.scope, "memory_count", -1);
       this._selectedAgent().memory_count = Math.max(0, Number(this._selectedAgent().memory_count || 0) - 1);
-      this._render();
+      getRouteFeature("data-memory/memories")?.reconcileMemories(this);
       this._toast("Memory deleted");
       this.shadowRoot.querySelector("#add-memory")?.focus({preventScroll: true});
     } catch (err) { this._toast(`Unable to delete memory: ${err.message || String(err)}`, true); }
