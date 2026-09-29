@@ -57,12 +57,13 @@ export function initializePageDraft(panel) {
     destinations: () => [view],
     save: async (submitted, current) => {
       if (view === RULES) return saveRuleSettings(panel, submitted, current);
+      const agentId = panel._agentId;
       const saved = await panel._call(view === GUEST ? "guest_mode" : "quiet_hours", view === GUEST ? "save_policy" : "update", {
         config: submitted, ...(current.revision ? {revision: current.revision} : {}),
       });
-      panel._result = {...panel._result, ...saved, ...(view === GUEST ? {legacy_policy: false, migration_notice: null} : {})};
+      const savedResult = {...(current.result || result), ...saved, ...(view === GUEST ? {legacy_policy: false, migration_notice: null} : {})};
+      if (panel._agentId === agentId) panel._result = {...panel._result, ...saved, ...(view === GUEST ? {legacy_policy: false, migration_notice: null} : {})};
       if (view === GUEST) {
-        const agentId = panel._agentId;
         const details = await panel._call("guest_mode", "details");
         if (panel._agentId === agentId && panel._viewKey?.() === GUEST && details?.policy) {
           panel._result = {...panel._result, policy: details.policy};
@@ -74,7 +75,7 @@ export function initializePageDraft(panel) {
           ].join("");
         }
       }
-      current.result = panel._result;
+      current.result = savedResult;
       current.revision = saved.revision;
       if (view === GUEST) { panel._guestMigrationReview = false; panel._guestStartingFresh = false; }
       return saved.config;
