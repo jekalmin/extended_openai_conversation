@@ -427,15 +427,16 @@ export function bindUsageDiagnostics(panel) {
     const next = normalizeUsageWindow(event.target.value);
     if (next === previous) return;
     const agentId = panel._agentId;
+    const generation = panel._usageWindowGeneration = (panel._usageWindowGeneration || 0) + 1;
     event.target.disabled = true;
     try {
       const days = await loadUsageWindow(panel, next, resultToday(panel._result || {}, panel));
-      if (panel._agentId !== agentId || panel._viewKey?.() !== "usage-maintenance/usage") return;
+      if (generation !== panel._usageWindowGeneration || panel._agentId !== agentId || panel._viewKey?.() !== "usage-maintenance/usage") return;
       panel._usageHistoryWindow = next;
       panel._result = {...(panel._result || {}), days};
       panel._render();
     } catch (err) {
-      if (panel._agentId === agentId && panel._viewKey?.() === "usage-maintenance/usage") {
+      if (generation === panel._usageWindowGeneration && panel._agentId === agentId && panel._viewKey?.() === "usage-maintenance/usage") {
         event.target.disabled = false;
         event.target.value = previous;
         panel._toast?.(`Unable to load usage history: ${err?.message || String(err)}`, true);
@@ -443,23 +444,31 @@ export function bindUsageDiagnostics(panel) {
     }
   };
   root.querySelectorAll(".close-usage-requests").forEach((button) => {
-    button.onclick = () => root.querySelector("#usage-request-dialog")?.close();
+    button.onclick = () => {
+      panel._usageRequestGeneration = (panel._usageRequestGeneration || 0) + 1;
+      root.querySelector("#usage-request-dialog")?.close();
+    };
   });
   const dialog = root.querySelector("#usage-request-dialog");
-  if (dialog) dialog.oncancel = (event) => { event.preventDefault(); dialog.close(); };
+  if (dialog) dialog.oncancel = (event) => {
+    event.preventDefault();
+    panel._usageRequestGeneration = (panel._usageRequestGeneration || 0) + 1;
+    dialog.close();
+  };
   root.querySelectorAll(".usage-run-details").forEach((button) => {
     button.onclick = async () => {
       const dialog = root.querySelector("#usage-request-dialog");
       const body = root.querySelector("#usage-request-body");
       if (!dialog || !body) return;
+      const generation = panel._usageRequestGeneration = (panel._usageRequestGeneration || 0) + 1;
       body.innerHTML = panel._loading();
       dialog.showModal();
       try {
         const response = await panel._call("usage", "requests", {run_id: button.dataset.usageRunId, limit: 100});
-        if (!dialog.open) return;
+        if (!dialog.open || generation !== panel._usageRequestGeneration) return;
         body.innerHTML = renderRequestDetails(panel, response?.requests || []);
       } catch (err) {
-        if (dialog.open) body.innerHTML = `<div class="error" role="alert">${panel._e(err.message || String(err))}</div>`;
+        if (dialog.open && generation === panel._usageRequestGeneration) body.innerHTML = `<div class="error" role="alert">${panel._e(err.message || String(err))}</div>`;
       }
     };
   });
