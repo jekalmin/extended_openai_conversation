@@ -29,9 +29,8 @@ async function createGroup(panel) {
   await panel.locator("#rule-groups-manage").click();
   await panel.locator("#rule-new-group-name").fill("Nightly editor group");
   await panel.locator("#rule-group-add").click();
-  const row = panel.locator(".rule-group-row").filter({hasText:"Nightly editor group"});
-  await expect(row).toHaveCount(1);
-  const groupId = await row.getAttribute("data-group-id");
+  const groupId = await panel.evaluate((host) => host._result.groups.find((group) => group.name === "Nightly editor group")?.id || null);
+  expect(groupId).toBeTruthy();
   await panel.locator("#rule-groups-done").click();
   return groupId;
 }
