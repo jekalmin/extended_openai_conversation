@@ -81,6 +81,15 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
 
   await panel.evaluate(async (host) => {
     await host._navigate("assistant", "model-responses");
+    Object.assign(host._draft, {
+      chat_model: "dynamic-model",
+      api_mode: "responses",
+      temperature: 0.7,
+      top_p: 0.8,
+      reasoning_effort: "high",
+      service_tier: "flex",
+      shorten_tool_call_id: true,
+    });
     if (host._modelCatalogData?.model_capabilities) {
       host._result.model_capabilities = host._modelCatalogData.model_capabilities;
       host._result.options = host._configData.options;
