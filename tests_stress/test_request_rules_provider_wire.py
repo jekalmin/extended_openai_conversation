@@ -363,3 +363,210 @@ async def test_matcher_local_action_calls_ha_without_provider(
         ha_service_calls=1,
         provider_requests=0,
     )
+
+
+async def test_continue_matching_skips_false_condition_and_reaches_later_rule(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """UI-authored continuation semantics execute later eligible rules in order."""
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    calls: list[str] = []
+
+    async def record_call(call):
+        calls.append(call.data["message"])
+
+    hass.services.async_register("rule_probe", "record", record_call)
+    hass.states.async_set("input_boolean.chain_allowed", "off")
+
+    first = _local(
+        [_record_action("first")],
+        phrase="run chain",
+        success="First complete",
+    )
+    first["continue_matching"] = True
+
+    skipped = _local(
+        [_record_action("conditional")],
+        phrase="run chain",
+        success="Conditional complete",
+    )
+    skipped["continue_matching"] = True
+    skipped["conditions"] = [
+        {
+            "condition": "state",
+            "entity_id": "input_boolean.chain_allowed",
+            "state": "on",
+        }
+    ]
+
+    final = _local(
+        [_record_action("final")],
+        phrase="run chain",
+        success="Final complete",
+    )
+
+    for item in (first, skipped, final):
+        await agent._request_rules.async_create(item)
+
+    wire = _install_wire(monkeypatch, agent, [])
+    result = await _say(hass, agent, "run chain")
+    assert _speech(result) == "Final complete"
+    assert calls == ["first", "final"]
+    assert not wire.requests
+    record(
+        stress_trace,
+        "summary",
+        scenario="continue_matching_condition_skip",
+        executed=calls,
+        provider_requests=0,
+    )
+
+
+async def test_continue_matching_stops_on_provider_handoff(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A Continue-to-AI handoff is terminal even when Continue Matching is enabled."""
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    calls: list[str] = []
+
+    async def record_call(call):
+        calls.append(call.data["message"])
+
+    hass.services.async_register("rule_probe", "record", record_call)
+    first = _local(
+        [_record_action("first")],
+        phrase="handoff chain",
+        success="Unused",
+    )
+    first["continue_matching"] = True
+    first["action"]["continue_to_ai"] = True
+
+    later = _local(
+        [_record_action("later")],
+        phrase="handoff chain",
+        success="Later should not run",
+    )
+    await agent._request_rules.async_create(first)
+    await agent._request_rules.async_create(later)
+
+    wire = _install_wire(monkeypatch, agent, [_chat_sse_text("Provider response")])
+    result = await _say(hass, agent, "handoff chain")
+    assert _speech(result) == "Provider response"
+    assert calls == ["first"]
+    assert len(wire.requests) == 1
+    record(
+        stress_trace,
+        "summary",
+        scenario="continue_matching_provider_handoff",
+        executed=calls,
+        provider_requests=1,
+    )
+
+
+@pytest.mark.parametrize(
+    ("terminal_action", "expected_response", "scenario"),
+    [
+        (
+            [{"set_conversation_response": "Terminal response"}],
+            "Terminal response",
+            "conversation_response",
+        ),
+        (
+            [{"stop": "finished"}],
+            "First complete",
+            "stop",
+        ),
+    ],
+)
+async def test_continue_matching_stops_on_terminal_local_outcome(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+    terminal_action: list[dict],
+    expected_response: str,
+    scenario: str,
+) -> None:
+    """Conversation response and successful Stop prevent later rule execution."""
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    calls: list[str] = []
+
+    async def record_call(call):
+        calls.append(call.data["message"])
+
+    hass.services.async_register("rule_probe", "record", record_call)
+    first = _local(
+        terminal_action,
+        phrase="terminal chain",
+        success="First complete",
+    )
+    first["continue_matching"] = True
+    later = _local(
+        [_record_action("later")],
+        phrase="terminal chain",
+        success="Later should not run",
+    )
+    await agent._request_rules.async_create(first)
+    await agent._request_rules.async_create(later)
+
+    wire = _install_wire(monkeypatch, agent, [])
+    result = await _say(hass, agent, "terminal chain")
+    assert _speech(result) == expected_response
+    assert calls == []
+    assert not wire.requests
+    record(
+        stress_trace,
+        "summary",
+        scenario=f"continue_matching_{scenario}",
+        executed=calls,
+        provider_requests=0,
+    )
+
+
+async def test_continue_matching_stops_on_local_failure(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    stress_trace: list[dict],
+) -> None:
+    """A failed local action returns the failure response and stops matching."""
+    agent = await _agent(hass, API_MODE_CHAT_COMPLETIONS)
+    calls: list[str] = []
+
+    async def fail(_call):
+        raise HomeAssistantError("nightly failure")
+
+    async def record_call(call):
+        calls.append(call.data["message"])
+
+    hass.services.async_register("rule_probe", "fail", fail)
+    hass.services.async_register("rule_probe", "record", record_call)
+    first = _local(
+        [{"action": "rule_probe.fail"}],
+        phrase="failure chain",
+        success="Should not succeed",
+        failure="Failed safely",
+    )
+    first["continue_matching"] = True
+    later = _local(
+        [_record_action("later")],
+        phrase="failure chain",
+        success="Later should not run",
+    )
+    await agent._request_rules.async_create(first)
+    await agent._request_rules.async_create(later)
+
+    wire = _install_wire(monkeypatch, agent, [])
+    result = await _say(hass, agent, "failure chain")
+    assert _speech(result) == "Failed safely"
+    assert calls == []
+    assert not wire.requests
+    record(
+        stress_trace,
+        "summary",
+        scenario="continue_matching_failure",
+        executed=calls,
+        provider_requests=0,
+    )
