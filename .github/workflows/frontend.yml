@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: read
 
 concurrency:
@@ -80,6 +80,24 @@ jobs:
 
       - name: Check production bundle regression ceilings
         run: python ci/check_frontend_bundle.py
+
+      - name: Commit generated bundle to PR branch
+        if: github.event_name == 'pull_request'
+        run: |
+          if git diff --quiet -- custom_components/extended_openai_conversation_responses/frontend/dist/; then
+            exit 0
+          fi
+          rm -rf /tmp/extended-openai-dist
+          cp -a custom_components/extended_openai_conversation_responses/frontend/dist /tmp/extended-openai-dist
+          git fetch origin nightly/pr11-assistant-dynamic-coverage
+          git reset --hard origin/nightly/pr11-assistant-dynamic-coverage
+          rm -rf custom_components/extended_openai_conversation_responses/frontend/dist
+          cp -a /tmp/extended-openai-dist custom_components/extended_openai_conversation_responses/frontend/dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/extended_openai_conversation_responses/frontend/dist/
+          git commit -m "Rebuild frontend bundle"
+          git push origin HEAD:nightly/pr11-assistant-dynamic-coverage
 
       - name: Verify tracked production frontend bundle
         run: git diff --exit-code -- custom_components/extended_openai_conversation_responses/frontend/dist/
