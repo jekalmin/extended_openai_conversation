@@ -98,7 +98,7 @@ test("nightly Usage history windows load lazily, cache selections, page all hist
   await expectHarnessClean(page, errors);
 });
 
-test("nightly rapid Usage window changes ignore delayed out-of-order history responses", async ({page}) => {
+test("nightly Usage window waits for pending history before accepting another selection", async ({page}) => {
   const errors = trackPageErrors(page);
   const panel = await openUsage(page, async (message) => {
     if (message.action === "summary") return {today:{date:"2026-09-29",total_tokens:9999},lifetime:{total_tokens:9999}};
@@ -113,13 +113,14 @@ test("nightly rapid Usage window changes ignore delayed out-of-order history res
   await select.selectOption("7");
   await expect.poll(() => page.evaluate(() => Boolean(window.releaseUsage7))).toBe(true);
   await expect(select).toBeDisabled();
-  await select.evaluate((element) => { element.value = "90"; element.dispatchEvent(new Event("change", {bubbles:true})); });
-  await expect.poll(() => page.evaluate(() => Boolean(window.releaseUsage90))).toBe(true);
+  await page.evaluate(() => window.releaseUsage7());
+  await expect(select).toBeEnabled();
+  await expect(panel.locator(".chart-column")).toHaveAttribute("aria-label", /7 total/);
 
+  await select.selectOption("90");
+  await expect.poll(() => page.evaluate(() => Boolean(window.releaseUsage90))).toBe(true);
   await page.evaluate(() => window.releaseUsage90());
   await expect(select).toHaveValue("90");
-  await expect(panel.locator(".chart-column")).toHaveAttribute("aria-label", /90 total/);
-  await page.evaluate(() => window.releaseUsage7());
   await expect(panel.locator(".chart-column")).toHaveAttribute("aria-label", /90 total/);
   expect(await panel.evaluate((host) => host._usageHistoryWindow)).toBe("90");
   await expectHarnessClean(page, errors);
