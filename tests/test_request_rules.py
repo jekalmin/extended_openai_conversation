@@ -126,7 +126,7 @@ async def test_only_when_uses_first_eligible_text_match_and_preview_trace(
         return config
 
     async def build(_hass, config):
-        entity = config["entity_id"]
+        entity = config["entity_id"][0]
         return SimpleNamespace(
             async_check=lambda **_kwargs: (
                 checks.append(entity) or entity.endswith("second")
@@ -222,7 +222,7 @@ async def test_only_when_does_not_check_nonmatching_rule_and_stops_on_error(
     ]
 
     async def fail(_hass, config):
-        assert config["entity_id"] == "input_boolean.second"
+        assert config["entity_id"] == ["input_boolean.second"]
         raise RuntimeError("condition unavailable")
 
     monkeypatch.setattr(
@@ -284,7 +284,7 @@ async def test_sentence_and_fuzzy_conditions_skip_to_next_eligible(
 
     async def build(_hass, config):
         return SimpleNamespace(
-            async_check=lambda **_kwargs: config["entity_id"].endswith("yes")
+            async_check=lambda **_kwargs: config["entity_id"][0].endswith("yes")
         )
 
     monkeypatch.setattr(
