@@ -41,7 +41,6 @@ async function configureCase(panel, item, index, groupId) {
   await panel.locator("#rule-phrases").fill(phraseFor(index, item));
   await panel.locator("#rule-match").selectOption(item.match);
   if (index % 2 === 0) await panel.locator("#rule-group").selectOption(groupId);
-  await panel.locator("#rule-ai-input-mode").selectOption("original");
 
   if (item.action === "local_action") {
     const actions = [{
