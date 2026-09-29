@@ -43,7 +43,9 @@ test("saved device assignments hydrate after the Voice policy core and survive r
     host._configData.config.voice_device_mappings = {"device-kitchen": "user:test-user"};
     await host._navigate("assistant", "voice");
   });
-  await expect(panel.locator(".voice-identity-flow")).toBeVisible();
+  await expect(panel.locator(".voice-identity-flow")).toBeHidden();
+  await expect(panel.locator(".voice-identity-help > summary")).toBeVisible();
+  await expect(panel.locator("#voice-current-summary")).toBeVisible();
   await expect.poll(() => Boolean(release)).toBe(true);
   await expect(panel.locator("[data-voice-mapping-feature]")).toContainText("Loading saved assignments");
   expect(await panel.evaluate((host) => host._draft.voice_device_mappings)).toEqual({"device-kitchen": "user:test-user"});
@@ -63,7 +65,9 @@ test("a delayed mapping module cannot decorate a later route", async ({page}) =>
   });
   await page.goto(fixtureUrl("assistant/voice"));
   const panel = page.locator("extended-openai-management-panel");
-  await expect(panel.locator(".voice-identity-flow")).toBeVisible();
+  await expect(panel.locator(".voice-identity-flow")).toBeHidden();
+  await expect(panel.locator(".voice-identity-help > summary")).toBeVisible();
+  await expect(panel.locator("#voice-current-summary")).toBeVisible();
   await panel.locator('[data-config="voice_scope_policy"]').selectOption("device_mapping");
   await expect.poll(() => Boolean(release)).toBe(true);
   await panel.evaluate((host) => host._navigate("assistant", "basics"));

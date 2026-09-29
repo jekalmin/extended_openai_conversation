@@ -13,7 +13,7 @@ export function requestRuleSummary(rule = {}, defaults = {}) {
   const phraseLabel = `${phrases.length} trigger phrase${phrases.length === 1 ? "" : "s"}`;
   let matching;
   if (rule.match_type === "sentence_pattern") {
-    matching = `${phraseLabel} · ${match} · ExtendedOpenAI sentence pattern`;
+    matching = `${phraseLabel} · ExtendedOpenAI sentence pattern`;
   } else {
     const source = rule.matching_behavior === "defaults" ? "Default matching" : "Custom matching";
     const settings = rule.matching_behavior === "defaults" ? defaults : (rule.matching || {});
@@ -64,7 +64,7 @@ const groupManager = (panel, result) => `<dialog id="rule-groups-dialog" class="
 
 function requestRuleCard(panel, rule, index) {
   const result = panel._result || {}, rules = result.rules || [], summary = requestRuleSummary(rule, result.defaults || {}), canReorder = !panel._query && (!panel._ruleGroupFilter || panel._ruleGroupFilter === "all");
-  return `<article data-rule-key="${panel._e(rule.id)}" draggable="${canReorder}" class="request-rule-card ${rule.enabled ? "" : "disabled"}"><div class="rule-card-heading"><div><span class="type-badge ${rule.action_type === "local_action" ? "local" : "routing"}">${rule.action_type === "local_action" ? "Local command" : "AI routing"}</span><h2>${panel._e(rule.name)}</h2><span class="meta">#${index + 1} <span class="rule-group-chip">${panel._e((result.groups || []).find((group) => group.id === rule.group_id)?.name || "Ungrouped")}</span></span></div><label class="switch-label"><span class="sr-only">Enable ${panel._e(rule.name)}</span><input class="rule-enabled" data-id="${panel._e(rule.id)}" type="checkbox" ${rule.enabled ? "checked" : ""}></label></div><div class="phrase-chips">${rule.phrases.slice(0,4).map((phrase) => `<span><b>${matchLabel(rule.match_type)}</b> ${panel._e(phrase)}</span>`).join("")}${summary.hiddenPhrases ? `<span class="eoc-more-phrases">+${summary.hiddenPhrases} more</span>` : ""}</div><p>${panel._e(summary.action)}</p><p class="meta">${panel._e(summary.matching)}</p>${rule.sensitive_matching_warning && rule.match_type !== "sentence_pattern" ? '<p class="sensitive-warning">Review tolerant matching carefully: this rule controls a potentially sensitive Home Assistant domain.</p>' : ""}<div class="actions">${result.diagnostics?.[rule.id] ? `<p class="sensitive-warning"><strong>Rule inactive:</strong> ${panel._e(result.diagnostics[rule.id])} Edit and save this rule to use the current sentence-pattern syntax.</p>` : ""}<button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="up" ${!canReorder || index === 0 ? "disabled" : ""}>Move up</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="down" ${!canReorder || index === rules.length - 1 ? "disabled" : ""}>Move down</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="top" ${!canReorder || index === 0 ? "disabled" : ""}>Move to top</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="bottom" ${!canReorder || index === rules.length - 1 ? "disabled" : ""}>Move to bottom</button><button type="button" class="secondary rule-edit" data-id="${panel._e(rule.id)}">Edit</button><button type="button" class="secondary rule-duplicate" data-id="${panel._e(rule.id)}">Duplicate</button><button type="button" class="danger secondary-danger rule-delete" data-id="${panel._e(rule.id)}">Delete</button></div></article>`;
+  return `<article data-rule-key="${panel._e(rule.id)}" draggable="${canReorder}" class="request-rule-card ${rule.enabled ? "" : "disabled"}"><div class="rule-card-heading"><div><span class="type-badge ${rule.action_type === "local_action" ? "local" : "routing"}">${rule.action_type === "local_action" ? "Local command" : "AI routing"}</span><h2>${panel._e(rule.name)}</h2><span class="meta">#${index + 1} <span class="rule-group-chip">${panel._e((result.groups || []).find((group) => group.id === rule.group_id)?.name || "Ungrouped")}</span></span></div><label class="switch-label"><span class="sr-only">Enable ${panel._e(rule.name)}</span><input class="rule-enabled" data-id="${panel._e(rule.id)}" type="checkbox" ${rule.enabled ? "checked" : ""}></label></div><div class="phrase-chips">${rule.phrases.slice(0,4).map((phrase) => `<span>${panel._e(phrase)}</span>`).join("")}${summary.hiddenPhrases ? `<span class="eoc-more-phrases">+${summary.hiddenPhrases} more</span>` : ""}</div><p>${panel._e(summary.action)}</p><p class="meta">${panel._e(summary.matching)}</p>${rule.sensitive_matching_warning && rule.match_type !== "sentence_pattern" ? '<p class="sensitive-warning">Review tolerant matching carefully: this rule controls a potentially sensitive Home Assistant domain.</p>' : ""}<div class="actions">${result.diagnostics?.[rule.id] ? `<p class="sensitive-warning"><strong>Rule inactive:</strong> ${panel._e(result.diagnostics[rule.id])} Edit and save this rule to use the current sentence-pattern syntax.</p>` : ""}<details class="rule-move-menu"><summary aria-label="Move ${panel._e(rule.name)}">Move</summary><div class="rule-move-options"><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="up" ${!canReorder || index === 0 ? "disabled" : ""}>Move up</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="down" ${!canReorder || index === rules.length - 1 ? "disabled" : ""}>Move down</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="top" ${!canReorder || index === 0 ? "disabled" : ""}>Move to top</button><button type="button" class="secondary rule-move" data-id="${panel._e(rule.id)}" data-direction="bottom" ${!canReorder || index === rules.length - 1 ? "disabled" : ""}>Move to bottom</button></div></details><button type="button" class="secondary rule-edit" data-id="${panel._e(rule.id)}">Edit</button><button type="button" class="secondary rule-duplicate" data-id="${panel._e(rule.id)}">Duplicate</button><button type="button" class="danger secondary-danger rule-delete" data-id="${panel._e(rule.id)}">Delete</button></div></article>`;
 }
 const EMPTY_RULES_MARKUP = '<section class="content-card empty-state"><h2>Create your first Request Rule</h2><p>Add a fast local command such as “good night”.</p><button type="button" id="rule-empty-add">Create rule</button></section>';
 const NO_RULES_MATCH_CONTENT = '<h2>No rules match your search</h2><p>Try a different phrase or rule name.</p>';
@@ -281,6 +281,36 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
   if(list && !list.dataset.eocRuleCoreBound){
     list.dataset.eocRuleCoreBound="";
     let dragging=null;
+    // A disclosure of ordinary buttons uses native Enter/Space and Tab behavior.
+    // Escape, outside clicks and completed actions dismiss it without losing focus.
+    const closeMoveMenus = (except = null) => {
+      list.querySelectorAll(".rule-move-menu[open]").forEach((menu) => {
+        if (menu !== except) menu.open = false;
+      });
+    };
+    list.addEventListener("keydown", (event) => {
+      const menu = event.target.closest?.(".rule-move-menu[open]");
+      if (event.key !== "Escape" || !menu) return;
+      event.preventDefault();
+      event.stopPropagation();
+      menu.open = false;
+      menu.querySelector("summary").focus();
+    });
+    // The listener belongs to this collection; replacing the route discards it.
+    list.addEventListener("focusout", (event) => {
+      // activeElement can be null while focus transfers. Use the destination
+      // instead so Tab and pointer activation do not close the menu mid-transfer.
+      closeMoveMenus(event.relatedTarget?.closest?.(".rule-move-menu"));
+    });
+    if (!root.__eocRuleMoveDismissBound) {
+      root.__eocRuleMoveDismissBound = true;
+      root.addEventListener("pointerdown", (event) => {
+        const current = event.target.closest?.(".rule-move-menu");
+        root.querySelectorAll(".rule-move-menu[open]").forEach((menu) => {
+          if (menu !== current) menu.open = false;
+        });
+      });
+    }
     list.addEventListener("dragstart",event=>{const card=event.target.closest?.("[data-rule-key]");if(!card||!card.draggable){event.preventDefault();return;}dragging=card.dataset.ruleKey;event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",dragging);});
     list.addEventListener("dragover",event=>{if(dragging&&event.target.closest?.("[data-rule-key]"))event.preventDefault();});
     list.addEventListener("dragend",()=>{dragging=null;});
@@ -290,12 +320,23 @@ export function bindRequestRulesCore(panel,{openEditor,activateSafeTester,activa
       if(button.id==="rule-empty-add"||button.matches(".rule-edit")){void openEditor?.(button.dataset.id||null);return;}
       const id=button.dataset.id;
       if(button.matches(".rule-move")){
+        const menu = button.closest(".rule-move-menu");
+        const trigger = menu?.querySelector("summary");
+        if (menu) { menu.open = false; trigger.focus(); }
+        let restoreFocus = false;
         pendingRuleButtons.add(button);button.disabled=true;
-        try{const result=await panel._call("request_rules","move",{rule_id:id,direction:button.dataset.direction,revision:panel._result?.revision});applyRequestRuleMutation(panel,"move",result,{ruleId:id,direction:button.dataset.direction});}
+        try{
+          const result=await panel._call("request_rules","move",{rule_id:id,direction:button.dataset.direction,revision:panel._result?.revision});
+          // Moving a keyed DOM node can drop focus. Do not steal it back if the
+          // user intentionally focused another control while the save ran.
+          restoreFocus = root.activeElement === trigger;
+          applyRequestRuleMutation(panel,"move",result,{ruleId:id,direction:button.dataset.direction});
+        }
         catch(err){await recoverRequestRuleMutation(panel,err,"Unable to move Request Rule");}
         finally{
           pendingRuleButtons.delete(button);
           reconcileRequestRules(panel);
+          if (restoreFocus && trigger?.isConnected) trigger.focus();
         }
         return;
       }

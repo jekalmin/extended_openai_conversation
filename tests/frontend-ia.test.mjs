@@ -148,6 +148,7 @@ assert.deepEqual(MODEL_RESET_FIELDS, ["temperature", "top_p", "reasoning_effort"
 assert.ok(MODEL_RESET_FIELDS.every((key) => !key.includes("memory")));
 
 const knowledgePanel = {
+  _e: escape,
   _data:{is_admin:true},
   _selectedAgent:()=>({feature_status:{knowledge:{state:"enabled"}}}),
 };
@@ -155,7 +156,10 @@ const knowledgeAvailability = knowledgeAvailabilityMarkup(knowledgePanel);
 assert.match(knowledgeAvailability, /knowledge-enabled-toggle/);
 assert.match(knowledgeAvailability, /checked/);
 knowledgePanel._data.is_admin = false;
-assert.equal(knowledgeAvailabilityMarkup(knowledgePanel), "");
+const readOnlyKnowledge = knowledgeAvailabilityMarkup(knowledgePanel);
+assert.match(readOnlyKnowledge, /Assistant access/);
+assert.match(readOnlyKnowledge, /id="knowledge-status"/);
+assert.doesNotMatch(readOnlyKnowledge, /knowledge-enabled-toggle/);
 
 assert.ok(GUIDE_TOPICS.length >= 12);
 assert.ok(GUIDE_TOPICS.some((topic) => topic.id === "guest-mode"));

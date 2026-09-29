@@ -1,6 +1,6 @@
 import {enhancementChanged} from "./management-enhancement-state.js";
 import {friendlySettingLabel, friendlySettingValue, settingSearchAliases} from "./management-setting-metadata.js";
-import {pageMetadata} from "./frontend-navigation.js";
+import {pageMetadata, focusManagementSetting} from "./frontend-navigation.js";
 import {SETTINGS_INDEX} from "./management-settings-index.js";
 
 export function buildSettingsSearchProjection(settings = SETTINGS_INDEX) {
@@ -239,8 +239,7 @@ function bindSearch(panel, search) {
       const element = panel.shadowRoot.getElementById(target);
       if (element) {
         panel._pendingSettingFocus = null;
-        element.scrollIntoView({behavior:"smooth", block:"start"});
-        (element.querySelector("input,select,textarea,button") || element).focus?.();
+        focusManagementSetting(element);
       }
     }
   });

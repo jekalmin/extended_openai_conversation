@@ -1,5 +1,5 @@
 import {adoptKeyedElements, reconcileKeyedChildren, delegateCollectionActions, setText} from "./keyed-collection.js";
-import {embeddedFeatureStatusMarkup, selectedFeatureStatus} from "./management-feature-status-core.js";
+import {selectedFeatureStatus} from "./management-feature-status-core.js";
 import {knowledgeSourceAvailabilityBadge} from "./knowledge-presentation.js";
 import {formatUsageNumber} from "./usage-format.js";
 
@@ -8,17 +8,26 @@ const identity = panel => JSON.stringify([panel._selectedAgent?.()?.entry_id, pa
 const signature = source => JSON.stringify([source.title, source.description, source.enabled, source.character_count, source.updated_at]);
 const matches = (source, query) => `${source.title || ""} ${source.description || ""}`.toLocaleLowerCase().includes(query);
 const countText = sources => `${formatUsageNumber(sources.length)} source${sources.length === 1 ? "" : "s"}`;
-const statusMarkup = panel => {
+function knowledgeAccessState(panel) {
   const current = selectedFeatureStatus(panel, "knowledge") || {};
   const enabled = typeof current.enabled === "boolean" ? current.enabled : panel._selectedAgent?.()?.knowledge_enabled !== false;
-  const count = panel._result?.sources?.length || 0;
-  const state = current.state || (enabled ? count ? "available" : "empty" : "disabled");
-  return embeddedFeatureStatusMarkup(panel, "Assistant access", {
-    state,
-    label: current.label || ({available:"Available", empty:"Needs sources", disabled:"Off"}[state] || "Unknown"),
-    detail: !enabled ? "Stored sources stay in the library, but the assistant cannot use them."
-      : count ? "The assistant can search these sources when needed." : "Add a source to make Knowledge available to the assistant.",
-  });
+  const sources = panel._result?.sources || [];
+  const usable = sources.some((source) => source.enabled !== false);
+  const state = current.state === "enabled" ? (usable ? "available" : "empty")
+    : current.state || (enabled ? usable ? "available" : "empty" : "disabled");
+  const detail = !enabled ? "Stored sources stay in the library, but the assistant cannot use them."
+    : ["unknown", "unavailable", "error"].includes(state) ? current.detail || current.summary || "Knowledge availability could not be confirmed."
+    : usable ? "The assistant can search these sources when needed."
+    : sources.length ? "Enable a source to make Knowledge available to the assistant."
+    : "Add a source to make Knowledge available to the assistant.";
+  return {
+    enabled, state, detail,
+    label: current.label || ({available:"Available", enabled:usable ? "Available" : "Needs sources", empty:"Needs sources", disabled:"Off"}[state] || "Unknown"),
+  };
+}
+const statusMarkup = panel => {
+  const status = knowledgeAccessState(panel);
+  return `<div class="compact-status"><small>${panel._e(status.detail)}</small><strong class="status-value ${["enabled", "available"].includes(status.state) ? "on" : ""}">${panel._e(status.label)}</strong></div>`;
 };
 
 export function applyKnowledgeMutation(panel, response, deletedId = null) {
@@ -39,17 +48,14 @@ export function applyKnowledgeMutation(panel, response, deletedId = null) {
 
 
 export function knowledgeAvailabilityMarkup(panel) {
-  if (panel._data?.is_admin === false) return "";
-  const sectionStatus = panel._result?.feature_status;
-  const status = sectionStatus && typeof sectionStatus.enabled === "boolean"
-    ? sectionStatus
-    : panel._selectedAgent?.()?.feature_status?.knowledge;
-  const agentEnabled = panel._selectedAgent?.()?.knowledge_enabled;
-  const enabled = typeof status?.enabled === "boolean" ? status.enabled
-    : typeof agentEnabled === "boolean" ? agentEnabled : ["enabled", "available", "empty"].includes(status?.state);
+  const status = `<div id="knowledge-status" aria-live="polite">${statusMarkup(panel)}</div>`;
+  if (panel._data?.is_admin === false) {
+    return `<div class="knowledge-availability-setting"><strong>Assistant access</strong>${status}</div>`;
+  }
+  const enabled = knowledgeAccessState(panel).enabled;
   return `<div class="knowledge-availability-setting">
     <div class="config-toggle setting">
-      <span class="setting-copy"><span class="setting-label-row"><label for="knowledge-enabled-toggle"><strong>Allow the assistant to use Knowledge</strong></label></span><small>When off, stored sources remain in the library but Knowledge tools are not available to the assistant. Changes here save immediately.</small></span>
+      <div class="setting-copy"><span class="setting-label-row"><label for="knowledge-enabled-toggle"><strong>Allow the assistant to use Knowledge</strong></label></span>${status}<small>Changes here save immediately.</small></div>
       <label class="switch-control" for="knowledge-enabled-toggle"><input id="knowledge-enabled-toggle" type="checkbox" role="switch" ${enabled ? "checked" : ""}><span class="switch-track" aria-hidden="true"></span></label>
     </div>
   </div>`;
@@ -102,7 +108,7 @@ function sourceCard(panel, source) {
 
 export function renderKnowledge(panel) {
   const sources = panel._result?.sources || [];
-  return `<section class="content-card" data-knowledge-collection data-collection-identity="${panel._e(identity(panel))}"><div class="section-heading"><div><h2>Sources</h2><p data-source-count>${countText(sources)}</p></div><button type="button" id="add-source">+ Add source</button></div><div id="knowledge-status">${statusMarkup(panel)}</div>${knowledgeAvailabilityMarkup(panel)}<input id="list-search" class="search" type="search" value="${panel._e(panel._query)}" placeholder="Filter by title or description" aria-label="Filter Knowledge sources"><div class="list knowledge-list">${sources.map(source => sourceCard(panel, source)).join("")}<div data-source-empty>${panel._empty("No Knowledge sources yet. Add one to make reference information available on demand.")}</div></div></section>`;
+  return `<section class="content-card" data-knowledge-collection data-collection-identity="${panel._e(identity(panel))}"><div class="section-heading"><div><h2>Sources</h2><p data-source-count>${countText(sources)}</p></div><button type="button" id="add-source">+ Add source</button></div>${knowledgeAvailabilityMarkup(panel)}<input id="list-search" class="search" type="search" value="${panel._e(panel._query)}" placeholder="Filter by title or description" aria-label="Filter Knowledge sources"><div class="list knowledge-list">${sources.map(source => sourceCard(panel, source)).join("")}<div data-source-empty>${panel._empty("No Knowledge sources yet. Add one to make reference information available on demand.")}</div></div></section>`;
 }
 
 export function filterKnowledge(panel) {

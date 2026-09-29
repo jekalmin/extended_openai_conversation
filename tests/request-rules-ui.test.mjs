@@ -110,7 +110,10 @@ const literalHtml = renderRequestRules({...panel, _result: {...panel._result, ru
   {...panel._result.rules[0], name: literalHelpWords, phrases: [literalHelpWords]},
 ]}});
 assert.match(literalHtml, /<h2>Home Assistant sentence pattern<\/h2>/);
-assert.match(literalHtml, /<b>Equals<\/b> Home Assistant sentence pattern/);
+assert.match(literalHtml, /<span>Home Assistant sentence pattern<\/span>/);
+assert.match(literalHtml, /1 trigger phrase · Equals · Default matching/);
+assert.equal((literalHtml.match(/Equals/g) || []).length, 1, "matching method is shown once, not repeated on each phrase");
+assert.match(html, /class="rule-move-menu"><summary aria-label="Move Good night">Move<\/summary>/);
 assert.match(bindingSource, /Captured values:/);
 assert.match(bindingSource, /enabled:previous\?\.enabled\?\?true/);
 assert.match(bindingSource, /selector = \{action:\{\}\}/);

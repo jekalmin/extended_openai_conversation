@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {renderKnowledge} from "../custom_components/extended_openai_conversation_responses/frontend/management-knowledge-feature.js";
 
 const frontend = (name) => new URL(
   `../custom_components/extended_openai_conversation_responses/frontend/${name}`,
@@ -28,7 +29,12 @@ assert.match(knowledgeSource, /management-feature-status-core\.js/);
 assert.match(knowledgeSource, /knowledge-presentation\.js/);
 assert.doesNotMatch(knowledgeSource, /management-capabilities-ia\.js|management-feature-status\.js/);
 assert.match(panelSource, /\$\{this\._knowledge\(\)\}/);
-assert.match(knowledgeSource, /data-knowledge-collection[^\n]*knowledge-status/);
+const knowledgeHtml = renderKnowledge({_e: String, _query: "", _empty: String,
+  _data: {is_admin: true}, _result: {sources: []},
+  _selectedAgent: () => ({knowledge_enabled: true})});
+assert.match(knowledgeHtml, /data-knowledge-collection/);
+assert.equal((knowledgeHtml.match(/id="knowledge-status"/g) || []).length, 1);
+assert.equal((knowledgeHtml.match(/Add a source to make Knowledge available/g) || []).length, 1);
 assert.match(knowledgeSource, /\$\{knowledgeAvailabilityMarkup\(panel\)\}/);
 
 assert.match(backendSource, /if action == "details":/);

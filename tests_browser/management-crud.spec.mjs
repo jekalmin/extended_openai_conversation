@@ -89,6 +89,7 @@ test("Request Rules support create, precedence changes, reload, edit, and delete
 
   let card = panel.locator(".request-rule-card").filter({hasText: "Browser rule"});
   await expect(card.locator(".rule-enabled")).toBeChecked();
+  await card.locator(".rule-move-menu > summary").click();
   await card.locator('.rule-move[data-direction="up"]').click();
   await expect.poll(async () => panel.locator(".request-rule-card h2").allTextContents()).toEqual(["Browser rule", "Baseline rule"]);
 
@@ -199,6 +200,9 @@ test("Request Rule condition selector, local continuation, and group survive rel
     selector.dispatchEvent(new CustomEvent("value-changed", {detail:{value},bubbles:true,composed:true}));
   });
   const condition = [{condition:"and",conditions:[{condition:"state",entity_id:"input_boolean.kitchen_ready",state:"on"},{condition:"not",conditions:[{condition:"state",entity_id:"input_boolean.kitchen_busy",state:"on"}]}]}];
+  await expect(panel.locator("#rule-conditions-body")).toBeHidden();
+  await panel.locator("#rule-add-conditions").click();
+  await expect(panel.locator("#rule-conditions-body")).toBeVisible();
   await panel.locator("#rule-condition-host ha-selector").evaluate((selector, value) => {
     selector.value=value;
     selector.dispatchEvent(new CustomEvent("value-changed", {detail:{value},bubbles:true,composed:true}));

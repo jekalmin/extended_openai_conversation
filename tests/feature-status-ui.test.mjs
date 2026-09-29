@@ -47,6 +47,7 @@ assert.doesNotMatch(disabledMarkup, /status-value on/);
 assert.doesNotMatch(disabledMarkup, /inline-route/);
 
 const knowledgePanel = {
+  _e: escape,
   _data: {is_admin: true},
   _result: {feature_status: {state: "empty", enabled: true, source_count: 0}},
   _selectedAgent: () => ({feature_status: {knowledge: {state: "disabled", enabled: false}}}),

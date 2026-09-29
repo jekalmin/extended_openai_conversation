@@ -147,6 +147,7 @@ test("Request Rules: reorder reads the current revision and keeps distant cards"
   const panel = await openCollection(page, "capabilities/request-rules");
   await remember(page, '[data-rule-key="rule-20"]');
   for (let i = 0; i < 3; i++) {
+    await rule(panel, "rule-1").locator(".rule-move-menu > summary").click();
     await rule(panel, "rule-1").locator('.rule-move[data-direction="down"]').click();
     await expect(panel.locator(".request-rule-card").nth(i + 1)).toHaveAttribute("data-rule-key", "rule-1");
     await expectRetained(page, '[data-rule-key="rule-20"]');
@@ -204,11 +205,13 @@ test("Request Rules: moved cards retain identity and boundary buttons remain dis
   const down = rule(panel, "rule-1").locator('.rule-move[data-direction="down"]');
   const up = rule(panel, "rule-1").locator('.rule-move[data-direction="up"]');
   await expect(up).toBeDisabled();
+  await rule(panel, "rule-1").locator(".rule-move-menu > summary").click();
   await down.click();
   await expect(panel.locator(".request-rule-card").last()).toHaveAttribute("data-rule-key", "rule-1");
   await expect(down).toBeDisabled();
   await expect(up).toBeEnabled();
   await expectRetained(page, '[data-rule-key="rule-1"]');
+  await rule(panel, "rule-1").locator(".rule-move-menu > summary").click();
   await up.click();
   await expect(panel.locator(".request-rule-card").first()).toHaveAttribute("data-rule-key", "rule-1");
   await expect(up).toBeDisabled();

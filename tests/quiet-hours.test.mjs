@@ -140,3 +140,52 @@ test("marks a mapped speaker ready only when a numeric volume is available", () 
   ));
   assert.match(unavailable, /Speaker unavailable/);
 });
+
+const resolvedSatellite = {
+  satellite_entity_id: "assist_satellite.kitchen", name: "Kitchen",
+  media_player_entity_id: "media_player.kitchen", media_player_source: "auto",
+  media_player_candidates: ["media_player.kitchen"], wake_sound_candidates: [],
+};
+const readyStates = {
+  "media_player.kitchen": {state: "idle", attributes: {volume_level: 0.4, friendly_name: "Kitchen speaker"}},
+  "media_player.manual": {state: "idle", attributes: {volume_level: 0.3}},
+};
+const {quietHoursSatellitePresentation: presentation} = await import("../custom_components/extended_openai_conversation_responses/frontend/quiet-hours-ui.js");
+
+test("ready satellites are compact and absent optional wake switches are not faults", () => {
+  const p = panel({config:baseConfig, satellites:[resolvedSatellite]}, null, readyStates);
+  const result = presentation(p, resolvedSatellite, baseConfig);
+  assert.equal(result.needsAttention, false);
+  assert.match(result.mediaSummary, /Automatic.*Kitchen speaker.*media_player.kitchen/);
+  assert.match(result.wakeSummary, /optional/);
+  const html = renderQuietHours(p);
+  assert.match(html, /class="qh-satellite-config eoc-details-base" ><summary>Configure/);
+  assert.doesNotMatch(html, /class="qh-satellite-config eoc-details-base" open/);
+});
+
+test("speaker failures and ambiguous wake selection expand without labelling unsupported wake switches faulty", () => {
+  const p = panel({config:baseConfig}, null, readyStates);
+  for (const satellite of [
+    {...resolvedSatellite, media_player_entity_id:null},
+    {...resolvedSatellite, media_player_entity_id:"media_player.unavailable"},
+    {...resolvedSatellite, wake_sound_candidates:["switch.a", "switch.b"]},
+  ]) assert.equal(presentation(p, satellite, baseConfig).needsAttention, true);
+  const ambiguous = {...resolvedSatellite, wake_sound_candidates:["switch.a", "switch.b"]};
+  assert.match(presentation(p, ambiguous, baseConfig).wakeSummary, /available to review/);
+  assert.equal(presentation(p, ambiguous, {...baseConfig,wake_sound:"unchanged"}).needsAttention, false);
+  assert.equal(presentation(p, {...resolvedSatellite,wake_sound_candidates:["switch.unrelated"]}, baseConfig).needsAttention, false);
+  const unavailableWake = {...resolvedSatellite,wake_sound_entity_id:"switch.missing",wake_sound_source:"manual"};
+  assert.equal(presentation(p, unavailableWake, baseConfig).needsAttention, true);
+});
+
+test("draft override summaries reflect unsaved choices without inventing automatic replacements", () => {
+  const manual = {...baseConfig, overrides:{"assist_satellite.kitchen":{media_player_entity_id:"media_player.manual"}}};
+  const p = panel({config:baseConfig}, manual, readyStates);
+  assert.match(presentation(p, resolvedSatellite, manual).mediaSummary, /Manual.*media_player.manual/);
+  const savedSatellite = {...resolvedSatellite, media_player_entity_id:"media_player.manual",media_player_source:"manual"};
+  const clearing = panel({config:manual}, baseConfig, readyStates);
+  const result = presentation(clearing, savedSatellite, baseConfig);
+  assert.match(result.mediaSummary, /resolved after saving/);
+  assert.doesNotMatch(result.mediaSummary, /media_player.kitchen/);
+  assert.equal(result.needsAttention, false);
+});

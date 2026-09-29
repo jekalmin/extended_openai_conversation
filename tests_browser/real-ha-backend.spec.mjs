@@ -163,6 +163,9 @@ test("real browser creates, groups, edits, reloads, and deletes a Request Rule t
   await panel.locator("#rule-scope").selectOption("conversation");
   await panel.locator("#rule-group").selectOption({label: "Real HA browser rule group"});
   const onlyWhen = [{condition:"template",value_template:"{{ true }}"}];
+  await expect(panel.locator("#rule-conditions-body")).toBeHidden();
+  await panel.locator("#rule-add-conditions").click();
+  await expect(panel.locator("#rule-conditions-body")).toBeVisible();
   await panel.locator("#rule-condition-host ha-selector").evaluate((selector, value) => {
     selector.value=value;
     selector.dispatchEvent(new CustomEvent("value-changed",{detail:{value},bubbles:true,composed:true}));
@@ -198,6 +201,7 @@ test("real browser creates, groups, edits, reloads, and deletes a Request Rule t
   await expect(panel.locator("#rule-match-test-result")).toContainText("Real HA browser rule edited");
   await card.locator(".rule-duplicate").click();
   await expect(panel.locator(".request-rule-card")).toHaveCount(2);
+  await panel.locator(".request-rule-card").last().locator(".rule-move-menu > summary").click();
   await panel.locator(".request-rule-card").last().locator('[data-direction="up"]').click();
   await expect(panel.locator(".request-rule-card")).toHaveCount(2);
   await panel.locator(".wording-editor summary").click();

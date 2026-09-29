@@ -66,7 +66,7 @@ test("Guest Mode policy save preserves DOM", async ({page}) => {
   const errors = trackPageErrors(page);
   await page.goto(fixtureUrl("capabilities/guest-mode"));
   const panel = page.locator("extended-openai-management-panel");
-  const advanced = panel.locator(".guest-advanced").last();
+  const advanced = panel.locator(".guest-advanced:has(#guest-controls-enabled)");
   await advanced.evaluate((node) => { node.open = true; });
   await expect(panel.locator("#guest-controls-enabled")).toBeVisible();
   await trackRenders(panel);
@@ -80,7 +80,7 @@ test("Guest Mode policy save preserves DOM", async ({page}) => {
   expect(await panel.evaluate((host) => ({
     sameMain: host.shadowRoot.querySelector("main") === window.pageSaveMain,
     renders: window.pageSaveRenderCount,
-    advancedOpen: [...host.shadowRoot.querySelectorAll(".guest-advanced")].at(-1)?.open,
+    advancedOpen: host.shadowRoot.querySelector("#guest-controls-enabled")?.closest("details")?.open,
     checked: host.shadowRoot.querySelector("#guest-controls-enabled")?.checked,
   }))).toEqual({sameMain:true, renders:0, advancedOpen:true, checked:!original});
   await expectHarnessClean(page, errors);

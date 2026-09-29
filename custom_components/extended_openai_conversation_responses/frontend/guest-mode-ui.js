@@ -26,7 +26,7 @@ export function freshGuestPolicyDraft(config = {}) {
 }
 
 export function renderGuestWebSearchSetting(config = {}) {
-  return `<section class="content-card guest-hosted-capabilities"><div class="section-heading"><div><h2>Hosted capabilities</h2><p>Provider-hosted capabilities remain unavailable to guests unless you explicitly allow them.</p></div></div><label class="toggle"><span>Allow hosted Web Search</span><input id="guest-web-search" type="checkbox" ${config.guest_web_search ? "checked" : ""}></label><p class="help">Off by default. When enabled, Guest Mode may expose hosted Web Search only when this agent's provider, API mode, and Web Search configuration support it.</p></section>`;
+  return `<div class="guest-hosted-capabilities"><label class="toggle"><span>Allow hosted Web Search</span><input id="guest-web-search" type="checkbox" ${config.guest_web_search ? "checked" : ""}></label><p class="help">Off by default. When enabled, Guest Mode may expose hosted Web Search only when this agent's provider, API mode, and Web Search configuration support it.</p></div>`;
 }
 
 
@@ -267,12 +267,6 @@ function bindPersistentMemories(panel) {
   });
 }
 
-export function decorateGuestPolicy(panel, html) {
-  const marker = '<section class="content-card"><div class="section-heading"><div><h2>Assistant permission</h2>';
-  if (!html.includes(marker)) return html;
-  const config = panel._guestDraft || panel._result?.config || {};
-  return html.replace(marker, `${renderGuestWebSearchSetting(config)}${marker}`);
-}
 
 export function filterPersistentMemories(panel) {
   applyMemoryFilter(panel);

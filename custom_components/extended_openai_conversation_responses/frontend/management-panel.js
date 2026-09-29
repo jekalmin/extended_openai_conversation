@@ -14,7 +14,7 @@ import {ASSISTANT_INTRO_MARKUP, renderManagement, showPendingDestination, reconc
 import {bindSingleRequestSave, bindFrontendCorrectness, normalizeGuestModeTimestamp, setControlPending, isAgentMutation, syncAgentPicker} from "./management-actions.js";
 import {loadAgentsWithOverviewPrefetch, loadRoute, bindRequestRuleSearch, applyRequestRuleSearch, warmRouteAsset, prefetchIntentRead, consumeIntentRead, consumeStoredConfigurationPrefetch, discardStoredConfigurationPrefetch, markConfigurationRead, measureConfigurationRead} from "./management-route.js";
 import {getConfigurationEditor, getConfigurationTools, getRouteFeature, routeAssetKind, routeFeaturesReady, isRestrictedManagementView, nonAdminOverviewKnowledgeSnapshot} from "./management-route.js";
-import {NAVIGATION, pageMetadata, routeFromPath, routePath} from "./frontend-navigation.js";
+import {NAVIGATION, pageMetadata, routeFromPath, routePath, focusManagementSetting} from "./frontend-navigation.js";
 import {clone, same} from "./unsaved-state.js";
 import {bindGuide, renderGuide} from "./guide-page.js";
 import {bindOverview, renderOverview, enhanceOverviewHealthClarity} from "./overview-page.js";
@@ -1538,7 +1538,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     shell.innerHTML = `
       <div class="page-shell" data-eoc-persistent-shell>
         <header>
-          <div class="page-heading"><h1>Extended OpenAI</h1><p>Configure your assistant, capabilities, retained data, and maintenance.</p></div>
+          <div class="page-heading"><h1>Extended OpenAI</h1></div>
           ${settingsSearchShellMarkup(this)}
         </header>
         <label class="mobile-nav"><span>Page</span><select id="top-section-mobile" tabindex="0">${navigation.map((item) => `<option value="${item.id}" ${item.id === this._page ? "selected" : ""}>${item.label}</option>`).join("")}</select></label>
@@ -1910,7 +1910,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     if (this._pendingSettingFocus && root.querySelector(`#${CSS.escape(this._pendingSettingFocus)}`)) {
       const target = this._pendingSettingFocus;
       this._pendingSettingFocus = null;
-      requestAnimationFrame(() => { const element = this.shadowRoot.querySelector(`#${target}`); element?.scrollIntoView({behavior:"smooth", block:"start"}); (element?.querySelector("input,select,textarea,button") || element)?.focus?.(); });
+      requestAnimationFrame(() => focusManagementSetting(this.shadowRoot.getElementById(target)));
     }
     if (["data-memory/memories", "capabilities/guest-mode"].includes(view)) {
       getRouteFeature("memory-browser")?.bindMemoryBrowser(this);

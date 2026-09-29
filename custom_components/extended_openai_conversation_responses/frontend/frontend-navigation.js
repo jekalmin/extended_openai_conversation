@@ -72,3 +72,19 @@ export function pageMetadata(page) {
 export function shouldShowGlobalSettingsSearch() {
   return true;
 }
+
+export function focusManagementSetting(element) {
+  if (!element) return;
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (parent.tagName === "DETAILS") parent.open = true;
+  }
+  const field = element.closest?.("[data-setting]") || element;
+  const selector = "input:not([type=hidden]),select,textarea,button,ha-user-picker,ha-entity-picker";
+  const control = element.matches?.(selector) ? element : field.querySelector?.(selector);
+  field.scrollIntoView?.({behavior:"smooth", block:"start"});
+  if (control && !control.disabled) control.focus?.();
+  else {
+    field.tabIndex = -1;
+    field.focus?.();
+  }
+}
