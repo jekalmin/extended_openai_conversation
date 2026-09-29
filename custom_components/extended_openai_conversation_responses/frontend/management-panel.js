@@ -2282,6 +2282,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       });
       this.shadowRoot.querySelector("#usage-request-dialog")?.close();
       this._render();
+      getRouteFeature("usage-maintenance/usage")?.reconcileUsageSecondary(this, "runs");
       this._toast("Recent usage details cleared");
     }
     catch (err) { this._toast(`Unable to clear details: ${err.message || String(err)}`, true); }
