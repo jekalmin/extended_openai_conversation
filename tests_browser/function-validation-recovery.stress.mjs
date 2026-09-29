@@ -31,14 +31,14 @@ test("nightly Function Tool validation rejects malformed/schema/dependency cases
     window.functionValidationAttempts = [];
     host._call = async (section, action, payload) => {
       if (section === "tools" && action === "validate_yaml") {
-        functionValidationAttempts.push({mode:functionValidationMode, yaml:payload.yaml});
+        window.functionValidationAttempts.push({mode:window.functionValidationMode, yaml:payload.yaml});
         const cases = {
           malformed: {valid:false, errors:{yaml:"YAML could not be parsed"}},
           schema: {valid:false, errors:{"spec.parameters":"must be an object schema"}},
           unsupported: {valid:false, errors:{"function.type":"unsupported Function Tool implementation"}},
           dependency: {valid:false, errors:{"function.entity_id":"Referenced Home Assistant entity is unavailable"}},
         };
-        if (cases[functionValidationMode]) return structuredClone(cases[functionValidationMode]);
+        if (cases[window.functionValidationMode]) return structuredClone(cases[window.functionValidationMode]);
       }
       return original(section, action, payload);
     };
@@ -83,8 +83,8 @@ test("nightly Function Tool save failure preserves the editor and a corrected re
     window.injectedToolSaveAttempts = 0;
     host._call = async (section, action, payload) => {
       if (section === "tools" && action === "save") {
-        injectedToolSaveAttempts += 1;
-        if (injectedToolSaveAttempts === 1) throw new Error("Function name already exists");
+        window.injectedToolSaveAttempts += 1;
+        if (window.injectedToolSaveAttempts === 1) throw new Error("Function name already exists");
       }
       return original(section, action, payload);
     };
@@ -116,15 +116,15 @@ test("nightly saved-configuration validation reports mixed failures and recovers
     window.validateCurrentMode = 0;
     host._call = async (section, action, payload) => {
       if (section === "tools" && action === "validate_current") {
-        validateCurrentMode += 1;
-        if (validateCurrentMode === 1) return {
+        window.validateCurrentMode += 1;
+        if (window.validateCurrentMode === 1) return {
           valid:false,
           errors:{
             baseline_tool:"Missing dependency: sensor.unavailable",
             disabled_tool:"Unavailable implementation is retained but disabled",
           },
         };
-        if (validateCurrentMode === 2) throw new Error("Validation service temporarily unavailable");
+        if (window.validateCurrentMode === 2) throw new Error("Validation service temporarily unavailable");
         return {valid:true, errors:{}};
       }
       return original(section, action, payload);
@@ -212,6 +212,6 @@ function:
   await expect(panel.locator("#tool-error")).toHaveClass(/valid/);
   await panel.locator("#tool-save").click();
   await expect(panel.locator(".tool-card").filter({hasText:"preset_tool"})).toBeVisible();
-  expect(await page.evaluate(() => catalogAttempts)).toBe(2);
+  expect(await page.evaluate(() => window.catalogAttempts)).toBe(2);
   await expectHarnessClean(page, errors);
 });
