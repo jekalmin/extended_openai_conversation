@@ -76,3 +76,19 @@ test("a delayed mapping module cannot decorate a later route", async ({page}) =>
   await expect(panel.locator("#voice-mappings")).toHaveCount(0);
   expect(await panel.evaluate((host) => host._viewKey())).toBe("assistant/basics");
 });
+
+test("Voice policy updates tolerate a partial render without the inactive settings node", async ({page}) => {
+  const errors = trackPageErrors(page);
+  await page.goto(fixtureUrl("assistant/voice"));
+  const panel = page.locator("extended-openai-management-panel");
+  const policy = panel.locator('[data-config="voice_scope_policy"]');
+  await expect(policy).toBeVisible();
+  await panel.evaluate(host => host.shadowRoot.querySelector("[data-voice-inactive-settings]")?.remove());
+
+  await policy.selectOption("default_user");
+  await expect(panel.locator("#voice-current-summary")).toContainText("default user");
+  await policy.selectOption("shared");
+  await expect(panel.locator("#voice-current-summary")).toContainText("shared household data");
+  await expect(panel.locator("[data-config='chat_model']")).toHaveCount(0);
+  await expectHarnessClean(page, errors);
+});

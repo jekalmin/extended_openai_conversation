@@ -214,3 +214,54 @@ test("late Guest Mode refresh does not replace a newer route", async ({page}) =>
   });
   await expectHarnessClean(page, errors);
 });
+
+test("saving Guest exclusions refreshes visible derived counts without reloading the route", async ({page}) => {
+  const errors = trackPageErrors(page);
+  await page.goto(fixtureUrl("capabilities/guest-mode"));
+  const panel = page.locator("extended-openai-management-panel");
+  await expect(panel.getByRole("heading", {name:"Guest Mode", exact:true})).toBeVisible();
+  await panel.evaluate(host => {
+    const original = host._hass.callWS.bind(host._hass);
+    let config = structuredClone(host._result.config);
+    host._result.policy = {readable_entity_count:7, controllable_entity_count:7, configured_tool_count:0};
+    window.guestProjectionCalls = [];
+    host._hass.callWS = async message => {
+      if (message.section === "guest_mode" && message.action === "save_policy") {
+        window.guestProjectionCalls.push("save_policy");
+        config = structuredClone(message.config);
+        return {revision:`${message.revision}x`, config};
+      }
+      if (message.section === "guest_mode" && message.action === "details") {
+        window.guestProjectionCalls.push("details");
+        const excluded = (config.guest_excluded_domains || []).length + (config.guest_excluded_entities || []).length;
+        return {policy:{readable_entity_count:7-excluded, controllable_entity_count:7-excluded, configured_tool_count:0}, knowledge_sources:[], functions:[], function_groups:[], domains:["camera"]};
+      }
+      return original(message);
+    };
+    host._render();
+  });
+
+  const visibleCount = () => panel.locator(".metric-grid").filter({hasText:"Guest-visible entities"});
+  await expect(visibleCount()).toContainText("7");
+  const exclusions = panel.locator('ha-selector[data-guest-key="guest_excluded_domains"]');
+  await exclusions.evaluate(node => { node.value = ["camera"]; node.dispatchEvent(new CustomEvent("value-changed", {detail:{value:["camera"]}, bubbles:true})); });
+  await expect(panel.locator(".save-bar #save-page")).toBeEnabled();
+  const agentReads = await page.evaluate(() => browserHarness.calls.filter(call => call.action === "agents").length);
+  await panel.locator(".save-bar #save-page").click();
+  await expect(visibleCount()).toContainText("6");
+  expect(await page.evaluate(() => browserHarness.calls.filter(call => call.action === "agents").length)).toBe(agentReads);
+  expect(await page.evaluate(() => guestProjectionCalls)).toEqual(["save_policy", "details"]);
+
+  await exclusions.evaluate(node => { node.value = []; node.dispatchEvent(new CustomEvent("value-changed", {detail:{value:[]}, bubbles:true})); });
+  await panel.locator(".save-bar #save-page").click();
+  await expect(visibleCount()).toContainText("7");
+  expect(await page.evaluate(() => guestProjectionCalls)).toEqual(["save_policy", "details", "save_policy", "details"]);
+
+  const entities = panel.locator('ha-selector[data-guest-key="guest_excluded_entities"]');
+  await entities.evaluate(node => { node.value = ["light.kitchen"]; node.dispatchEvent(new CustomEvent("value-changed", {detail:{value:["light.kitchen"]}, bubbles:true})); });
+  await expect(panel.locator(".save-bar #save-page")).toBeEnabled();
+  await panel.locator(".save-bar #save-page").click();
+  await expect(visibleCount()).toContainText("6");
+  expect(await page.evaluate(() => guestProjectionCalls)).toEqual(["save_policy", "details", "save_policy", "details", "save_policy", "details"]);
+  await expectHarnessClean(page, errors);
+});

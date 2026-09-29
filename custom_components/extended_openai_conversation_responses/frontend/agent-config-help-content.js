@@ -138,7 +138,7 @@ export const HELP_METADATA = Object.freeze({
   }),
   custom_replacements: Object.freeze({
     title: "Custom spoken replacements",
-    paragraphs: ["Rules use Python regular expressions, run from top to bottom on the completed response, and change spoken output only. An empty replacement removes matching text; capture groups are supported. Because arbitrary regex can depend on future text, progressive TTS is disabled while custom rules are configured. Invalid rules are rejected during validation."],
+    paragraphs: ["Built-in Markdown and bare-URL cleanup runs first. Custom rules then use Python regular expressions from top to bottom on the cleaned response and change spoken output only. For example, turn off Remove bare URLs if a custom rule needs to replace a URL. An empty replacement removes matching text; capture groups are supported. Because arbitrary regex can depend on future text, progressive TTS is disabled while custom rules are configured. Invalid rules are rejected during validation."],
     example: String.raw`\bHA\b → Home Assistant`,
     keywords: "python regex regular expression capture groups ordered remove validation tts spoken",
   }),

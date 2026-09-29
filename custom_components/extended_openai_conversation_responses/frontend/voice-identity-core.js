@@ -70,7 +70,8 @@ function updatePolicy(panel) {
     // Move the existing picker/control, rather than remounting or clearing it.
     if (card && host && card.parentElement !== host) host.append(card);
   }
-  root.querySelector("[data-voice-inactive-settings]").hidden = mapping && defaultActive;
+  const inactiveSettings = root.querySelector("[data-voice-inactive-settings]");
+  if (inactiveSettings) inactiveSettings.hidden = mapping && defaultActive;
   const text = root.querySelector("#voice-current-summary");
   if (text) text.textContent = summary({...panel._draft, voice_scope_policy: policy, voice_unmapped_policy: fallback, voice_default_user_id: defaultUser}, users(panel));
   const mappingFeature = root.querySelector("[data-voice-mapping-feature]");
@@ -100,7 +101,10 @@ async function hydrateMapping(panel) {
     target.dataset.ready = "";
     feature.bindVoiceMappings(panel);
   } catch (error) {
-    if (target.isConnected && panel._agentId === agentId) target.querySelector(".help").textContent = `Unable to load device assignments: ${error.message || String(error)}`;
+    if (target.isConnected && panel._agentId === agentId && panel._viewKey?.() === "assistant/voice") {
+      const help = target.querySelector(".help");
+      if (help) help.textContent = `Unable to load device assignments: ${error.message || String(error)}`;
+    }
   } finally {
     if (!target.dataset.ready) delete target.dataset.loading;
   }
@@ -116,9 +120,11 @@ export function bindVoiceIdentityCore(panel) {
     picker.addEventListener("value-changed", (event) => {
       const value = rawUserId(event.detail?.value || "");
       picker.value = value;
-      hidden.value = value;
-      hidden.dispatchEvent(new Event("input", {bubbles: true}));
-      hidden.dispatchEvent(new Event("change", {bubbles: true}));
+      if (hidden?.isConnected && root.contains(hidden)) {
+        hidden.value = value;
+        hidden.dispatchEvent(new Event("input", {bubbles: true}));
+        hidden.dispatchEvent(new Event("change", {bubbles: true}));
+      }
       updatePolicy(panel);
     });
   }

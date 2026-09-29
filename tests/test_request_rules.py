@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 import json
 from types import SimpleNamespace
 
@@ -319,6 +320,80 @@ def test_only_when_validation_and_legacy_default() -> None:
     ]
     assert validate_rule(rule)["conditions"] == rule["conditions"]
     rule["conditions"] = [{"condition": "state"}]
+    with pytest.raises(ValueError, match="Only when"):
+        validate_rule(rule)
+
+
+@pytest.mark.parametrize(
+    ("condition", "local_time", "expected"),
+    [
+        ({"condition": "time"}, "2026-09-28T12:00:00+00:00", True),
+        (
+            {"condition": "time", "after": "11:00:00", "before": "13:00:00"},
+            "2026-09-28T12:00:00+00:00",
+            True,
+        ),
+        (
+            {"condition": "time", "after": "22:00:00", "before": "06:00:00"},
+            "2026-09-29T02:00:00+00:00",
+            True,
+        ),
+        (
+            {
+                "condition": "time",
+                "after": "11:00:00",
+                "before": "13:00:00",
+                "weekday": ["mon"],
+            },
+            "2026-09-28T12:00:00+00:00",
+            True,
+        ),
+        (
+            {"condition": "time", "after": "14:00:00", "before": "16:00:00"},
+            "2026-09-28T12:00:00+00:00",
+            False,
+        ),
+        (
+            {"condition": "time", "weekday": ["tue"]},
+            "2026-09-28T12:00:00+00:00",
+            False,
+        ),
+    ],
+)
+async def test_native_time_conditions_agree_in_preview_and_request_execution(
+    hass, monkeypatch, condition, local_time, expected
+) -> None:
+    """Saved Home Assistant time conditions execute consistently at runtime."""
+    from custom_components.extended_openai_conversation_responses.request_rule_match_preview import (
+        async_request_rule_match_preview,
+    )
+    from homeassistant.util import dt as dt_util
+
+    fixed_now = datetime.fromisoformat(local_time)
+    monkeypatch.setattr(dt_util, "now", lambda *_args, **_kwargs: fixed_now)
+    rule = local_rule("Time conditioned", phrases=["good night"])
+    rule["conditions"] = [condition]
+    saved_rule = validate_rule(rule)
+    assert saved_rule["conditions"] == [condition]
+    rules = await manager(saved_rule)
+
+    preview = await async_request_rule_match_preview(hass, rules, "good night")
+    assert preview["matched"] is expected
+    hass.services = FakeServices()
+    outcome = await async_evaluate_rule(
+        hass, rules, RequestRuleRuntime(), "good night", "time-condition-session"
+    )
+    if expected:
+        assert outcome is not None and outcome.successful
+        assert len(hass.services.calls) == 1
+    else:
+        assert outcome is None
+        assert hass.services.calls == []
+
+
+def test_invalid_native_time_condition_is_rejected_before_save() -> None:
+    rule = local_rule("Invalid time", phrases=["good night"])
+    rule["conditions"] = [{"condition": "time", "after": "not-a-time"}]
     with pytest.raises(ValueError, match="Only when"):
         validate_rule(rule)
 

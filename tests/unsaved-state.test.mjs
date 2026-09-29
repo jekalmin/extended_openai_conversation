@@ -24,7 +24,10 @@ for (const view of ["capabilities/guest-mode", "capabilities/quiet-hours"]) {
   test(`${view}: authoritative save and failure preserve draft`, async () => {
     let fail = true;
     const panel = {_agentId: "a", _viewKey: () => view, _result: {config: {enabled: false}, revision: "v1"},
-      _call: async (_section, _action, payload) => { assert.equal(payload.revision, "v1"); if (fail) throw Error("offline"); return {config: {enabled: true}, revision: "v2"}; }};
+      _call: async (_section, action, payload) => {
+        if (view === "capabilities/guest-mode" && action === "details") return {policy: {readable_entity_count: 1, controllable_entity_count: 1, configured_tool_count: 0}};
+        assert.equal(payload.revision, "v1"); if (fail) throw Error("offline"); return {config: {enabled: true}, revision: "v2"};
+      }};
     initializePageDraft(panel); const scope = currentPageScope(panel);
     scope.read().enabled = true;
     await assert.rejects(scope.save(), /offline/);
