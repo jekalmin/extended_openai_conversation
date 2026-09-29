@@ -638,6 +638,15 @@ class ExtendedOpenAIAgentEntity(
         surround debug capture, request caches, Voice Identity and reconciliation.
         No installer may replace this method or any of its request-entry owners.
         """
+        if not user_input.text.strip():
+            response = intent.IntentResponse(language=user_input.language)
+            response.async_set_speech("")
+            return ConversationResult(
+                response=response,
+                conversation_id=user_input.conversation_id,
+                continue_conversation=False,
+            )
+
         with bind_active_ha_context(user_input.context):
             async with conversation_request_lease(self):
                 with conversation_debug_trace(self, user_input) as trace:
