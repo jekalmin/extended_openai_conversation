@@ -673,6 +673,20 @@ function collectionToolIndex(panel, control) {
   return (panel._draft.functions || []).findIndex(tool => tool.spec?.name === name);
 }
 
+function queueFunctionGroupMutation(panel, operation) {
+  const previous = panel._eocFunctionGroupUiTail || Promise.resolve();
+  const pending = previous.catch(() => {}).then(async () => {
+    const backendTail = panel._eocFunctionMutationTail;
+    if (backendTail) await backendTail.catch(() => {});
+    return operation();
+  });
+  const tracked = pending.finally(() => {
+    if (panel._eocFunctionGroupUiTail === tracked) panel._eocFunctionGroupUiTail = null;
+  });
+  panel._eocFunctionGroupUiTail = tracked;
+  return tracked;
+}
+
 function bindToolCollection(panel) {
   const root = panel.shadowRoot;
   const host = root.querySelector(".tools-surface");
@@ -689,13 +703,28 @@ function bindToolCollection(panel) {
     if (button.matches(".edit-group")) return openFunctionGroup(panel, button.dataset.groupId);
     if (button.matches(".delete-group")) {
       const group = (panel._draft.function_groups || []).find(item => item.id === button.dataset.groupId);
-      if (!group || !await panel._confirm("Delete function group?", `The group “${group.name}” will be removed. Its functions will not be deleted; they will move to Always available.`, "Delete group")) return;
+      panel._eocDeletingFunctionGroups ||= new Set();
+      if (!group || panel._eocDeletingFunctionGroups.has(group.id)
+        || !await panel._confirm("Delete function group?", `The group “${group.name}” will be removed. Its functions will not be deleted; they will move to Always available.`, "Delete group")) return;
+      if (panel._eocDeletingFunctionGroups.has(group.id)) return;
+      panel._eocDeletingFunctionGroups.add(group.id);
+      const idleLabel = button.textContent;
+      button.disabled = true;
+      button.textContent = "Deleting…";
+      button.setAttribute("aria-busy", "true");
       try {
-        const result = await panel._call("tools", "delete_group", {group_id: group.id, confirm: true});
+        const result = await queueFunctionGroupMutation(panel, () => panel._call("tools", "delete_group", {group_id: group.id, confirm: true}));
         synchronizePersistedFunctions(panel, result);
         panel._toast("Function group deleted");
         panel._render();
-      } catch (err) { panel._toast(`Unable to delete group: ${err.message || String(err)}`, true); }
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = idleLabel;
+        button.removeAttribute("aria-busy");
+        panel._toast(`Unable to delete group: ${err.message || String(err)}`, true);
+      } finally {
+        panel._eocDeletingFunctionGroups.delete(group.id);
+      }
       return;
     }
     const index = collectionToolIndex(panel, button);
@@ -758,7 +787,11 @@ function bindToolCollection(panel) {
     input.disabled = true;
     try {
       const result = isGroup
-        ? await panel._call("tools", "save_group", {group: {...item, enabled}, original_id: item.id})
+        ? await queueFunctionGroupMutation(panel, () => {
+            const latest = (panel._draft.function_groups || []).find(group => group.id === item.id);
+            if (!latest) throw new Error("The Function Group no longer exists");
+            return panel._call("tools", "save_group", {group: {...latest, enabled}, original_id: latest.id});
+          })
         : await panel._call("tools", "set_enabled", {name: item.spec.name, enabled});
       synchronizePersistedFunctions(panel, result);
       const references = result.references || {};
@@ -922,7 +955,7 @@ async function saveFunctionGroup(panel) {
   error.textContent="Saving...";
   panel._setSaving(button, true);
   try {
-    const result=await panel._call("tools","save_group",{group:{id,name,description,loading_mode,functions,guest_allowed},...(panel._groupOriginalId?{original_id:panel._groupOriginalId}:{})});
+    const result=await queueFunctionGroupMutation(panel,()=>panel._call("tools","save_group",{group:{id,name,description,loading_mode,functions,guest_allowed},...(panel._groupOriginalId?{original_id:panel._groupOriginalId}:{})}));
     synchronizePersistedFunctions(panel,result);
     root.querySelector("#group-dialog").close();
     panel._toast("Function group saved");
@@ -932,28 +965,34 @@ async function saveFunctionGroup(panel) {
 }
 
 async function assignToolToGroup(panel, select) {
-  const config = panel._draft || panel._result?.config || {};
-  const tools = config.functions || [];
-  const groups = config.function_groups || [];
   const name = select.closest?.("[data-tool-key]")?.dataset.toolKey;
-  const current = groups.find(group => (group.functions || []).includes(name));
   const targetId = select.value;
-  if (!name || (current?.id || "") === targetId) return;
+  if (!name) return;
   select.disabled = true;
+  let previousGroupId = "";
   try {
-    const target = targetId ? groups.find(group => group.id === targetId) : current;
-    if (!target) throw new Error("The selected Function Group no longer exists");
-    const functions = targetId
-      ? [...new Set([...(target.functions || []), name])]
-      : (target.functions || []).filter(item => item !== name);
-    const result = await panel._call("tools", "save_group", {
-      group: {...target, functions}, original_id: target.id,
+    const result = await queueFunctionGroupMutation(panel, async () => {
+      const config = panel._draft || panel._result?.config || {};
+      const groups = config.function_groups || [];
+      const current = groups.find(group => (group.functions || []).includes(name));
+      previousGroupId = current?.id || "";
+      if (previousGroupId === targetId) return null;
+      const target = targetId ? groups.find(group => group.id === targetId) : current;
+      if (!target) throw new Error("The selected Function Group no longer exists");
+      const functions = targetId
+        ? [...new Set([...(target.functions || []), name])]
+        : (target.functions || []).filter(item => item !== name);
+      return panel._call("tools", "save_group", {
+        group: {...target, functions}, original_id: target.id,
+      });
     });
+    if (!result) return;
     synchronizePersistedFunctions(panel, result);
-    panel._toast(targetId ? `${name} moved to ${target.name}` : `${name} is now available on every request`);
+    const target = (panel._draft.function_groups || []).find(group => group.id === targetId);
+    panel._toast(targetId ? `${name} moved to ${target?.name || targetId}` : `${name} is now available on every request`);
     panel._render();
   } catch (err) {
-    select.value = current?.id || "";
+    select.value = previousGroupId;
     panel._toast(`Unable to change Function Group: ${err.message || String(err)}`, true);
   } finally { select.disabled = false; }
 }
