@@ -79,7 +79,14 @@ test("nightly model capability transitions and dedicated reset stay coherent", a
 
   await expect(panel.locator('#config-api_mode option[value="chat_completions"]')).toBeDisabled();
 
-  await panel.evaluate((host) => host._navigate("assistant", "model-responses"));
+  await panel.evaluate(async (host) => {
+    await host._navigate("assistant", "model-responses");
+    if (host._modelCatalogData?.model_capabilities) {
+      host._result.model_capabilities = host._modelCatalogData.model_capabilities;
+      host._result.options = host._configData.options;
+      host._render();
+    }
+  });
   await expect(panel.locator("#reset-model-parameters")).toBeVisible();
   await expect(panel.locator("#config-temperature")).toBeVisible();
   await expect(panel.locator("#config-temperature")).toBeDisabled();
