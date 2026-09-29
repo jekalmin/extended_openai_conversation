@@ -901,8 +901,16 @@ class RequestRules:
             if cached is None or cached[0] != conditions:
                 checkers = []
                 for config in conditions:
+                    # validate_rule validates native HA condition schemas, but
+                    # the persisted representation remains JSON-friendly (for
+                    # example, time bounds stay strings). Normalize it again
+                    # before constructing HA's checker: async_validate_condition_config
+                    # does not apply the built-in schemas for every condition,
+                    # and the native time checker treats an unparsed time string
+                    # as an entity ID.
+                    checked = cv.CONDITION_SCHEMA(deepcopy(config))
                     checked = await ha_condition.async_validate_condition_config(
-                        hass, deepcopy(config)
+                        hass, checked
                     )
                     checkers.append(await ha_condition.async_from_config(hass, checked))
                 cached = (deepcopy(conditions), tuple(checkers))
