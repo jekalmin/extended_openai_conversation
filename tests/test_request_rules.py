@@ -193,16 +193,20 @@ async def test_condition_checker_is_rebuilt_after_edit_and_restore(
     rules = await manager(rule)
     await rules.async_match(hass, "hello")
     await rules.async_match(hass, "hello")
-    assert built == ["input_boolean.old"]
+    assert built == [["input_boolean.old"]]
     edited = deepcopy(rules.snapshot()["rules"][0])
     edited["conditions"][0]["entity_id"] = "input_boolean.new"
     await rules.async_update(edited["id"], edited)
     await rules.async_match(hass, "hello")
-    assert built == ["input_boolean.old", "input_boolean.new"]
+    assert built == [["input_boolean.old"], ["input_boolean.new"]]
     backup = await rules.async_backup_data()
     await rules.async_replace_backup(backup)
     await rules.async_match(hass, "hello")
-    assert built == ["input_boolean.old", "input_boolean.new", "input_boolean.new"]
+    assert built == [
+        ["input_boolean.old"],
+        ["input_boolean.new"],
+        ["input_boolean.new"],
+    ]
 
 
 async def test_only_when_does_not_check_nonmatching_rule_and_stops_on_error(
