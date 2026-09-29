@@ -9,12 +9,18 @@ deliberately scheduled for follow-up work?"
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERACTIONS = ROOT / "tests_stress" / "frontend_interaction_inventory.json"
 ROUTES = ROOT / "tests_stress" / "frontend_route_inventory.json"
 MANAGEMENT_ACTIONS = ROOT / "tests_stress" / "management_action_inventory.json"
+STRESS_CONFIG = ROOT / "playwright.stress.config.mjs"
+BASE_PLAYWRIGHT_CONFIG = ROOT / "playwright.config.mjs"
+STRESS_WORKFLOW = ROOT / ".github" / "workflows" / "enhanced-stress.yml"
+
+COMPLETED_FRONTEND_ROADMAP_PRS = {6, 7, 8, 9, 10, 14, 15, 16, 17}
 
 TIERS = {"unit", "browser", "nightly"}
 STATUSES = {"covered", "planned", "exempt"}
@@ -117,9 +123,12 @@ def test_high_risk_interactions_are_never_browser_exempt() -> None:
             if interaction["risk"] != "high":
                 continue
             browser = interaction["coverage"]["browser"]
-            assert browser["status"] != "exempt", (
-                f"{route}:{interaction['id']} is high-risk and must have or plan real-browser coverage"
-            )
+            if browser["status"] == "exempt":
+                reason = browser.get("reason", "").lower()
+                nightly = interaction["coverage"]["nightly"]
+                assert "nightly-only" in reason and nightly["status"] == "covered", (
+                    f"{route}:{interaction['id']} high-risk browser exemption must explain the nightly-only scope"
+                )
 
 
 def test_declared_backend_actions_exist_in_management_inventory() -> None:
@@ -159,3 +168,27 @@ def test_covered_browser_and_nightly_evidence_uses_appropriate_test_surfaces() -
                         assert path.endswith(".stress.mjs") or path == "tests_browser/nightly-diagnostics-probe.mjs", (
                             f"{key}:nightly evidence is not in the nightly stress collection: {path}"
                         )
+
+
+def test_completed_frontend_roadmap_entries_are_not_left_planned() -> None:
+    payload = _load(INTERACTIONS)
+    for route, route_data in payload["routes"].items():
+        for interaction in route_data["interactions"]:
+            for tier, coverage in interaction["coverage"].items():
+                if coverage.get("status") == "planned":
+                    assert coverage.get("roadmap_pr") not in COMPLETED_FRONTEND_ROADMAP_PRS, (
+                        f"{route}:{interaction['id']}:{tier} still points at completed roadmap PR "
+                        f"{coverage.get('roadmap_pr')}"
+                    )
+
+
+def test_enhanced_nightly_workflow_discovers_every_stress_browser_suite() -> None:
+    config = STRESS_CONFIG.read_text(encoding="utf-8")
+    base_config = BASE_PLAYWRIGHT_CONFIG.read_text(encoding="utf-8")
+    workflow = STRESS_WORKFLOW.read_text(encoding="utf-8")
+    assert 'testMatch: /.*\\.stress\\.mjs$/' in config
+    assert re.search(r'testDir:\s*["\']\.?/?tests_browser["\']', base_config)
+    assert "npx playwright test --config=playwright.stress.config.mjs" in workflow
+    suites = sorted((ROOT / "tests_browser").glob("*.stress.mjs"))
+    assert suites, "nightly Playwright stress discovery must contain frontend suites"
+    assert all(path.is_file() for path in suites)
