@@ -80,7 +80,7 @@ async function configureCase(panel, item, index, groupId) {
     }
   }
 
-  await panel.locator("#rule-advanced summary").click();
+  await panel.locator("#rule-advanced").evaluate((details) => { details.open = true; });
   if (item.continueMatching) await panel.locator("#rule-continue-matching").check();
   if (item.custom) {
     await panel.locator("#rule-matching-behavior").selectOption("custom");
@@ -96,6 +96,7 @@ async function configureCase(panel, item, index, groupId) {
 async function assertCase(panel, item, index, groupId) {
   const card = panel.locator(".request-rule-card").filter({hasText:nameFor(index, item)});
   await card.locator(".rule-edit").click();
+  await panel.locator("#rule-advanced").evaluate((details) => { details.open = true; });
   await expect(panel.locator("#rule-name")).toHaveValue(nameFor(index, item));
   await expect(panel.locator("#rule-phrases")).toHaveValue(phraseFor(index, item));
   await expect(panel.locator("#rule-match")).toHaveValue(item.match);

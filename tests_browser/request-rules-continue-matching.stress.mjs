@@ -31,7 +31,7 @@ test("nightly Continue Matching chain survives repeated authoring and fresh load
       target:{entity_id:`light.continuation_${index + 1}`},
     }]);
     if (index < 4) {
-      await panel.locator("#rule-advanced summary").click();
+      await panel.locator("#rule-advanced").evaluate((details) => { details.open = true; });
       await panel.locator("#rule-continue-matching").check();
     }
     if (index === 2) {
@@ -48,6 +48,7 @@ test("nightly Continue Matching chain survives repeated authoring and fresh load
   for (let index = 0; index < created.length; index += 1) {
     const card = panel.locator(".request-rule-card").filter({hasText:created[index]});
     await card.locator(".rule-edit").click();
+    await panel.locator("#rule-advanced").evaluate((details) => { details.open = true; });
     await expect(panel.locator("#rule-continue-matching")).toBeChecked({checked:index < 4});
     if (index === 2) await expect(panel.locator("#rule-conditions-body")).toBeVisible();
     await panel.locator(".rule-close").first().click();
