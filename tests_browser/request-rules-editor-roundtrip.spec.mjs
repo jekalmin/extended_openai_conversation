@@ -97,7 +97,6 @@ test("Request Rule editor round-trips local and routing forms through reopen and
   await setHaSelector(panel.locator("#rule-action-sequence-host ha-selector"), actions);
   await panel.locator("#rule-success").fill("Local success");
   await panel.locator("#rule-failure").fill("Local failure");
-  await panel.locator("#rule-ai-input-mode").selectOption("original");
   await panel.locator("#rule-add-conditions").click();
   await setHaSelector(panel.locator("#rule-condition-host ha-selector"), conditions);
   await panel.locator("#rule-advanced summary").click();
@@ -124,7 +123,6 @@ test("Request Rule editor round-trips local and routing forms through reopen and
   await panel.locator("#rule-reasoning").selectOption("medium");
   await panel.locator("#rule-scope").selectOption("request");
   await panel.locator("#rule-continue-to-ai").check();
-  await panel.locator("#rule-ai-input-mode").selectOption("original");
   await panel.locator("#rule-save").click();
 
   await openRule(panel, "Round-trip routing");
