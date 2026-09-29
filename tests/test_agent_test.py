@@ -950,7 +950,7 @@ async def test_unexpected_probe_error_marks_compatible_web_search_failed(
         {
             "successful": False,
             **_usage_attribution(
-                model=agent_test.DEFAULT_CHAT_MODEL,
+                model="gpt-5.6",
                 api_mode=agent_test.API_MODE_RESPONSES,
             ),
         }
