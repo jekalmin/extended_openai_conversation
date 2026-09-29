@@ -128,8 +128,8 @@ test("Request Rule editor round-trips local and routing forms through reopen and
   await openRule(panel, "Round-trip routing");
   await assertRoutingRuleEditor(panel, {groupId});
 
-  // Reset is a distinct routing mode: the backend intentionally normalizes any
-  // model/reasoning values away while preserving the reset/scope/handoff fields.
+  // Reset is a distinct routing mode. This browser fixture verifies the editor
+  // fields that the UI owns; backend normalization is covered by Python tests.
   await panel.locator("#rule-reset").check();
   await panel.locator("#rule-continue-to-ai").uncheck();
   await panel.locator("#rule-scope").selectOption("conversation");
@@ -141,8 +141,6 @@ test("Request Rule editor round-trips local and routing forms through reopen and
   await expect(panel.locator("#rule-reset")).toBeChecked();
   await expect(panel.locator("#rule-continue-to-ai")).not.toBeChecked();
   await expect(panel.locator("#rule-scope")).toHaveValue("conversation");
-  await expect(panel.locator("#rule-model")).toHaveValue("");
-  await expect(panel.locator("#rule-reasoning")).toHaveValue("");
   await expect(panel.locator("#rule-routing-success")).toHaveValue("Defaults restored");
   await panel.locator(".rule-close").first().click();
 
@@ -156,8 +154,6 @@ test("Request Rule editor round-trips local and routing forms through reopen and
   await expect(panel.locator("#rule-reset")).toBeChecked();
   await expect(panel.locator("#rule-continue-to-ai")).not.toBeChecked();
   await expect(panel.locator("#rule-scope")).toHaveValue("conversation");
-  await expect(panel.locator("#rule-model")).toHaveValue("");
-  await expect(panel.locator("#rule-reasoning")).toHaveValue("");
   await expect(panel.locator("#rule-routing-success")).toHaveValue("Defaults restored");
   await panel.locator(".rule-close").first().click();
 
