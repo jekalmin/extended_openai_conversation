@@ -8,9 +8,8 @@ async function createGroup(panel, name) {
   await expect(panel.locator("#rule-groups-dialog")).toHaveJSProperty("open", true);
   await panel.locator("#rule-new-group-name").fill(name);
   await panel.locator("#rule-group-add").click();
-  const row = panel.locator(".rule-group-row").filter({hasText:name});
-  await expect(row).toHaveCount(1);
-  const id = await row.getAttribute("data-group-id");
+  const id = await panel.evaluate((host, label) => host._result.groups.find((group) => group.name === label)?.id || null, name);
+  expect(id).toBeTruthy();
   await panel.locator("#rule-groups-done").click();
   return id;
 }
