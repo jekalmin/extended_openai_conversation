@@ -22,7 +22,7 @@ assert.deepEqual(commonCapturedSlotNames(""), []);
 
 assert.equal(suggestResultAlias("get_battery"), "get_battery");
 assert.equal(suggestResultAlias("get-battery"), "get_battery");
-assert.equal(suggestResultAlias("123 battery"), "battery");
+assert.equal(suggestResultAlias("123 battery"), "_battery");
 assert.equal(suggestResultAlias("get_battery", ["get_battery"]), "get_battery_2");
 assert.equal(suggestResultAlias("request"), "request_2");
 
