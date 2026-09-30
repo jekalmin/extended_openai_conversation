@@ -177,6 +177,15 @@ function bindEntityPicker(panel, entities) {
 export function bindExposedAttributeSettings(panel) {
   const root = panel?.shadowRoot;
   if (!root) return;
+  const exposedToggle = root.querySelector('[data-config="exposed_entities_enabled"]');
+  if (exposedToggle && exposedToggle.dataset.eocExposedRefreshBound === undefined) {
+    exposedToggle.dataset.eocExposedRefreshBound = "";
+    exposedToggle.addEventListener("change", () => queueMicrotask(() => {
+      if (panel?._viewKey?.() === "assistant/prompt-context") {
+        rerenderKeepingEditor(panel, panel._exposedAttributeEntityId || null);
+      }
+    }));
+  }
   const catalog = catalogFor(panel);
   const entities = Array.isArray(catalog?.entities) ? catalog.entities : [];
   bindEntityPicker(panel, entities);
