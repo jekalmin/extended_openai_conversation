@@ -20,7 +20,7 @@ STRESS_CONFIG = ROOT / "playwright.stress.config.mjs"
 BASE_PLAYWRIGHT_CONFIG = ROOT / "playwright.config.mjs"
 STRESS_WORKFLOW = ROOT / ".github" / "workflows" / "enhanced-stress.yml"
 
-COMPLETED_FRONTEND_ROADMAP_PRS = {6, 7, 8, 9, 10, 14, 15, 16, 17}
+COMPLETED_FRONTEND_ROADMAP_PRS = {6, 7, 8, 9, 10, 11, 14, 15, 16, 17}
 
 TIERS = {"unit", "browser", "nightly"}
 STATUSES = {"covered", "planned", "exempt"}
