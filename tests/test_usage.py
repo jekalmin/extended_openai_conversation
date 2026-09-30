@@ -805,7 +805,11 @@ async def test_async_get_durable_usage_publishes_single_manager_before_initializ
 
     monkeypatch.setattr(usage, "Store", FakeStore)
     monkeypatch.setattr(usage.UsageManager, "async_initialize", blocked_initialize)
-    hass = SimpleNamespace(data={})
+    listeners = []
+    hass = SimpleNamespace(
+        data={},
+        bus=SimpleNamespace(async_listen_once=lambda *args: listeners.append(args)),
+    )
 
     first_task = asyncio.create_task(usage.async_get_durable_usage(hass, "entry", "agent"))
     await entered.wait()
@@ -820,6 +824,7 @@ async def test_async_get_durable_usage_publishes_single_manager_before_initializ
     assert created[2][2]["private"] is True
     assert created[2][2]["serialize_in_event_loop"] is False
     assert await usage.async_get_durable_usage(hass, "entry", "agent") is first
+    assert len(listeners) == 1
 
 class ResidualMemoryStorage:
     """Small in-memory UsageStorage implementation for residual tests."""

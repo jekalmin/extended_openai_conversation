@@ -97,7 +97,11 @@ from .ha_tool_result_compat import (
 )
 from .helpers import get_api_mode, get_model_config
 from .non_streaming import completed_chat_chunks, completed_responses_events
-from .provider_errors import provider_stream_error, provider_transport_error
+from .provider_errors import (
+    ProviderStreamError,
+    provider_stream_error,
+    provider_transport_error,
+)
 from .provider_loop import MAX_PROVIDER_REQUESTS, assert_provider_loop_completed
 from .request import (
     CONTINUE_CONVERSATION_TOOL,
@@ -764,6 +768,11 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                         )
                     if isinstance(err, (TimeoutError, ConnectionError)):
                         raise provider_transport_error(err) from err
+                    if isinstance(err, ValueError):
+                        raise ProviderStreamError(
+                            "Provider returned malformed data or an invalid event sequence",
+                            error_type=type(err).__name__,
+                        ) from err
                     raise
                 else:
                     try:
@@ -1277,9 +1286,22 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
         response_refusal_lengths: dict[tuple[int | None, int | None], int] = {}
         url_citations: dict[tuple[int | None, int | None], list[dict[str, Any]]] = {}
         terminal_event_seen = False
+        completed_items: set[tuple[Any, Any]] = set()
         async for event in normalized_responses_stream(chat_log, result, request_usage):
             _LOGGER.debug("Received Responses event: %s", event)
             event_type = getattr(event, "type", "")
+            if terminal_event_seen and event_type in {
+                "response.completed",
+                "response.incomplete",
+                "response.output_item.added",
+                "response.output_item.done",
+                "response.output_text.delta",
+                "response.refusal.delta",
+            }:
+                raise ProviderStreamError(
+                    "Provider returned malformed data: event after terminal response",
+                    error_type="invalid_event_sequence",
+                )
 
             if event_type == "response.output_item.added":
                 item_type = getattr(event.item, "type", "")
@@ -1359,6 +1381,14 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             if event_type == "response.output_item.done":
                 item = event.item
+                key = (getattr(event, "output_index", None), getattr(item, "id", None))
+                if key != (None, None):
+                    if key in completed_items:
+                        raise ProviderStreamError(
+                            "Provider returned malformed data: repeated completed output item",
+                            error_type="invalid_event_sequence",
+                        )
+                    completed_items.add(key)
                 item_type = getattr(item, "type", "")
                 if item_type in {"reasoning", "web_search_call"}:
                     # Preserve native hosted-tool and reasoning output so stateless

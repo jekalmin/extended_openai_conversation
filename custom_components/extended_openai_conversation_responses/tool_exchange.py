@@ -490,12 +490,12 @@ async def async_execute_tool_exchange(
             chat_log,
             entity.entity_id,
             pending_tool_calls,
-            error=FunctionNotFound(
-                "Function Tool configuration changed during the provider request"
+            error=HomeAssistantError(
+                "Function Tool configuration changed during the provider request; the pending tool call was stopped"
             ),
         )
-        raise FunctionNotFound(
-            "Function Tool configuration changed during the provider request"
+        raise HomeAssistantError(
+            "Function Tool configuration changed during the provider request; the pending tool call was stopped"
         )
     _reject_duplicate_tool_call_ids(pending_tool_calls)
     prior_results = {
@@ -511,7 +511,8 @@ async def async_execute_tool_exchange(
         for call in pending_tool_calls
     ):
         raise HomeAssistantError(
-            "Provider repeated a tool call whose prior result was not acknowledged"
+            "Provider repeated a tool call whose prior result was not acknowledged. "
+            "Start a new conversation, or complete a turn without this tool before retrying"
         )
     if recovery_state is not None and recovery_state.enabled:
         await _async_execute_with_recovery(

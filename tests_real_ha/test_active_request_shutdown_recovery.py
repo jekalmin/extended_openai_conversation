@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 
 from tests_real_ha.process_harness import run_python_child
 
@@ -21,6 +22,7 @@ DOMAIN = "extended_openai_conversation_responses"
 _CHILD_PHASE = "ACTIVE_REQUEST_SHUTDOWN_PHASE"
 _CONFIG_DIR = "ACTIVE_REQUEST_SHUTDOWN_CONFIG_DIR"
 _STATE_FILE = "active-request-shutdown-state.json"
+_AFTER_TOOL = "ACTIVE_REQUEST_SHUTDOWN_AFTER_TOOL"
 
 
 def _raw_client(agent: Any) -> Any:
@@ -43,6 +45,60 @@ class _BlockingWire:
         self, request: httpx.Request, *args: Any, **kwargs: Any
     ) -> httpx.Response:
         del args, kwargs
+        if os.environ.get(_AFTER_TOOL) == "1" and not self.requests:
+            from tests_real_ha.test_provider_wire_e2e import (
+                _chat_sse_tool_call,
+                _responses_sse_tool_call,
+            )
+
+            self.requests.append(request.url.path)
+            content = (
+                _chat_sse_tool_call()
+                if request.url.path == "/v1/chat/completions"
+                else _responses_sse_tool_call()
+            )
+            if request.url.path == "/v1/responses":
+                events = [
+                    json.loads(part.removeprefix("data: "))
+                    for part in content.decode().split("\n\n")
+                    if part
+                ]
+                events[-1]["response"]["usage"] = {
+                    "input_tokens": 10,
+                    "output_tokens": 3,
+                    "total_tokens": 13,
+                    "input_tokens_details": {
+                        "cached_tokens": 0,
+                        "cache_write_tokens": 0,
+                    },
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                }
+                content = "".join(
+                    f"data: {json.dumps(event)}\n\n" for event in events
+                ).encode()
+            else:
+                usage_chunk = {
+                    "id": "usage",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "gpt-5.6",
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 3,
+                        "total_tokens": 13,
+                    },
+                }
+                content = content.replace(
+                    b"data: [DONE]",
+                    f"data: {json.dumps(usage_chunk)}\n\ndata: [DONE]".encode(),
+                )
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=content,
+                request=request,
+            )
         self.requests.append(request.url.path)
         self.started.set()
         try:
@@ -172,7 +228,7 @@ class _RecoveryWire:
 
 async def _create_entry(hass: Any) -> Any:
     """Create a persisted entry through the integration's real config flow."""
-    from homeassistant.config_entries import ConfigEntryState, SOURCE_USER
+    from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
     from homeassistant.const import CONF_API_KEY, CONF_NAME
     from homeassistant.data_entry_flow import FlowResultType
 
@@ -211,6 +267,20 @@ async def _interrupt_phase(hass: Any, config_dir: Path) -> None:
     agent = conversation.async_get_agent(hass, entry.entry_id)
     assert agent is not None
 
+    markers = []
+    if os.environ.get(_AFTER_TOOL) == "1":
+        from homeassistant.components.homeassistant.exposed_entities import (
+            async_expose_entity,
+        )
+
+        hass.states.async_set("light.provider_wire", "on")
+        async_expose_entity(hass, conversation.DOMAIN, "light.provider_wire", True)
+
+        async def mark(call):
+            markers.append(call.data)
+
+        hass.services.async_register("light", "turn_off", mark)
+
     wire = _BlockingWire()
     raw_client = _raw_client(agent)
     with patch.object(raw_client._client, "send", wire.send):
@@ -228,6 +298,7 @@ async def _interrupt_phase(hass: Any, config_dir: Path) -> None:
             await wire.started.wait()
 
         assert wire.requests, "provider request never reached the real SDK HTTP seam"
+        assert len(markers) == (1 if os.environ.get(_AFTER_TOOL) == "1" else 0)
         (config_dir / _STATE_FILE).write_text(
             json.dumps({"entry_id": entry.entry_id}), encoding="utf-8"
         )
@@ -239,7 +310,11 @@ async def _interrupt_phase(hass: Any, config_dir: Path) -> None:
 
         assert wire.cancelled.is_set(), "provider send did not receive cancellation"
         assert request_task.done(), "conversation task survived Home Assistant shutdown"
-        assert request_task.cancelled(), "interrupted conversation did not end by cancellation"
+        assert request_task.cancelled(), (
+            "interrupted conversation did not end by cancellation"
+        )
+        assert agent._usage.totals.conversation_count == 1
+        assert agent._usage.runs[-1].successful is False
 
 
 async def _recovery_phase(hass: Any, config_dir: Path) -> None:
@@ -258,6 +333,20 @@ async def _recovery_phase(hass: Any, config_dir: Path) -> None:
 
     agent = conversation.async_get_agent(hass, entry.entry_id)
     assert agent is not None
+    usage = agent._usage
+    assert usage.totals.conversation_count == 1
+    assert len(usage.runs) == 1
+    interrupted = usage.runs[0]
+    assert not interrupted.successful
+    assert interrupted.completed_at
+    assert interrupted.error_type == "CancelledError"
+    assert interrupted.tool_call_count == (
+        1 if os.environ.get(_AFTER_TOOL) == "1" else 0
+    )
+    assert interrupted.total_tokens == (13 if os.environ.get(_AFTER_TOOL) == "1" else 0)
+    assert usage.totals.total_tokens == interrupted.total_tokens
+    assert interrupted.failed_request_count == 1
+    assert interrupted.request_count == (2 if os.environ.get(_AFTER_TOOL) == "1" else 1)
     wire = _RecoveryWire("Recovered cleanly after the interrupted request.")
     raw_client = _raw_client(agent)
     with patch.object(raw_client._client, "send", wire.send):
@@ -316,13 +405,16 @@ async def _child_main() -> None:
         await hass.async_stop()
 
 
-def _run_child(config_dir: Path, phase: str) -> subprocess.CompletedProcess[str]:
+def _run_child(
+    config_dir: Path, phase: str, after_tool: bool = False
+) -> subprocess.CompletedProcess[str]:
     return run_python_child(
         __file__,
         cwd=config_dir,
         extra_env={
             _CHILD_PHASE: phase,
             _CONFIG_DIR: str(config_dir),
+            _AFTER_TOOL: "1" if after_tool else "0",
         },
         timeout=90,
     )
@@ -335,8 +427,12 @@ def _assert_child_ok(result: subprocess.CompletedProcess[str], phase: str) -> No
     )
 
 
+@pytest.mark.parametrize("after_tool", [False, True])
+@pytest.mark.usefixtures("socket_enabled")
 def test_shutdown_cancels_inflight_provider_request_and_next_boot_is_healthy(
     tmp_path: Path,
+    after_tool: bool,
+    unused_tcp_port: int,
 ) -> None:
     """Interrupt a live request during HA shutdown, then cold-start and converse."""
     repo_root = Path(__file__).resolve().parent.parent
@@ -346,16 +442,17 @@ def test_shutdown_cancels_inflight_provider_request_and_next_boot_is_healthy(
     destination.parent.mkdir(parents=True)
     shutil.copytree(source, destination)
     (config_dir / "configuration.yaml").write_text(
-        "homeassistant:\n  name: Active Request Shutdown Acceptance\n",
+        "homeassistant:\n  name: Active Request Shutdown Acceptance\n"
+        f"http:\n  server_port: {unused_tcp_port}\n",
         encoding="utf-8",
     )
 
-    interrupted = _run_child(config_dir, "interrupt")
+    interrupted = _run_child(config_dir, "interrupt", after_tool)
     _assert_child_ok(interrupted, "interrupt")
     assert (config_dir / ".storage" / "core.config_entries").exists()
     assert (config_dir / _STATE_FILE).exists()
 
-    recovered = _run_child(config_dir, "recover")
+    recovered = _run_child(config_dir, "recover", after_tool)
     _assert_child_ok(recovered, "recover")
 
 

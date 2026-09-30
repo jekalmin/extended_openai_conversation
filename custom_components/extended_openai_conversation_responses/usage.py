@@ -14,6 +14,7 @@ import time
 from typing import Any, Protocol
 from uuid import uuid4
 
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -23,6 +24,7 @@ from .const import (
     DEFAULT_USAGE_RUN_RETENTION_DAYS,
     DOMAIN,
 )
+from .debug import record_current_run_failure
 
 STORAGE_VERSION = 2
 STORAGE_KEY_PREFIX = f"{DOMAIN}.usage"
@@ -240,6 +242,10 @@ class UsageManager:
             f"usage_run_{id(self)}", default=None
         )
         self._run_started: dict[str, float] = {}
+        self._active_runs: dict[str, asyncio.Task[Any]] = {}
+        self._stopping = False
+        self._shutdown_lock = asyncio.Lock()
+        self._shutdown_registered = False
         self._last_prune_date: str | None = None
         self._next_prune_retry = 0.0
         self._prune_attempt_date: str | None = None
@@ -337,6 +343,9 @@ class UsageManager:
             source_device_id=source_device_id,
         )
         self._run_started[run.run_id] = time.monotonic()
+        task = asyncio.current_task()
+        if task is not None:
+            self._active_runs[run.run_id] = task
         token = self._current_run.set(run)
         try:
             yield run
@@ -346,12 +355,29 @@ class UsageManager:
             raise
         finally:
             self._current_run.reset(token)
-            await self._async_finalize_run(run)
+            try:
+                await self._async_finalize_run(run)
+            finally:
+                self._active_runs.pop(run.run_id, None)
+
+    async def async_shutdown(self, _event: Any = None) -> None:
+        """Cancel active request owners and durably flush their normal finalizers."""
+        async with self._shutdown_lock:
+            self._stopping = True
+            tasks = set(self._active_runs.values()) - {asyncio.current_task()}
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            await self._async_save_aggregates()
+            await self._async_save_details()
 
     def current_run(self) -> UsageRun | None:
         return self._current_run.get()
 
     def mark_current_run_failed(self, error_type: str) -> None:
+        record_current_run_failure(error_type)
         if run := self._current_run.get():
             run.successful = False
             run.error_type = error_type[:128]
@@ -447,6 +473,8 @@ class UsageManager:
             self._notify()
 
     async def _async_finalize_run(self, run: UsageRun) -> None:
+        if not run.successful:
+            record_current_run_failure(run.error_type or "RequestFailed")
         async with self._lock:
             if run.completed_at is None:
                 completed_at = dt_util.utcnow()
@@ -842,6 +870,9 @@ class UsageManager:
     async def _async_save_safely(self, label: str, save: Callable[[], Any]) -> None:
         """Coalesce routine telemetry writes without changing request outcomes."""
         try:
+            if self._stopping:
+                await save()
+                return
             if label in {"request aggregates", "run aggregates"}:
                 if self._schedule_aggregate_snapshots():
                     return
@@ -1174,6 +1205,9 @@ async def async_get_durable_usage(
         # retains the same authoritative manager instance.
         managers[key] = manager
     await manager.async_initialize()
+    if not manager._shutdown_registered:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, manager.async_shutdown)
+        manager._shutdown_registered = True
     return manager
 
 

@@ -308,7 +308,13 @@ async def test_wait_timeout_stops_actions_and_next_request_works(hass, monkeypat
 async def test_failing_ha_action_stops_without_replaying_previous_steps(
     hass, monkeypatch
 ):
+    from custom_components.extended_openai_conversation_responses.debug import (
+        get_debug_manager,
+    )
+
     agent = await _agent(hass)
+    debug = get_debug_manager(hass, agent.entry.entry_id, agent.subentry.subentry_id)
+    debug.configure(enabled=True)
     _provider(monkeypatch, agent, [])
     calls = []
 
@@ -335,5 +341,9 @@ async def test_failing_ha_action_stops_without_replaying_previous_steps(
     )
     assert _speech(await _say(hass, agent, "failing rule")) == "Failed safely"
     assert calls == ["before"]
+    assert debug.summaries()[0]["successful"] is False
+    assert debug.summaries()[0]["error_type"] == "RequestRuleExecutionFailed"
+    assert agent._usage.runs[-1].successful is False
     assert _speech(await _say(hass, agent, "healthy rule")) == "Done"
     assert calls == ["before", "healthy"]
+    assert debug.summaries()[0]["successful"] is True

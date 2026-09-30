@@ -494,6 +494,13 @@ def current_debug_trace() -> DebugTrace | None:
     return _ACTIVE_DEBUG_TRACE.get()
 
 
+def record_current_run_failure(error_type: str) -> None:
+    """Observe the same handled terminal failure signal used by Usage."""
+    trace = current_debug_trace()
+    if trace is not None and trace.error_type is None:
+        trace.error_type = error_type[:128]
+
+
 def record_current_provider_failure(error: BaseException) -> None:
     """Attach a provider failure to the active opt-in debug trace, if any."""
     trace = current_debug_trace()

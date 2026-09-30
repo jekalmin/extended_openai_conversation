@@ -307,13 +307,19 @@ async def test_execute_tool_exchange_empty_batch_is_noop() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change", ["identical_recreated", "max_tokens", "prompt", "function_tools"]
+)
 async def test_delete_recreate_identical_tool_cannot_rebind_outstanding_call(
     monkeypatch,
+    change,
 ) -> None:
     _patch_content_types(monkeypatch)
     old_data = {"function_tools": "same bytes"}
     new_data = {"function_tools": "same bytes"}
-    assert old_data == new_data and old_data is not new_data
+    if change != "identical_recreated":
+        new_data[change] = "changed while provider was pending"
+    assert old_data is not new_data
     subentry = SimpleNamespace(data=new_data)
     entry = SimpleNamespace(subentries={"agent": subentry})
     call = _call("call-1")
@@ -329,7 +335,7 @@ async def test_delete_recreate_identical_tool_cannot_rebind_outstanding_call(
         _execute_function_tool=execute,
     )
 
-    with pytest.raises(FunctionNotFound, match="configuration changed"):
+    with pytest.raises(HomeAssistantError, match=r"configuration changed.*stopped"):
         await tool_exchange.async_execute_tool_exchange(
             entity,
             chat_log,
@@ -343,6 +349,42 @@ async def test_delete_recreate_identical_tool_cannot_rebind_outstanding_call(
 
     execute.assert_not_awaited()
     assert chat_log.added[0].tool_call_id == "call-1"
+
+
+async def test_failed_tool_result_remains_ambiguous_with_fresh_call_id(monkeypatch):
+    """A FunctionNotFound result alone does not certify that execution never began."""
+    from custom_components.extended_openai_conversation_responses.tool_replay_guard import (
+        clear_unacknowledged_calls,
+        remember_unacknowledged_calls,
+        was_unacknowledged_equivalent,
+    )
+
+    _patch_content_types(monkeypatch)
+    original = _call("old-id")
+    log = FakeChatLog(
+        [
+            FakeAssistantContent([original]),
+            FakeToolResultContent(
+                "agent", "old-id", "demo", {"error": "function does not exist"}
+            ),
+        ]
+    )
+    log.conversation_id = "ambiguous"
+    execute = AsyncMock()
+    entity = SimpleNamespace(entity_id="agent", _execute_function_tool=execute)
+    remember_unacknowledged_calls(entity, log, set())
+    retry = _call("fresh-provider-id")
+    assert was_unacknowledged_equivalent(entity, log, retry)
+    with pytest.raises(HomeAssistantError, match="Start a new conversation"):
+        await tool_exchange.async_execute_tool_exchange(
+            entity, log, [retry], [_tool()], FunctionCallBudget(2), None, []
+        )
+    execute.assert_not_awaited()
+    fresh = FakeChatLog()
+    fresh.conversation_id = "fresh"
+    assert not was_unacknowledged_equivalent(entity, fresh, retry)
+    clear_unacknowledged_calls(entity, "ambiguous")
+    assert not was_unacknowledged_equivalent(entity, log, retry)
 
 
 @pytest.mark.asyncio
