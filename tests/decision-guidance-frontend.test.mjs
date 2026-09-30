@@ -9,6 +9,7 @@ import {
   requestRuleSummary,
   renderLiveRequestTester,
   restoreScopeMarkup,
+  bindDecisionRequestRules,
 } from "../custom_components/extended_openai_conversation_responses/frontend/management-decision-guidance.js";
 
 assert.equal(
@@ -84,7 +85,7 @@ assert.match(renderLiveRequestTester(), /Run full request \(live\)/);
 assert.match(restoreScopeMarkup({_selectedAgent:()=>({title:"Kitchen"}),_e:String}), /This backup will replace:.*Kitchen/);
 assert.match(source, /eoc-rule-live-test/);
 assert.match(source, /Run full request\?/);
-assert.match(source, /panel\._call\("request_rules", "test", \{text\}\)/);
+assert.match(source, /panel\._call\("request_rules", "test", \{text, confirm: true\}\)/);
 assert.match(await readFile(new URL("../custom_components/extended_openai_conversation_responses/frontend/management-confirmation-scope.js", import.meta.url), "utf8"), /eoc-confirm-scope/);
 assert.match(source, /This backup will replace:/);
 assert.match(source, /Request Rule “\$\{rule\.name\}”/);
@@ -96,3 +97,37 @@ const panelSource = await readFile(
 assert.match(panelSource, /from "\.\/management-confirmation-scope\.js"/);
 assert.match(panelSource, /enhanceConfirmationScope\(this, subject\)/);
 assert.doesNotMatch(source, /prototype\._confirm|installManagementDecisionGuidance/);
+
+// Retained bindings and concurrent confirmation gestures cannot duplicate execution.
+const listeners = {};
+const input = {value: "hello", addEventListener: (name, fn) => { listeners[name] = fn; }};
+const button = {disabled: false, addEventListener: (name, fn) => { listeners[name] = fn; }};
+const output = {textContent: ""};
+const section = {dataset: {}, querySelector: (id) => ({"#eoc-rule-live-text": input, "#eoc-rule-live-run": button, "#eoc-rule-live-result": output}[id])};
+let approve;
+let calls = 0;
+let confirmations = 0;
+const livePanel = {
+  shadowRoot: {querySelector: () => section, addEventListener: () => {}},
+  _confirm: () => { confirmations++; return new Promise(resolve => { approve = resolve; }); },
+  _call: async (section, action, payload) => {
+    calls++;
+    assert.deepEqual([section, action, payload], ["request_rules", "test", {text: "hello", confirm: true}]);
+    return {response: "Real speech", conversation_id: "real-cid"};
+  },
+};
+bindDecisionRequestRules(livePanel);
+bindDecisionRequestRules(livePanel);
+listeners.click();
+listeners.click();
+assert.equal(confirmations, 1);
+approve(true);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(calls, 1);
+assert.equal(button.disabled, false);
+assert.match(output.textContent, /real-cid/);
+listeners.click();
+approve(false);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(calls, 1);
+assert.equal(button.disabled, false);

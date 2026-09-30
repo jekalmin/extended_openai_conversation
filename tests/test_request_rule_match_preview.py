@@ -116,7 +116,7 @@ def test_preview_summarizes_model_routing_and_no_match() -> None:
     assert request_rule_match_preview(None) == {"matched": False}
 
 
-@pytest.mark.parametrize("action", ["test", "test_match"])
+@pytest.mark.parametrize("action", ["test_match"])
 async def test_management_test_actions_never_delegate_to_real_processing(
     monkeypatch: pytest.MonkeyPatch, action: str
 ) -> None:

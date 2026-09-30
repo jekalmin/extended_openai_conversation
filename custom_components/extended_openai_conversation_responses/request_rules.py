@@ -2504,8 +2504,19 @@ async def async_evaluate_rule(
     """Apply each eligible rule once, stopping on handoff or failure."""
     matching_revision = rules.revision() if isinstance(rules, RequestRules) else None
 
+    execution_started = False
+
+    def commit_execution_snapshot() -> None:
+        nonlocal execution_started
+        require_matching_revision()
+        execution_started = True
+
     def require_matching_revision() -> None:
-        if matching_revision is not None and rules.revision() != matching_revision:
+        if (
+            not execution_started
+            and matching_revision is not None
+            and rules.revision() != matching_revision
+        ):
             raise HomeAssistantError(
                 "Request Rules changed during matching; please retry"
             )
@@ -2533,6 +2544,7 @@ async def async_evaluate_rule(
             function_executor,
             context,
             require_matching_revision=require_matching_revision,
+            commit_execution_snapshot=commit_execution_snapshot,
         )
         require_matching_revision()
         return evaluation
@@ -2556,6 +2568,7 @@ async def async_evaluate_rule(
                 context,
                 request_override,
                 require_matching_revision=require_matching_revision,
+                commit_execution_snapshot=commit_execution_snapshot,
             )
             require_matching_revision()
             action = match.rule["action"]
@@ -2619,6 +2632,7 @@ async def _async_evaluate_matched_rule(
     context: Context | None,
     prior_request_override: Mapping[str, str] | None = None,
     require_matching_revision: Callable[[], None] | None = None,
+    commit_execution_snapshot: Callable[[], None] | None = None,
 ) -> RuleEvaluation:
     """Execute one already matched and condition-eligible rule."""
     rule = match.rule
@@ -2670,6 +2684,11 @@ async def _async_evaluate_matched_rule(
             )
             if require_matching_revision is not None:
                 require_matching_revision()
+            # Once the validated native script starts, its frozen actions may
+            # produce external effects. Later edits apply to future requests;
+            # they must never invite a retry of an already executed action.
+            if commit_execution_snapshot is not None:
+                commit_execution_snapshot()
             script = Script(
                 hass,
                 validated_actions,

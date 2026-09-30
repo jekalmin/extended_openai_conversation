@@ -101,6 +101,7 @@ from .local_intents import (
     CONF_LOCAL_INTENT_DELAYED_COMMANDS_TO_AI,
     CONF_LOCAL_INTENT_EXCLUSIONS,
     CONF_LOCAL_INTENTS_ENABLED,
+    _conversation_entity_id,
     local_handling_snapshot,
 )
 from .management_browser import async_browse_memories
@@ -650,6 +651,23 @@ async def async_request_rules_command(request: _ManagementRequest) -> dict[str, 
         text = message.get("text")
         if not isinstance(text, str) or not text.strip():
             raise HomeAssistantError("Test request text is required")
+        if action == "test":
+            if message.get("confirm") is not True:
+                raise HomeAssistantError("Confirm the live request before running it")
+            entity_id = _conversation_entity_id(hass, entry_id, subentry_id)
+            if entity_id is None:
+                raise HomeAssistantError(
+                    "The selected conversation agent is unavailable"
+                )
+            result = await hass.services.async_call(
+                DOMAIN,
+                "process",
+                {"agent_id": entity_id, "text": text},
+                blocking=True,
+                return_response=True,
+                context=Context(user_id=request.user_id),
+            )
+            return dict(result or {})
         rules = await async_get_request_rules(hass, entry_id, subentry_id)
         return await async_request_rule_match_preview(hass, rules, text)
     if action in {"create", "update"}:

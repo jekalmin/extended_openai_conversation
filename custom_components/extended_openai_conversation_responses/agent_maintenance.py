@@ -171,8 +171,8 @@ async def management_command_lease(
 ) -> AsyncIterator[None]:
     """Hold the original Management lease across validation, dispatch and projection.
 
-    Backup and provider diagnostics own their gates. The legacy Request Rules
-    ``test`` exemption is retained even though testing now only previews matching.
+    Backup, provider diagnostics and live Request Rules tests own their gates
+    inside the normal execution pipeline.
     """
     entry_id = message.get("entry_id")
     subentry_id = message.get("subentry_id")

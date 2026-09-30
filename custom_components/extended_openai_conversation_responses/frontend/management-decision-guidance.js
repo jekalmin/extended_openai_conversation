@@ -121,16 +121,16 @@ function bindLiveRequest(panel, section) {
   const run = async () => {
     const text = input.value.trim();
     if (!text || button.disabled) return;
-    const confirmed = await panel._confirm(
-      "Run full request?",
-      "This uses the assistant's real processing path. It may execute Home Assistant actions, change conversation routing, or call the AI provider.",
-      "Run live request",
-    );
-    if (!confirmed) return;
     button.disabled = true;
-    output.textContent = "Processing live request…";
     try {
-      const response = await panel._call("request_rules", "test", {text});
+      const confirmed = await panel._confirm(
+        "Run full request?",
+        "This uses the assistant's real processing path. It may execute Home Assistant actions, change conversation routing, or call the AI provider.",
+        "Run live request",
+      );
+      if (!confirmed) return;
+      output.textContent = "Processing live request…";
+      const response = await panel._call("request_rules", "test", {text, confirm: true});
       output.textContent = formatLiveRequestResult(response);
     } catch (err) {
       output.textContent = err.message || String(err);

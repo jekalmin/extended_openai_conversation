@@ -236,10 +236,10 @@ async def test_request_rule_test_defaults_duplicate_move_and_errors(
     rules.async_match = AsyncMock(return_value=None)
     with pytest.raises(HomeAssistantError, match="Test request text is required"):
         await management_ui.async_management_command(
-            hass, "admin", True, _message("request_rules", "test", text=" ")
+            hass, "admin", True, _message("request_rules", "test_match", text=" ")
         )
     result = await management_ui.async_management_command(
-        hass, "admin", True, _message("request_rules", "test", text=" hello ")
+        hass, "admin", True, _message("request_rules", "test_match", text=" hello ")
     )
     assert result["matched"] is False
     rules.async_match.assert_awaited_once()
