@@ -480,6 +480,50 @@ def _assist_fixture(monkeypatch):
     return entity, invoke, logs, seen
 
 
+@pytest.mark.parametrize("blank", ["   ", "\t", "\n", " \t\n "])
+async def test_blank_assist_input_is_ignored_before_conversation_processing(
+    monkeypatch, blank
+):
+    entity, invoke, logs, seen = _assist_fixture(monkeypatch)
+    resolve = AsyncMock(wraps=entity._continuity.async_resolve)
+    monkeypatch.setattr(entity._continuity, "async_resolve", resolve)
+    entity._usage = SimpleNamespace(async_run=MagicMock())
+    entity._archive = SimpleNamespace(async_record_turn=AsyncMock())
+
+    result = await invoke(blank, incoming="existing-conversation")
+
+    assert result.conversation_id == "existing-conversation"
+    assert result.continue_conversation is False
+    assert result.response.speech["plain"]["speech"] == ""
+    assert logs == []
+    assert seen == []
+    resolve.assert_not_awaited()
+    entity._usage.async_run.assert_not_called()
+    entity._archive.async_record_turn.assert_not_awaited()
+
+
+async def test_blank_assist_input_does_not_replay_established_history(monkeypatch):
+    entity, invoke, logs, seen = _assist_fixture(monkeypatch)
+    entity.subentry.data[CONF_CONVERSATION_CONTINUITY] = CONVERSATION_CONTINUITY_DEVICE
+
+    first = await invoke("Remember the blue mug")
+    assert len(logs) == 1
+    assert len(seen) == 1
+
+    resolve = AsyncMock(wraps=entity._continuity.async_resolve)
+    monkeypatch.setattr(entity._continuity, "async_resolve", resolve)
+    provider_calls = entity._async_handle_chat_log.await_count
+
+    blank = await invoke("   ", incoming=first.conversation_id)
+
+    assert blank.conversation_id == first.conversation_id
+    assert blank.response.speech["plain"]["speech"] == ""
+    assert len(logs) == 1
+    assert len(seen) == 1
+    assert entity._async_handle_chat_log.await_count == provider_calls
+    resolve.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     ("mode", "second_device", "expired", "resumes"),
     [

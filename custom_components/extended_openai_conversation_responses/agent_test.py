@@ -26,6 +26,7 @@ from .const import (
     CONF_SKILLS,
     CONF_WEB_SEARCH,
     DEFAULT_API_MODE,
+    DEFAULT_API_PROVIDER,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_FUNCTION_TOOLS,
     DEFAULT_FUNCTION_GROUPS,
@@ -142,6 +143,9 @@ async def async_test_agent(
     with model_capability_snapshot(model, metadata):
         api_mode = get_api_mode(configured_mode, model)
     checks.append(_check("API mode", "Passed", api_mode.replace("_", " ").title()))
+    usage_provider = str(entry.data.get(CONF_API_PROVIDER, DEFAULT_API_PROVIDER))
+    usage_model = str(model)
+    usage_api_mode = str(api_mode)
 
     try:
         function_count = _validate_function_schema(subentry)
@@ -342,7 +346,12 @@ async def async_test_agent(
             # Request it first so a secondary usage-storage failure cannot suppress reauth.
             request_reauthentication(hass, entry, err)
             authentication_rejected = True
-            await usage_manager.async_record_request(successful=False)
+            await usage_manager.async_record_request(
+                successful=False,
+                provider=usage_provider,
+                model=usage_model,
+                api_mode=usage_api_mode,
+            )
             authentication = next(
                 check for check in checks if check.name == "Authentication"
             )
@@ -351,21 +360,35 @@ async def async_test_agent(
             checks.append(_check("Model access", "Failed", "Authentication rejected"))
             checks.append(_check("Function calling", "Failed", "Probe was rejected"))
         else:
-            await usage_manager.async_record_request(successful=False)
+            await usage_manager.async_record_request(
+                successful=False,
+                provider=usage_provider,
+                model=usage_model,
+                api_mode=usage_api_mode,
+            )
             message = provider_user_message(err)
             checks.append(_check("Model access", "Failed", message))
             checks.append(_check("Function calling", "Failed", "Probe was rejected"))
             if web_search and web_search_compatible:
                 checks.append(_check("Web Search", "Failed", message))
     except Exception as err:
-        await usage_manager.async_record_request(successful=False)
+        await usage_manager.async_record_request(
+            successful=False,
+            provider=usage_provider,
+            model=usage_model,
+            api_mode=usage_api_mode,
+        )
         checks.append(_check("Model access", "Failed", str(err)))
         checks.append(_check("Function calling", "Failed", "Probe was rejected"))
         if web_search and web_search_compatible:
             checks.append(_check("Web Search", "Failed", str(err)))
     else:
         await usage_manager.async_record_request(
-            successful=True, usage=extract_usage(getattr(response, "usage", None))
+            successful=True,
+            usage=extract_usage(getattr(response, "usage", None)),
+            provider=usage_provider,
+            model=usage_model,
+            api_mode=usage_api_mode,
         )
         checks.append(
             _check("Model access", "Passed", f"Minimal {model} request succeeded")

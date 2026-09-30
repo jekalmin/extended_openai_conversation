@@ -57,6 +57,15 @@ def _objects(options: dict | None = None):
     return hass, entry, subentry, client, usage
 
 
+def _usage_attribution(
+    *,
+    provider: str = agent_test.DEFAULT_API_PROVIDER,
+    model: str = "gpt-4.1-mini",
+    api_mode: str = API_MODE_CHAT_COMPLETIONS,
+) -> dict[str, str]:
+    return {"provider": provider, "model": model, "api_mode": api_mode}
+
+
 async def _run(options: dict | None = None, *, exposed: int = 1):
     hass, entry, subentry, client, usage = _objects(options)
     entities = [SimpleNamespace()] * exposed
@@ -92,7 +101,11 @@ async def test_successful_agent_test() -> None:
         "Configuration",
     }
     client.chat.completions.create.assert_awaited_once()
-    usage.async_record_request.assert_awaited_once()
+    usage.async_record_request.assert_awaited_once_with(
+        successful=True,
+        usage=agent_test.extract_usage(client.chat.completions.create.return_value.usage),
+        **_usage_attribution(),
+    )
 
 
 async def test_invalid_authentication() -> None:
@@ -281,7 +294,10 @@ async def test_responses_failed_status_is_reported() -> None:
     assert result.authentication_rejected is False
     assert model.status == "Failed"
     assert "server_error" in model.message
-    usage.async_record_request.assert_awaited_once_with(successful=False)
+    usage.async_record_request.assert_awaited_once_with(
+        successful=False,
+        **_usage_attribution(model="gpt-5.6", api_mode=API_MODE_RESPONSES),
+    )
 
 
 async def test_responses_incomplete_status_is_reported() -> None:
@@ -315,7 +331,10 @@ async def test_responses_incomplete_status_is_reported() -> None:
     assert result.authentication_rejected is False
     assert model.status == "Failed"
     assert "max_output_tokens" in model.message
-    usage.async_record_request.assert_awaited_once_with(successful=False)
+    usage.async_record_request.assert_awaited_once_with(
+        successful=False,
+        **_usage_attribution(model="gpt-5.6", api_mode=API_MODE_RESPONSES),
+    )
 
 
 class _CoverageUsage:
@@ -581,7 +600,15 @@ async def test_agent_test_authentication_failure_requests_reauth_first(
     assert checks["Authentication"].status == "Failed"
     assert checks["Authentication"].message == "Authentication failed"
     assert checks["Model access"].message == "Authentication rejected"
-    assert usage.calls == [{"successful": False}]
+    assert usage.calls == [
+        {
+            "successful": False,
+            **_usage_attribution(
+                model=agent_test.DEFAULT_CHAT_MODEL,
+                api_mode=agent_test.API_MODE_RESPONSES,
+            ),
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -607,7 +634,15 @@ async def test_agent_test_non_auth_provider_error_and_web_search_failure(
     assert checks["Model access"].message == "Rate limited"
     assert checks["Function calling"].message == "Probe was rejected"
     assert checks["Web Search"].message == "Rate limited"
-    assert usage.calls == [{"successful": False}]
+    assert usage.calls == [
+        {
+            "successful": False,
+            **_usage_attribution(
+                model=agent_test.DEFAULT_CHAT_MODEL,
+                api_mode=agent_test.API_MODE_RESPONSES,
+            ),
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -627,7 +662,15 @@ async def test_agent_test_unexpected_probe_error_is_reported(
     checks = _coverage_checks(result)
     assert checks["Model access"].message == "transport exploded"
     assert checks["Function calling"].status == "Failed"
-    assert usage.calls == [{"successful": False}]
+    assert usage.calls == [
+        {
+            "successful": False,
+            **_usage_attribution(
+                model=agent_test.DEFAULT_CHAT_MODEL,
+                api_mode=agent_test.API_MODE_RESPONSES,
+            ),
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -653,7 +696,56 @@ async def test_agent_test_successful_responses_probe_records_usage_and_web_searc
     assert checks["Web Search"].status == "Passed"
     assert create.calls[0]["tools"][0]["type"] == "web_search"
     assert create.calls[0]["tool_choice"] == "none"
-    assert usage.calls == [{"successful": True, "usage": {"input_tokens": 3}}]
+    assert usage.calls == [
+        {
+            "successful": True,
+            "usage": {"input_tokens": 3},
+            **_usage_attribution(
+                model=agent_test.DEFAULT_CHAT_MODEL,
+                api_mode=agent_test.API_MODE_RESPONSES,
+            ),
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_test_usage_attribution_uses_configured_provider_model_and_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    usage = _coverage_patch_common(monkeypatch)
+    monkeypatch.setattr(
+        agent_test,
+        "get_api_mode",
+        lambda *_args: agent_test.API_MODE_CHAT_COMPLETIONS,
+    )
+    monkeypatch.setattr(agent_test, "extract_usage", lambda _raw: {})
+    create = _CoverageCreate(result=SimpleNamespace(usage=None))
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create.create))
+    )
+
+    result = await agent_test.async_test_agent(
+        cast(Any, SimpleNamespace()),
+        cast(Any, _coverage_entry(client, api_provider="azure")),
+        cast(
+            Any,
+            _coverage_subentry(
+                api_mode=agent_test.API_MODE_CHAT_COMPLETIONS,
+                chat_model="diagnostic-model",
+            ),
+        ),
+    )
+
+    assert result.status == "Passed"
+    assert usage.calls == [
+        {
+            "successful": True,
+            "usage": {},
+            "provider": "azure",
+            "model": "diagnostic-model",
+            "api_mode": agent_test.API_MODE_CHAT_COMPLETIONS,
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -854,4 +946,12 @@ async def test_unexpected_probe_error_marks_compatible_web_search_failed(
     assert checks["Model access"].status == "Failed"
     assert checks["Web Search"].status == "Failed"
     assert checks["Web Search"].message == "probe transport failed"
-    assert usage.calls == [{"successful": False}]
+    assert usage.calls == [
+        {
+            "successful": False,
+            **_usage_attribution(
+                model="gpt-5.6",
+                api_mode=agent_test.API_MODE_RESPONSES,
+            ),
+        }
+    ]
