@@ -13,8 +13,8 @@ function knowledgeAccessState(panel) {
   const enabled = typeof current.enabled === "boolean" ? current.enabled : panel._selectedAgent?.()?.knowledge_enabled !== false;
   const sources = panel._result?.sources || [];
   const usable = sources.some((source) => source.enabled !== false);
-  const state = current.state === "enabled" ? (usable ? "available" : "empty")
-    : current.state || (enabled ? usable ? "available" : "empty" : "disabled");
+  const exceptional = ["unknown", "unavailable", "error"].includes(current.state);
+  const state = exceptional ? current.state : enabled ? usable ? "available" : "empty" : "disabled";
   const detail = !enabled ? "Stored sources stay in the library, but the assistant cannot use them."
     : ["unknown", "unavailable", "error"].includes(state) ? current.detail || current.summary || "Knowledge availability could not be confirmed."
     : usable ? "The assistant can search these sources when needed."
@@ -22,7 +22,7 @@ function knowledgeAccessState(panel) {
     : "Add a source to make Knowledge available to the assistant.";
   return {
     enabled, state, detail,
-    label: current.label || ({available:"Available", enabled:usable ? "Available" : "Needs sources", empty:"Needs sources", disabled:"Off"}[state] || "Unknown"),
+    label: exceptional ? current.label || "Unknown" : {available:"Available", empty:"Needs sources", disabled:"Off"}[state],
   };
 }
 const statusMarkup = panel => {

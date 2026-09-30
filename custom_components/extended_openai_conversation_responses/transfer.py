@@ -235,7 +235,9 @@ async def async_collect_transfer_snapshot(
     else:
         raise backup.BackupError("Transfer mode must be setup or custom")
 
-    document = _new_transfer_document(entry, subentry, mode)
+    document = await hass.async_add_executor_job(
+        _new_transfer_document, entry, subentry, mode
+    )
     payload = document["sections"]
     if SECTION_CONFIGURATION in selected:
         payload[SECTION_CONFIGURATION] = backup.export_configuration_snapshot(

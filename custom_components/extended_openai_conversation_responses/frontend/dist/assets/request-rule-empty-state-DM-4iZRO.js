@@ -1,0 +1,1 @@
+function e(e,t){return!String(e||``).trim()&&t&&t!==`all`?`<h2>No rules in this group</h2>`:`<h2>No rules match your search</h2><p>Try a different phrase or rule name.</p>`}function t(t,n,r){if(!t)return;let i=e(n,r);t.innerHTML!==i&&(t.innerHTML=i)}export{t as n,e as t};

@@ -30,7 +30,11 @@ _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([,.;:!?])")
 _WHITESPACE = re.compile(r"[ \t\f\v]+")
 _BLANK_LINES = re.compile(r"\n\s*\n+")
 
-_URL_PREFIXES = ("http://", "https://")
+_URL_PREFIXES = ("http://", "https://", "www.")
+_WWW_ADDRESS = re.compile(
+    r"www\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+",
+    re.IGNORECASE,
+)
 _FORMAT_MARKERS = ("**", "__", "~~")
 
 DEFAULT_STREAMING_BUFFER_LIMIT = 4096
@@ -174,7 +178,7 @@ class StreamingSpeechSanitizer:
                     index = self._suppress(output, link_end)
                     continue
 
-            if self.urls and char.lower() == "h":
+            if self.urls and char.lower() in "hw":
                 remaining = text[index:].lower()
                 matching_prefix = next(
                     (
@@ -191,9 +195,13 @@ class StreamingSpeechSanitizer:
                 ):
                     index = self._hold_preceding_whitespace(output, index)
                     break
-                if matching_prefix is not None and (
-                    index == 0
-                    or not (text[index - 1].isalnum() or text[index - 1] == "@")
+                preceding = (
+                    text[index - 1]
+                    if index
+                    else (self._last_output[-1:] if matching_prefix == "www." else "")
+                )
+                if matching_prefix is not None and not (
+                    preceding.isalnum() or preceding == "@"
                 ):
                     end = index + len(matching_prefix)
                     while (
@@ -205,6 +213,12 @@ class StreamingSpeechSanitizer:
                     if end == len(text) and not final:
                         index = self._hold_preceding_whitespace(output, index)
                         break
+                    if matching_prefix == "www." and not _WWW_ADDRESS.match(
+                        text[index:end]
+                    ):
+                        self._emit(output, char)
+                        index += 1
+                        continue
                     index = self._suppress(output, end)
                     continue
 
