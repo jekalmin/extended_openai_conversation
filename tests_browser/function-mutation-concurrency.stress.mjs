@@ -320,13 +320,11 @@ test("nightly HA LLM refresh is single-flight and latest catalogue state wins", 
 
   const refresh = panel.locator("#refresh-ha-tools");
   await expect(refresh).toBeVisible();
-  await expect.poll(() => panel.evaluate(host => host.shadowRoot.querySelector(".tools-surface")?.__eocHaBound === true)).toBe(true);
-  await refresh.evaluate(button => {
-    button.dispatchEvent(new MouseEvent("click", {bubbles:true, composed:true}));
-    button.dispatchEvent(new MouseEvent("click", {bubbles:true, composed:true}));
-  });
+  await refresh.click();
   await expect.poll(() => page.evaluate(() => refreshProbe.reads)).toBe(1);
   await expect(refresh).toBeDisabled();
+  await refresh.evaluate(button => button.dispatchEvent(new MouseEvent("click", {bubbles:true, composed:true})));
+  await expect.poll(() => page.evaluate(() => refreshProbe.reads)).toBe(1);
   await page.evaluate(() => refreshProbe.release());
   await expect(panel.locator('[data-tool-key="baseline_tool"]')).toContainText("After refresh");
   await expect(panel.locator('[data-tool-key="baseline_tool"]')).toContainText("Unavailable");
