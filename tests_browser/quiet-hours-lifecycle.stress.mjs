@@ -111,7 +111,7 @@ test("nightly Quiet Hours surfaces unavailable and changing satellite candidates
   await expectHarnessClean(page, errors);
 });
 
-test("nightly Quiet Hours retries a failed save and ignores a late save after agent change", async ({page}) => {
+test("nightly Quiet Hours retries a failed save and protects agent selection while saving", async ({page}) => {
   const errors = trackPageErrors(page);
   await page.goto(fixtureUrl("capabilities/quiet-hours"));
   const panel = panelFor(page);
@@ -137,8 +137,9 @@ test("nightly Quiet Hours retries a failed save and ignores a late save after ag
   await panel.locator("#qh-start").fill("21:00");
   await panel.locator("#save-page").click();
   await expect.poll(() => page.evaluate(() => typeof window.releaseQuietSave)).toBe("function");
-  await panel.evaluate(host => { host._agentId = "agent-2"; });
+  await expect(panel.locator("#agent")).toBeDisabled();
   await page.evaluate(() => window.releaseQuietSave());
-  await expect.poll(() => panel.evaluate(host => host._result.config.start)).not.toBe("21:00");
+  await expect(panel.locator("#agent")).toBeEnabled();
+  await expect(panel.locator("#qh-start")).toHaveValue("21:00");
   await expectHarnessClean(page, errors);
 });
