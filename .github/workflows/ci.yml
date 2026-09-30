@@ -340,7 +340,7 @@ jobs:
             echo "Dependency declarations changed; reconciling prebuilt environment."
             rm -f /opt/eoai-ci/media-dependencies.ready
             pip install -r requirements_test.txt
-            pip install --upgrade homeassistant
+            pip install --upgrade homeassistant pytest-homeassistant-custom-component
             python ci/install_ha_dependencies.py \
               --manifest custom_components/extended_openai_conversation_responses/manifest.json
           fi

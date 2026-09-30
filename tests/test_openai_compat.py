@@ -64,8 +64,10 @@ def test_required_245_usage_field_becomes_optional_and_patch_is_idempotent(
     assert field.default == 7
 
 
+@pytest.mark.parametrize("version", ["2.21.0", "2.45.1", "3.10.0"])
 def test_non_target_openai_version_is_not_patched(
     monkeypatch: pytest.MonkeyPatch,
+    version: str,
 ) -> None:
     """The workaround must not leak into SDK releases other than 2.45.0."""
 
@@ -73,7 +75,7 @@ def test_non_target_openai_version_is_not_patched(
         cache_write_tokens: int
 
     ResponseUsage = _install_usage_models(monkeypatch, InputTokensDetails)
-    _prepare_patch(monkeypatch, version="2.45.1")
+    _prepare_patch(monkeypatch, version=version)
 
     openai_compat.apply_openai_compatibility()
 

@@ -149,7 +149,7 @@ jobs:
             python -m pip install 'pytest-homeassistant-custom-component==0.13.317'
             python -m pip install --pre "homeassistant==$MINIMUM"
           elif [[ "$HA_POINT" == stable ]]; then
-            python -m pip install --upgrade homeassistant
+            python -m pip install --upgrade homeassistant pytest-homeassistant-custom-component
           else
             python -m pip install "git+https://github.com/home-assistant/core.git@$HA_DEV_SHA"
           fi
@@ -199,7 +199,7 @@ jobs:
           else
             echo "Dependency declarations changed; reconciling prebuilt environment."
             pip install -r requirements_test.txt
-            pip install --upgrade homeassistant
+            pip install --upgrade homeassistant pytest-homeassistant-custom-component
             python ci/install_ha_dependencies.py \
               --manifest custom_components/extended_openai_conversation_responses/manifest.json
           fi

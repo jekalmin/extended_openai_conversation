@@ -15,10 +15,10 @@ _PATCHED = False
 def apply_openai_compatibility() -> None:
     """Allow OpenAI-compatible providers to omit a 2.45-only usage field.
 
-    Home Assistant currently pins openai==2.45.0. That SDK release made
+    HA stable releases using openai==2.45.0 need this shim. That release made
     ``cache_write_tokens`` required in Responses usage metadata even though many
     OpenAI-compatible providers do not return it. Keep the HA-compatible package
-    version and make only that generated field tolerant until HA moves its pin.
+    version and make only that generated field tolerant on that exact SDK.
     """
     global _PATCHED
     if _PATCHED or getattr(openai, "__version__", None) != _OPENAI_245:

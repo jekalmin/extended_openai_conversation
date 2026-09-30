@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import partial
+from inspect import isawaitable
 import logging
 import re
 from typing import Any, cast
@@ -143,6 +144,8 @@ async def get_authenticated_client(
 ) -> AsyncClient:
     """Validate OpenAI authentication."""
 
+    # Match HA core: retain its shared HTTPX client and TLS/connection policy.
+    # SDK 3 supports this client at runtime, while typing targets HTTPX2.
     client: AsyncClient
     if base_url and (is_azure_url(base_url) or api_provider == "azure"):
         client = AsyncAzureOpenAI(
@@ -168,7 +171,10 @@ async def get_authenticated_client(
             partial(client.models.list, timeout=10)
         )
 
-        async for _ in response:
+        # SDK 2 returns an async paginator immediately; SDK 3 returns a
+        # coroutine. Materialize either awaitable exactly once before iterating.
+        page = await response if isawaitable(response) else response
+        async for _ in page:
             break
     except (TimeoutError, ConnectionError) as err:
         raise provider_transport_error(err) from err

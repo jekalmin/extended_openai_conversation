@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: [pinned, latest-2x-early-warning]
+        sdk: ["2.21.0", "2.45.0", "3.10.0", latest-3x-early-warning]
     container:
       image: ghcr.io/${{ github.repository_owner }}/extended-openai-ci-stable:ha-stable
       credentials:
@@ -29,16 +29,16 @@ jobs:
       - name: Checkout live develop
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: develop
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'develop' }}
           persist-credentials: false
       - name: Select SDK version for early warning
         run: |
           set -euo pipefail
-          if [ "${{ matrix.sdk }}" = "pinned" ]; then
-            SPEC="$(python -c 'import json; p=json.load(open("custom_components/extended_openai_conversation_responses/manifest.json")); print(next(x for x in p["requirements"] if x.startswith("openai==")))')"
+          if [ "${{ matrix.sdk }}" = "latest-3x-early-warning" ]; then
+            # Experimental only; this does not widen the manifest's tested range.
+            SPEC='openai>=3.10.0,<4'
           else
-            # An experimental compatibility signal; it does not widen manifest support.
-            SPEC='openai>=2.45.0,<3'
+            SPEC="openai==${{ matrix.sdk }}"
           fi
           python -m pip install --upgrade "$SPEC"
           python -m pip check
@@ -50,4 +50,6 @@ jobs:
             tests/test_openai_sdk_malformed_wire.py \
             tests/test_openai_sdk_error_matrix.py \
             tests/test_openai_sdk_catalog_matrix.py \
-            tests/test_openai_sdk_multicall_wire.py
+            tests/test_openai_sdk_multicall_wire.py \
+            tests/test_openai_sdk_ha_compatibility.py \
+            tests/test_openai_compat.py
