@@ -7,24 +7,39 @@ export function bindHALlmTools(panel, synchronize) {
   if (!host || host.__eocHaBound) return;
   host.__eocHaBound = true;
   const agentId = panel._agentId;
-  const load = async () => {
-    const catalog = await panel._call("tools", "ha_catalog");
-    if (panel._agentId !== agentId) throw new Error("The selected agent changed");
-    panel._haCatalog = catalog;
-    panel._haCatalogAgent = agentId;
-    panel._haCatalogLoadedAt = Date.now();
-    return catalog;
+  const load = () => {
+    if (panel._haCatalogLoad?.agentId === agentId) return panel._haCatalogLoad.promise;
+    const request = (async () => {
+      const catalog = await panel._call("tools", "ha_catalog");
+      if (panel._agentId !== agentId) throw new Error("The selected agent changed");
+      panel._haCatalog = catalog;
+      panel._haCatalogAgent = agentId;
+      panel._haCatalogLoadedAt = Date.now();
+      return catalog;
+    })();
+    const tracked = request.finally(() => {
+      if (panel._haCatalogLoad?.promise === tracked) panel._haCatalogLoad = null;
+    });
+    panel._haCatalogLoad = {agentId, promise: tracked};
+    return tracked;
   };
   if ((panel._draft.functions || []).some(isHALlmTool) && (panel._haCatalogAgent !== agentId || Date.now() - (panel._haCatalogLoadedAt || 0) > 30000) && !panel._haCatalogLoading) {
     panel._haCatalogLoading = true;
     load().then(() => { if (!root.querySelector("dialog[open]")) panel._render(); }).catch(err => panel._toast(err.message, true)).finally(() => { panel._haCatalogLoading = false; });
   }
-  root.querySelector("#refresh-ha-tools")?.addEventListener("click", async () => {
+  root.querySelector("#refresh-ha-tools")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    button.disabled = true;
     try { await load(); panel._render(); } catch (err) { panel._toast(err.message, true); }
+    finally { if (button.isConnected) button.disabled = false; }
   });
   root.querySelector("#add-ha-tools")?.addEventListener("click", async () => {
+    const existing = root.querySelector('dialog[data-ha-llm-tools-dialog][open]');
+    if (existing) { existing.focus?.(); return; }
     const dialog = document.createElement("dialog");
     dialog.className = "editor-dialog";
+    dialog.dataset.haLlmToolsDialog = "";
     dialog.setAttribute("aria-label", "Add Home Assistant LLM Tools");
     dialog.innerHTML = `<div class="dialog-header"><h2>Add LLM Tools</h2></div><div class="dialog-body">
       <p>These capabilities are supplied by Home Assistant or installed integrations/services. A source can be an integration's contribution or a complete LLM API, including an MCP server.</p>
@@ -68,6 +83,7 @@ export function bindHALlmTools(panel, synchronize) {
       dialog.querySelector("[data-clear]").onclick = () => { selected.clear(); render(); };
       dialog.querySelector("[data-add]").onclick = async () => {
         const button = dialog.querySelector("[data-add]");
+        if (button.disabled) return;
         button.disabled = true;
         try {
           if (panel._agentId !== agentId) throw new Error("The selected agent changed");
