@@ -33,6 +33,8 @@ export function configurationDecisionBadges(key, defaults = {}) {
   if (!Object.prototype.hasOwnProperty.call(defaults, key)) return [];
   const value = defaults[key];
   if (DELEGATED_CHOICES[key]?.has(String(value))) return [{kind:"default", text:"Uses Home Assistant sessions"}];
+  if (key === "conversation_continuity" && value === "user") return [{kind:"configured", text:"Remembers by user across devices"}];
+  if (key === "conversation_continuity" && value === "device") return [{kind:"configured", text:"Remembers by voice device"}];
   return [];
 }
 
@@ -96,17 +98,10 @@ export function formatLiveRequestResult(response = {}) {
   ].filter(Boolean).join("\n");
 }
 
-function configurationDefaults(panel) {
-  if (panel._draftAgentId === panel._agentId && panel._configData?.defaults) return panel._configData.defaults;
-  if (panel._result?.config && panel._result?.defaults) return panel._result.defaults;
-  if (panel._settingsSearchConfigAgentId === panel._agentId && panel._settingsSearchConfig?.defaults) return panel._settingsSearchConfig.defaults;
-  return {};
-}
-
 export function settingBadgesMarkup(panel, key, value, disabled = false) {
   const effects = ["memory_retrieval_mode", "local_intents_enabled"].includes(key)
     ? `<span data-setting-effects>${settingEffectMarkup(panel, key, value, disabled)}</span>` : "";
-  return effects + configurationDecisionBadges(key, configurationDefaults(panel)).map((badge) => `<span class="eoc-decision-badge ${badge.kind}">${panel._e(badge.text)}</span>`).join("");
+  return effects + configurationDecisionBadges(key, {[key]: value}).map((badge) => `<span class="eoc-decision-badge ${badge.kind}">${panel._e(badge.text)}</span>`).join("");
 }
 
 

@@ -115,6 +115,7 @@ from .debug import (
     conversation_debug_trace,
     current_debug_trace,
     model_path_timing,
+    record_current_run_failure,
     record_memory_retrieval,
     record_system_prompt,
 )
@@ -329,6 +330,8 @@ class ExtendedOpenAIAgentEntity(
     _guest_mode: GuestModeManager | None = None
     _request_rules: RequestRules | None = None
     _request_rule_runtime: RequestRuleRuntime | None = None
+    _agent_ready: asyncio.Event | None = None
+    _agent_initialization_failed = False
 
     def __init__(self, entry: ExtendedOpenAIConfigEntry, subentry: Any) -> None:
         """Initialize the conversation agent and its streaming capability."""
@@ -360,13 +363,21 @@ class ExtendedOpenAIAgentEntity(
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
-        await super().async_added_to_hass()
-        conversation.async_set_agent(self.hass, self.entry, self)
-        await self._async_initialize_agent_state()
-        await self._async_initialize_optional_managers()
-        # Shared managers can retain a provider bound to the previous entity.
-        sync_memory_embedding_provider(self)
-        self._schedule_archive_retention()
+        self._agent_ready = asyncio.Event()
+        self._agent_initialization_failed = False
+        try:
+            await super().async_added_to_hass()
+            await self._async_initialize_agent_state()
+            await self._async_initialize_optional_managers()
+            # Shared managers can retain a provider bound to the previous entity.
+            sync_memory_embedding_provider(self)
+            self._schedule_archive_retention()
+            conversation.async_set_agent(self.hass, self.entry, self)
+        except BaseException:
+            self._agent_initialization_failed = True
+            raise
+        finally:
+            self._agent_ready.set()
 
     async def _async_initialize_agent_state(self) -> None:
         """Load required shared state and reset per-registration request state."""
@@ -638,6 +649,10 @@ class ExtendedOpenAIAgentEntity(
         surround debug capture, request caches, Voice Identity and reconciliation.
         No installer may replace this method or any of its request-entry owners.
         """
+        if self._agent_ready is not None:
+            await self._agent_ready.wait()
+            if self._agent_initialization_failed:
+                return self._agent_not_ready_result(user_input)
         if not user_input.text.strip():
             response = intent.IntentResponse(language=user_input.language)
             response.async_set_speech("")
@@ -699,7 +714,8 @@ class ExtendedOpenAIAgentEntity(
                     )
                 )
                 source_device_id = source_device_id or scope.device_id
-                assert self._continuity is not None
+                if self._continuity is None:
+                    return self._agent_not_ready_result(user_input)
                 resolution = await self._continuity.async_resolve(
                     continuity_mode,
                     scope,
@@ -748,6 +764,20 @@ class ExtendedOpenAIAgentEntity(
         finally:
             _PROMPT_CACHE_CONTEXT.reset(cache_token)
 
+    def _agent_not_ready_result(
+        self, user_input: ConversationInput
+    ) -> ConversationResult:
+        """Handle an unavailable initialization state at the request boundary."""
+        record_current_run_failure("AgentNotReady")
+        response = intent.IntentResponse(language=user_input.language)
+        response.async_set_error(
+            intent.IntentResponseErrorCode.UNKNOWN,
+            "The assistant is not ready to process requests. Please try again after it finishes initializing.",
+        )
+        return ConversationResult(
+            response=response, conversation_id=user_input.conversation_id
+        )
+
     async def _async_process_claimed(
         self,
         user_input: ConversationInput,
@@ -762,31 +792,31 @@ class ExtendedOpenAIAgentEntity(
         continuity = self._continuity
         assert continuity is not None
         user_input.conversation_id = resolution.conversation_id
-        context_id = getattr(getattr(llm_context, "context", None), "id", None)
-        session_key = (
-            f"continuity:{resolution.key}"
-            if resolution.key
-            else f"conversation:{user_input.conversation_id}"
-            if user_input.conversation_id
-            else f"context:{context_id or scope.device_id or 'unidentified'}"
-        )
-        archive_session = await self._async_begin_archive_session(
-            session_key,
-            scope,
-            user_input.conversation_id,
-            request_policy,
-        )
-        scope_token = _ACTIVE_SCOPE.set(scope)
-        archive_token = _ACTIVE_ARCHIVE.set(
-            (session_key, archive_session.session_id) if archive_session else None
-        )
-        memory_session_token = _ACTIVE_MEMORY_SESSION.set(
-            (session_key, timeout_minutes if resolution.key else 5)
-        )
         with (
             async_get_chat_session(self.hass, resolution.conversation_id) as session,
             async_get_chat_log(self.hass, session, user_input) as chat_log,
         ):
+            context_id = getattr(getattr(llm_context, "context", None), "id", None)
+            session_key = (
+                f"continuity:{resolution.key}"
+                if resolution.key
+                else f"conversation:{chat_log.conversation_id}"
+                if chat_log.conversation_id
+                else f"context:{context_id or scope.device_id or 'unidentified'}"
+            )
+            archive_session = await self._async_begin_archive_session(
+                session_key,
+                scope,
+                chat_log.conversation_id,
+                request_policy,
+            )
+            scope_token = _ACTIVE_SCOPE.set(scope)
+            archive_token = _ACTIVE_ARCHIVE.set(
+                (session_key, archive_session.session_id) if archive_session else None
+            )
+            memory_session_token = _ACTIVE_MEMORY_SESSION.set(
+                (session_key, timeout_minutes if resolution.key else 5)
+            )
             subentry_id = getattr(getattr(self, "subentry", None), "subentry_id", None)
             claimed_id = resolution.conversation_id
             if claimed_id is not None and isinstance(subentry_id, str):

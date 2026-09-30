@@ -50,11 +50,11 @@ async function loadConversationPage(panel, offset) {
     if (mode === "search") extra.query = panel._eocHistoryQuery || "";
     const response = await panel._call("conversations", mode, extra);
     setSessionResult(panel, response, mode);
-    panel._render();
   } catch (err) {
     panel._toast(`Unable to load conversation history: ${err.message || String(err)}`, true);
   } finally {
     panel._eocHistoryPagePending = false;
+    panel._render();
   }
 }
 
@@ -234,6 +234,6 @@ export function reconcileActiveConversations(panel) {
 export function renderConversations(panel) {
   const result = panel._contentData || panel._result || {};
   const content = `<section class="page-intro"><h1>Conversation history</h1><p>Recent conversations can continue when the same user or device speaks again. Review or search retained conversations below.</p></section><div data-eoc-active-conversations>${activeConversationMarkup(panel, result)}</div>
-    <section class="content-card"><div class="section-heading"><div><h2>Retained conversations</h2><p>Search and review conversations for the selected scope.</p></div></div><div class="search-row"><input id="archive-query" type="search" placeholder="Search retained discussions" aria-label="Search retained discussions"><button type="button" id="archive-search">Search</button></div><div class="list">${(result.sessions?.sessions || []).map((item) => `<article class="list-card"><div class="card-main clickable open-session" tabindex="0" role="button" data-id="${panel._e(item.session_id)}"><h3>${panel._e(item.title || "Untitled conversation")}</h3><p class="meta">${panel._e(panel._formatDate(item.last_message_at))} · ${panel._e(String(item.turn_count))} turns · ${panel._e(item.scope_source)}</p></div><div class="actions"><button type="button" class="secondary view-session" data-id="${panel._e(item.session_id)}">View</button><button type="button" class="danger delete-session" data-id="${panel._e(item.session_id)}">Delete</button></div></article>`).join("") || panel._empty("No retained conversations in this scope.")}</div></section>`;
+    <section class="content-card"><div class="section-heading"><div><h2>Retained conversations</h2><p>Search and review conversations for the selected scope.</p></div></div><div class="search-row"><input id="archive-query" type="search" placeholder="Search retained discussions" aria-label="Search retained discussions"><button type="button" id="archive-search">Search</button></div><div class="list">${(result.sessions?.sessions || []).map((item) => `<article class="list-card"><div class="card-main clickable open-session" tabindex="0" role="button" data-id="${panel._e(item.session_id)}"><h3>${panel._e(item.title || "Untitled conversation")}</h3><p class="meta">${panel._e(panel._formatDate(item.last_message_at))} · ${panel._e(String(item.turn_count))} turns · ${panel._e(item.scope_source)}</p></div><div class="actions"><button type="button" class="secondary view-session" data-id="${panel._e(item.session_id)}">View</button><button type="button" class="danger delete-session" data-id="${panel._e(item.session_id)}">Delete</button></div></article>`).join("") || panel._empty(panel._eocHistoryMode === "search" ? "No conversations match this search." : "No retained conversations in this scope.")}</div></section>`;
   return content;
 }

@@ -86,6 +86,28 @@ def startup(monkeypatch):
     )
 
 
+async def test_startup_publishes_agent_only_after_required_state_is_ready(startup):
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    usage = startup.getters["usage"].return_value
+
+    async def load_usage(*args):
+        entered.set()
+        await release.wait()
+        return usage
+
+    startup.getters["usage"].side_effect = load_usage
+    task = asyncio.create_task(startup.agent.async_added_to_hass())
+    await entered.wait()
+    conversation.conversation.async_set_agent.assert_not_called()
+    assert not startup.agent._agent_ready.is_set()
+    release.set()
+    await task
+    conversation.conversation.async_set_agent.assert_called_once()
+    assert startup.agent._agent_ready.is_set()
+    assert startup.agent._continuity is not None
+
+
 async def test_startup_registers_one_retention_callback_using_live_settings(startup):
     await startup.agent.async_added_to_hass()
     for getter in startup.getters.values():
@@ -189,9 +211,9 @@ async def test_shared_optional_manager_ensure_reuses_existing_without_io(startup
     )
     assert startup.agent._temporary_memory is existing
     loader.assert_not_awaited()
-    status = startup.agent.hass.data[SUBSYSTEM_STATUS_KEY][
-        ("entry", "agent")
-    ]["temporary_memory"]
+    status = startup.agent.hass.data[SUBSYSTEM_STATUS_KEY][("entry", "agent")][
+        "temporary_memory"
+    ]
     assert status["status"] == "healthy"
 
 

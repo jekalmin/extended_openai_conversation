@@ -1415,9 +1415,7 @@ async def async_configuration_command(request: _ManagementRequest) -> dict[str, 
         refresh_local_handling = _local_handling_config_changed(
             subentry.data, normalized, updates
         )
-        hass.config_entries.async_update_subentry(
-            entry, subentry, data=normalized, title=saved_title
-        )
+        update_live_subentry(hass, entry, subentry, data=normalized, title=saved_title)
         snapshot = agent_config_snapshot(normalized)
         result = {
             "title": saved_title,

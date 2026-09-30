@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises";
 import {
   assistantScopeLabel,
   configurationDecisionBadges,
+  settingBadgesMarkup,
   displayDefaultValue,
   formatLiveRequestResult,
   requestRuleSummary,
@@ -34,6 +35,12 @@ assert.deepEqual(
 assert.deepEqual(configurationDecisionBadges("conversation_continuity", {conversation_continuity:"ha_default"}),
   [{kind:"default", text:"Uses Home Assistant sessions"}]);
 assert.deepEqual(configurationDecisionBadges("temperature", {temperature:1}), []);
+for (const [mode, label] of [["user", "Remembers by user across devices"], ["device", "Remembers by voice device"]]) {
+  assert.deepEqual(configurationDecisionBadges("conversation_continuity", {conversation_continuity:mode}), [{kind:"configured", text:label}]);
+  const markup = settingBadgesMarkup({_e:String, _configData:{defaults:{conversation_continuity:"ha_default"}}}, "conversation_continuity", mode);
+  assert.ok(markup.includes(label));
+  assert.ok(!markup.includes("Uses Home Assistant sessions"));
+}
 
 const local = requestRuleSummary({
   action_type:"local_action",
