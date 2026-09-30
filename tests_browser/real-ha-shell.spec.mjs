@@ -53,6 +53,58 @@ async function openFunctionsFromOverview(page) {
   return panel;
 }
 
+test("cold native Guest and Request Rule editors receive HA context and discard cancelled YAML", async ({context,page}) => {
+  await authenticate(context);
+  const panel=await openAssistantFromOverview(page);
+  // The pristine HA fixture emits unrelated startup websocket rejections.
+  // Capture every error throughout the native interactions under test.
+  const errors=[];
+  page.on("pageerror",error=>errors.push(error.message));
+  await panel.evaluate(host=>host._navigate("capabilities","guest-mode"));
+  await expect(panel.locator(".guest-intro")).toBeVisible();
+  if (await panel.locator("#guest-review-converted").count()) await panel.locator("#guest-review-converted").click();
+  expect(await panel.evaluate(host=>host.hass===host._hass)).toBe(true);
+  const guestSelector=panel.locator("ha-selector[data-guest-key]").first();
+  expect(await guestSelector.evaluate(selector=>Boolean(selector.hass?.locale&&selector.hass?.localize))).toBe(true);
+  await panel.evaluate(host=>host._navigate("capabilities","request-rules"));
+  await expect(panel.locator("#rule-add")).toBeVisible();
+  const name="Cold native cancelled YAML regression";
+  await panel.evaluate(async(host,name)=>{
+    try {
+      await host._call("request_rules","create",{revision:host._result.revision,rule:{name,phrases:["cold native test"],match_type:"equals",action_type:"model_routing",action:{model:"gpt-5-mini",scope:"request",continue_to_ai:true,success_response:"Updated"},conditions:[{condition:"template",value_template:"{{ false }}"}]}});
+    } catch (error) { throw new Error(error.message || JSON.stringify(error)); }
+    await host._loadSection(true);
+  },name);
+  const card=panel.locator(".request-rule-card").filter({hasText:name});
+  await card.locator(".rule-edit").click();
+  const condition=panel.locator("#rule-condition-host > ha-selector");
+  const row=condition.locator("ha-automation-condition-row").first();
+  await expect(row).toBeVisible();
+  await expect.poll(()=>condition.evaluate(selector=>selector.hass.localize("ui.panel.config.automation.editor.conditions.add"))).toBe("Add condition");
+  await row.evaluate(element=>{element._yamlMode=true;element.requestUpdate();});
+  await row.locator("ha-expansion-panel").evaluate(element=>{element.expanded=true;});
+  const yaml=condition.locator("ha-yaml-editor");
+  await expect(yaml).toBeVisible();
+  await expect.poll(()=>yaml.evaluate(element=>element.yaml)).toContain("false");
+  await yaml.locator(".cm-content").fill("condition: template\nvalue_template: '{{ true }}'");
+  await expect.poll(()=>condition.evaluate(selector=>selector.value[0]?.value_template)).toBe("{{ true }}");
+  await panel.locator("#rule-dialog .rule-close").filter({hasText:"Cancel"}).click();
+  await card.locator(".rule-edit").click();
+  await row.evaluate(element=>{element._yamlMode=true;element.requestUpdate();});
+  await row.locator("ha-expansion-panel").evaluate(element=>{element.expanded=true;});
+  await expect.poll(()=>yaml.evaluate(element=>element.yaml)).toContain("false");
+  await yaml.locator(".cm-content").fill("condition: template\nvalue_template: '{{ true }}'");
+  await expect.poll(()=>condition.evaluate(selector=>selector.value[0]?.value_template)).toBe("{{ true }}");
+  await panel.locator("#rule-save").click();
+  await expect(panel.locator("#rule-dialog")).toHaveJSProperty("open",false);
+  await card.locator(".rule-edit").click();
+  await row.evaluate(element=>{element._yamlMode=true;element.requestUpdate();});
+  await row.locator("ha-expansion-panel").evaluate(element=>{element.expanded=true;});
+  await expect.poll(()=>yaml.evaluate(element=>element.yaml)).toContain("true");
+  await panel.locator("#rule-dialog .rule-close").filter({hasText:"Cancel"}).click();
+  expect(errors).toEqual([]);
+});
+
 test("latency readiness helper sees panel inside genuine HA shadow DOM", async ({context, page}) => {
   await authenticate(context);
   await page.goto(`${baseUrl}/extended-openai/overview`, {waitUntil: "domcontentloaded"});

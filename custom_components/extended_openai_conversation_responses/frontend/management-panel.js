@@ -1,3 +1,4 @@
+import {stopLiveStatus, watchTimedFeatureStatus} from "./management-live-status.js";
 import {bindConfigurationClarity, enhanceConfigurationClarity} from "./management-draft-navigation.js";
 import {formatManagementTimestamp, prepareMemoryBrowser, ensureTemporaryScope, storeRuntimeGuidance} from "./management-data-state.js";
 import {enhanceConfirmationScope} from "./management-confirmation-scope.js";
@@ -290,9 +291,12 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     }
   }
 
+  get hass() { return this._hass; }
+
   set hass(value) {
     const first = !this._hass;
     this._hass = value;
+    this.shadowRoot?.querySelectorAll("ha-selector, ha-entity-picker, ha-user-picker, ha-yaml-editor").forEach(element => { element.hass = value; });
     if (first) this._loadAgents();
   }
 
@@ -327,6 +331,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    stopLiveStatus(this);
     getRouteFeature("usage-maintenance/diagnostics")?.stopDiagnosticsWatch(this);
     cleanupStateSafety(this);
   }
@@ -530,6 +535,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       history.pushState({}, "", routePath(this._page, this._subsection));
       return;
     }
+    stopLiveStatus(this);
     this._page = route.page;
     this._subsection = route.section;
     this._query = "";
@@ -1453,6 +1459,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
       return;
     }
     return trackAsync(this, NAVIGATION_MARK_PREFIX, async () => {
+      stopLiveStatus(this);
       const metadata = pageMetadata(page);
       const resolvedSubsection = subsection || this._visibleSubsections(page)[0]?.id || metadata.sections[0]?.id || null;
       this._page = page;
@@ -1946,6 +1953,7 @@ export class ExtendedOpenAIManagementPanel extends HTMLElement {
     }
     if (view === "assistant/voice") getRouteFeature(view)?.bindVoiceIdentityCore(this);
     if (view === "capabilities/quiet-hours") getRouteFeature(view)?.bindQuietHours(this);
+    watchTimedFeatureStatus(this);
     if (view === "usage-maintenance/usage") {
       getRouteFeature(view)?.bindUsageDiagnostics(this);
     }

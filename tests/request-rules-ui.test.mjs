@@ -173,7 +173,10 @@ assert.equal(suggestResultAlias("request"), "request_2");
 
   const existingActions = [{action:"light.turn_on",data:{brightness_pct:50}}];
   loadRequestRuleActions(actionSelector, {action:{actions:existingActions}});
-  assert.equal(actionSelector.value, existingActions);
+  assert.deepEqual(actionSelector.value, existingActions);
+  assert.notEqual(actionSelector.value, existingActions);
+  actionSelector.value[0].data.brightness_pct = 75;
+  assert.equal(existingActions[0].data.brightness_pct, 50);
   const editedActions = [{delay:1}];
   valueChanged({detail:{value:editedActions}});
   assert.equal(readRequestRuleActions(actionSelector), editedActions);

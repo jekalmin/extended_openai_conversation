@@ -115,6 +115,27 @@ export function commonCapturedSlotNames(text) {
 const setFuzzyState = (root, prefix) => { const toggle = root.querySelector(`#${prefix}-fuzzy`), select = root.querySelector(`#${prefix}-threshold`); if (!toggle || !select) return; select.disabled = !toggle.checked; select.closest(".fuzzy-sensitivity")?.classList.toggle("is-disabled", !toggle.checked); };
 
 
+const editorTranslations = new WeakMap();
+
+export function ensureRequestRuleTranslations(panel) {
+  const hass = panel.hass || panel._hass;
+  if (!hass?.loadFragmentTranslation) return Promise.resolve();
+  const language = hass.language || hass.locale?.language;
+  const cached = editorTranslations.get(panel);
+  if (cached?.language === language && cached.connection === hass.connection) return cached.promise;
+  const promise = Promise.resolve(hass.loadFragmentTranslation("config")).then(localize => {
+    if ((panel.hass || panel._hass)?.language !== hass.language) return;
+    panel.shadowRoot.querySelectorAll("#rule-condition-host ha-selector, #rule-action-sequence-host ha-selector").forEach(selector => {
+      selector.hass = localize ? {...(panel.hass || panel._hass), localize} : (panel.hass || panel._hass);
+    });
+  }).catch(error => {
+    editorTranslations.delete(panel);
+    panel._toast?.(`Unable to load Home Assistant editor labels: ${error.message || String(error)}`, true);
+  });
+  editorTranslations.set(panel, {language, connection:hass.connection, promise});
+  return promise;
+}
+
 export function createRequestRuleActionSelector(panel, host) {
   const actionSelector = host.ownerDocument.createElement("ha-selector");
   actionSelector.hass = panel._hass;
@@ -201,7 +222,7 @@ function renderResultAliases(panel, selector) {
 }
 
 export function loadRequestRuleActions(actionSelector, rule) {
-  actionSelector.value = rule?.action?.actions || [];
+  actionSelector.value = structuredClone(rule?.action?.actions || []);
 }
 
 export function readRequestRuleActions(actionSelector) {
@@ -412,6 +433,12 @@ export function bindRequestRuleEditor(panel) {
 
 export function openRequestRuleEditor(panel,id=null) {
   const dialog=bindRequestRuleEditor(panel), root=panel.shadowRoot, q=(selector)=>root.querySelector(selector), state=editorState(panel);
+  // Native YAML children retain their own draft and mode. Each opening owns
+  // fresh selectors, so Cancel cannot leak an unsaved child draft into saved data.
+  state.actionSelector=createRequestRuleActionSelector(panel,q("#rule-action-sequence-host"));
+  state.conditionSelector=createRequestRuleConditionSelector(panel,q("#rule-condition-host"));
+  state.actionSelector.addEventListener("value-changed",()=>queueMicrotask(()=>renderResultAliases(panel,state.actionSelector)));
+  void ensureRequestRuleTranslations(panel);
   state.revision=panel._result?.revision;
   const rule=(panel._result?.rules||[]).find((item)=>item.id===id);
   panel._editingRuleId=id;
@@ -426,7 +453,7 @@ export function openRequestRuleEditor(panel,id=null) {
   q("#rule-success").value=rule?.action?.success_response||"Done";
   q("#rule-failure").value=rule?.action?.failure_response||"Sorry, that did not work";
   q("#rule-local-continue-to-ai").checked=rule?.action_type==="local_action" ? Boolean(rule?.action?.continue_to_ai) : false;
-  state.conditionSelector.value=rule?.conditions||[];
+  state.conditionSelector.value=structuredClone(rule?.conditions||[]);
   showRuleConditions(panel, hasRuleConditions(state.conditionSelector.value));
   const groupSelect=q("#rule-group");
   groupSelect.replaceChildren(...[{id:"",name:"Ungrouped"},...(panel._result?.groups||[])].map((group)=>{const option=groupSelect.ownerDocument.createElement("option");option.value=group.id;option.textContent=group.name;return option;}));

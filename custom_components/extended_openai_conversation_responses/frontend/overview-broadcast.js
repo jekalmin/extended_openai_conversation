@@ -1,3 +1,4 @@
+import {watchLiveStatus, stopLiveStatus} from "./management-live-status.js";
 const ROUTE_STYLE = `/* Overview Broadcast */
 #broadcast-card{background:color-mix(in srgb,var(--secondary-background-color) 20%,var(--card-background-color));border-color:color-mix(in srgb,var(--divider-color) 72%,var(--secondary-text-color))}
 .broadcast-toggle-row{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:16px 0;border-bottom:1px solid var(--divider-color)}
@@ -32,6 +33,12 @@ function ensureRouteStyle(panel) {
 }
 
 const WS_BROADCAST = "extended_openai_conversation_responses/broadcast";
+
+export function hasPendingBroadcast(snapshot) {
+  const pending = new Set(["pending", "queued", "queued_idle", "queued_busy", "waiting_idle", "delivering"]);
+  return (snapshot?.history || []).some(item => pending.has(item.status)
+    || Object.values(item.deliveries || {}).some(delivery => pending.has(delivery.status)));
+}
 
 function statusLabel(status) {
   return {
@@ -157,6 +164,30 @@ function applyBroadcastSnapshot(panel, snapshot) {
   panel._broadcastSelected = new Set([...(panel._broadcastSelected || new Set())].filter((entityId) => available.has(entityId)));
   host.innerHTML = broadcastMarkup(panel, snapshot);
   bindBroadcastControls(panel, snapshot);
+  panel._eocBroadcastEpoch = (panel._eocBroadcastEpoch || 0) + 1;
+  panel._eocBroadcastSnapshot = snapshot;
+  if (hasPendingBroadcast(snapshot)) {
+    const started = Date.now();
+    watchLiveStatus(panel, "broadcast", {
+      // Fast completion feedback, then back off while a satellite is busy.
+      // The bounded budget covers the backend's maximum one-hour delivery TTL.
+      view:"overview", delay:() => Date.now() - started < 30000 ? 1000 : 5000, maxRefreshes:800,
+      refresh: async current => {
+        const epoch = panel._eocBroadcastEpoch;
+        const result = await panel._hass.callWS({type:WS_BROADCAST, action:"snapshot"});
+        if (!current() || panel._eocBroadcastEpoch !== epoch) return;
+        panel._eocBroadcastSnapshot = result;
+        // Preserve the message draft, selection and focus while status settles.
+        const currentHost = panel.shadowRoot.querySelector("#broadcast-card");
+        if (!currentHost) return;
+        const history = currentHost.querySelector(".broadcast-history");
+        const template = currentHost.ownerDocument.createElement("template");
+        template.innerHTML = broadcastMarkup(panel, result);
+        history?.replaceWith(template.content.querySelector(".broadcast-history"));
+        if (!hasPendingBroadcast(result)) stopLiveStatus(panel, "broadcast");
+      },
+    });
+  } else stopLiveStatus(panel, "broadcast");
 }
 
 function applyBroadcastError(panel, err) {
