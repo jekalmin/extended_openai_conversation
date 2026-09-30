@@ -530,7 +530,7 @@ export function renderTools(panel, {repairCards = ""} = {}) {
   const enabledCount = tools.filter(isFunctionToolEnabled).length;
   const categories = categorizeFunctionTools(config);
   const ungrouped = categories.alwaysAvailable.map((tool)=>functionToolCard(panel,tool,tools)).join("");
-  return `<style data-function-group-assignment>${FUNCTION_GROUP_ASSIGNMENT_STYLE}</style><section class="content-card tools-surface"><div class="section-heading"><div><span class="setting-label-row"><h2>Function Tools & Groups</h2>${helpButton(panel,"function_tools")}</span><p>Function Tools give the assistant actions beyond normal Home Assistant access. Changes to functions and groups save immediately. <button type="button" class="guide-topic-link guide-link" data-guide-topic="functions">Learn more</button></p><small data-function-totals>${enabledCount} enabled · ${tools.length - enabledCount} disabled · ${categories.groups.length} groups</small></div><div class="actions"><button type="button" class="secondary" id="add-group">+ Create group</button><button type="button" class="secondary" id="add-ha-tools">+ Add LLM Tools</button><button type="button" id="add-tool">+ Add Function Tool</button></div></div><div class="notice function-groups-help"><strong>Loading groups only when needed</strong><p>The assistant initially sees each group's name and description, then loads its full tool instructions if the current task needs them. This reduces input-token usage but may add one model round-trip the first time a group is used.</p></div><label class="tool-search"><span class="sr-only">Search functions and groups</span><input id="tool-search" type="search" placeholder="Search functions and groups..." aria-label="Search functions and groups"></label><div class="function-groups">${repairCards}<article class="function-group-card always-card" data-group-search="always available ungrouped general"><div class="function-group-heading"><div><div class="tool-title"><h3>Available on every request</h3><span class="function-count">${functionToolCountLabel(categories.alwaysAvailable)}</span></div><p>These ungrouped functions send their full instructions with every request, so the assistant can use them immediately.</p></div></div><details class="eoc-details-base" open><summary>Show included functions</summary><div class="list tool-list">${ungrouped || panel._empty("No ungrouped functions.")}</div></details></article>${categories.groups.map((group)=>functionGroupCard(panel,group,tools)).join("")||panel._empty("No groups yet. Existing functions remain available on every request until you create one.")}</div><div class="section-actions tools-actions"><button type="button" class="secondary" id="refresh-ha-tools" ${tools.some(isHALlmTool)?"":"hidden"}>Refresh HA tool availability</button><button type="button" class="secondary" id="validate-tools">Check tool configuration</button><span id="tool-status" class="validation" aria-live="polite"></span></div></section>`;
+  return `<style data-function-group-assignment>${FUNCTION_GROUP_ASSIGNMENT_STYLE}</style><section class="content-card tools-surface"><div class="section-heading"><div><span class="setting-label-row"><h2>Function Tools & Groups</h2>${helpButton(panel,"function_tools")}</span><p>Function Tools give the assistant actions beyond normal Home Assistant access. Changes to functions and groups save immediately. <button type="button" class="guide-topic-link guide-link" data-guide-topic="functions">Learn more</button></p><small data-function-totals>${enabledCount} enabled · ${tools.length - enabledCount} disabled · ${categories.groups.length} groups</small></div><div class="actions"><button type="button" class="secondary" id="add-group">+ Create group</button><button type="button" class="secondary" id="add-ha-tools">+ Add LLM Tools</button><button type="button" id="add-tool">+ Add Function Tool</button></div></div><div class="notice function-groups-help"><strong>Loading groups only when needed</strong><p>The assistant initially sees each group's name and description, then loads its full tool instructions if the current task needs them. This reduces input-token usage but may add one model round-trip the first time a group is used.</p></div><label class="tool-search"><span class="sr-only">Search functions and groups</span><input id="tool-search" type="search" placeholder="Search functions and groups..." aria-label="Search functions and groups"></label><div class="function-groups">${repairCards}<article class="function-group-card always-card" data-group-search="always available ungrouped general"><div class="function-group-heading"><div><div class="tool-title"><h3>Available on every request</h3><span class="function-count">${functionToolCountLabel(categories.alwaysAvailable)}</span></div><p>These ungrouped functions send their full instructions with every request, so the assistant can use them immediately.</p></div></div><details class="eoc-details-base" open><summary>Show included functions</summary><div class="list tool-list">${ungrouped || panel._empty("No ungrouped functions.")}</div></details></article>${categories.groups.map((group)=>functionGroupCard(panel,group,tools)).join("")||panel._empty("No groups yet. Existing functions remain available on every request until you create one.")}</div><div id="function-search-empty" class="empty-state" role="status" hidden><h3>No functions or groups match your search</h3><button type="button" class="secondary" id="clear-tool-search">Clear search</button></div><div class="section-actions tools-actions"><button type="button" class="secondary" id="refresh-ha-tools" ${tools.some(isHALlmTool)?"":"hidden"}>Refresh HA tool availability</button><button type="button" class="secondary" id="validate-tools">Check tool configuration</button><span id="tool-status" class="validation" aria-live="polite"></span></div></section>`;
 }
 
 // Only DOM references and presentation signatures are retained here. Mutations
@@ -552,6 +552,7 @@ function applyFunctionSearch(panel) {
   const query = root.querySelector("#tool-search")?.value || "";
   const hasQuery = Boolean(query.trim());
   const queryTokens = hasQuery ? searchTokens(query) : [];
+  let visible = 0;
   root.querySelectorAll(".function-group-card").forEach(card => {
     const groupMatch = hasQuery && matchesFunctionSearchTokens(
       queryTokens,
@@ -568,11 +569,16 @@ function applyFunctionSearch(panel) {
     });
     const hidden = hasQuery && !groupMatch && !toolMatch;
     if (card.hidden !== hidden) card.hidden = hidden;
+    if (!hidden) visible++;
     if (hasQuery && toolMatch) {
       const details = card.querySelector("details");
       if (details && !details.open) details.open = true;
     }
   });
+  const empty = root.querySelector("#function-search-empty");
+  if (empty) empty.hidden = !hasQuery || visible > 0;
+  const noGroups = toolCollections.get(root.querySelector(".tools-surface"))?.noGroups;
+  if (noGroups) noGroups.hidden = hasQuery;
 }
 
 function prepareToolsCollection(panel) {
@@ -698,6 +704,13 @@ function bindToolCollection(panel) {
   host.addEventListener("click", async event => {
     const button = event.target.closest?.("button");
     if (!button || button.disabled) return;
+    if (button.id === "clear-tool-search") {
+      const search = root.querySelector("#tool-search");
+      search.value = "";
+      applyFunctionSearch(panel);
+      search.focus();
+      return;
+    }
     if (button.id === "add-tool") return openTool(panel);
     if (button.id === "add-group") return openFunctionGroup(panel);
     if (button.matches(".edit-group")) return openFunctionGroup(panel, button.dataset.groupId);

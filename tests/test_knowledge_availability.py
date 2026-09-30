@@ -307,3 +307,52 @@ async def test_enabled_field_requires_boolean() -> None:
     library = await _library()
     with pytest.raises(ValueError, match="enabled"):
         await library.async_create("Bad", "", "Content", enabled="yes")  # type: ignore[arg-type]
+
+
+async def test_enabling_knowledge_after_adding_available_source_returns_current_status() -> (
+    None
+):
+    subentry = SimpleNamespace(
+        subentry_id="agent-1",
+        subentry_type="conversation",
+        title="Assistant",
+        data={CONF_KNOWLEDGE_ENABLED: False},
+    )
+    entry = SimpleNamespace(
+        entry_id="entry-1",
+        domain="extended_openai_conversation_responses",
+        title="OpenAI",
+        data={},
+        subentries={"agent-1": subentry},
+    )
+    hass = MagicMock()
+    hass.config_entries.async_get_entry.return_value = entry
+    library = await _library()
+    base = {
+        "section": "knowledge",
+        "entry_id": entry.entry_id,
+        "subentry_id": subentry.subentry_id,
+    }
+    with patch.object(
+        management_ui, "async_get_knowledge", AsyncMock(return_value=library)
+    ):
+        created = await management_ui.async_management_command(
+            hass,
+            "admin-user",
+            True,
+            {
+                **base,
+                "action": "create",
+                "title": "Reference",
+                "content": "Available reference",
+                "enabled": True,
+            },
+        )
+        assert created["summary"]["enabled"] is True
+        assert created["feature_status"]["state"] == "disabled"
+        enabled = await management_ui.async_management_command(
+            hass, "admin-user", True, {**base, "action": "set_enabled", "enabled": True}
+        )
+    assert enabled["feature_status"]["source_count"] == 1
+    assert enabled["feature_status"]["state"] == "available"
+    assert enabled["feature_status"]["label"] == "Available"

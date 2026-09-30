@@ -379,3 +379,41 @@ async def test_strict_rule_preflight_precedes_quarantine_scope(
     ) == {"ok": True}
     assert seen == ["strict", "validate", "route"]
     assert not quarantine._ALLOW_QUARANTINED_TOOLS.get()
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "https://example.com",
+        "http://example.com",
+        "www.example.com",
+        "www.example.com/path),",
+    ],
+)
+async def test_speech_preview_uses_shared_bare_url_cleanup(
+    hass, management_message, address
+) -> None:
+    from custom_components.extended_openai_conversation_responses.speech import (
+        process_speech_text,
+    )
+
+    config = {
+        "speech_processing_enabled": True,
+        "speech_strip_urls": True,
+        "speech_strip_markdown": True,
+        "speech_regex_replacements": [],
+    }
+    sample = f"Visit {address} for details."
+    result = await ui.async_management_command(
+        hass,
+        "admin",
+        True,
+        management_message(
+            "configuration", "speech_preview", sample_text=sample, config=config
+        ),
+    )
+    assert (
+        result["speech_text"]
+        == process_speech_text(sample, config)
+        == "Visit for details."
+    )

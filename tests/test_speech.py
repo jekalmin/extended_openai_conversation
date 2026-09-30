@@ -617,3 +617,30 @@ def test_line_prefix_finalizes_ambiguous_terminal_markers_as_plain_text() -> Non
     assert line_prefix("12", True) == ("none", 0)
     assert line_prefix("12)", True) == ("none", 0)
     assert line_prefix("   ", True) == ("none", 0)
+
+
+@pytest.mark.parametrize("prefix", ["https://", "http://", "www."])
+@pytest.mark.parametrize(
+    "suffix", ["", "/path", "/path?query=one", ",", ".", ")", "/path),"]
+)
+def test_bare_web_addresses_share_runtime_and_completed_cleanup(prefix, suffix) -> None:
+    text = f"Visit {prefix}example.com{suffix} for details. Ordinary prose stays."
+    expected = "Visit for details. Ordinary prose stays."
+    assert process_speech_text(text, _config()) == expected
+    assert process_speech_text(text, _config(speech_strip_urls=False)) == text
+    for split in range(len(text) + 1):
+        assert _stream([text[:split], text[split:]]) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ordinary text with periods. Version 1.2.3.",
+        "The www. prefix is ordinary text.",
+        "Keep www.example and user@www.example.com unchanged.",
+    ],
+)
+def test_www_cleanup_preserves_ordinary_text(text) -> None:
+    assert process_speech_text(text, _config()) == text
+    for split in range(len(text) + 1):
+        assert _stream([text[:split], text[split:]]) == text

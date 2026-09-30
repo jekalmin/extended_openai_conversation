@@ -104,6 +104,7 @@ async def test_full_backup_collection_succeeds_with_quarantined_function(
 
 
 async def test_setup_export_collection_succeeds_with_quarantined_function(
+    hass,
     monkeypatch,
 ) -> None:
     config = _broken_config()
@@ -119,13 +120,12 @@ async def test_setup_export_collection_succeeds_with_quarantined_function(
     )
 
     document = await transfer.async_collect_transfer_snapshot(
-        SimpleNamespace(), entry, subentry, mode="setup"
+        hass, entry, subentry, mode="setup"
     )
 
     exported = document["sections"][transfer.SECTION_CONFIGURATION]
     assert exported[CONF_FUNCTION_TOOLS] == config[CONF_FUNCTION_TOOLS]
     assert exported[CONF_FUNCTION_GROUPS] == config[CONF_FUNCTION_GROUPS]
-
 
 
 def test_setup_import_accepts_quarantined_function_for_repair() -> None:

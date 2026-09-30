@@ -132,9 +132,33 @@ export function createRequestRuleConditionSelector(panel, host) {
   selector.hass = panel._hass;
   selector.selector = {condition:{}};
   selector.value = [];
-  selector.addEventListener("value-changed", (event) => { selector.value = event.detail.value || []; });
+  selector.addEventListener("value-changed", (event) => { selector.value = event.detail.value || []; void labelConditionAddControl(panel, selector); });
   host.replaceChildren(selector);
+  void labelConditionAddControl(panel, selector);
   return selector;
+}
+
+async function labelConditionAddControl(panel, selector) {
+  // The native selector owns the plus button inside its nested shadow roots.
+  // Label that control after Lit finishes rendering, without replacing its UI.
+  const registry = selector.ownerDocument?.defaultView?.customElements || globalThis.customElements;
+  if (!registry) return;
+  await registry.whenDefined("ha-selector");
+  let element = selector;
+  for (const tag of ["ha-selector-condition", "ha-automation-condition"]) {
+    await element.updateComplete;
+    await registry.whenDefined(tag);
+    element = element.shadowRoot?.querySelector(tag);
+    if (!element) return;
+  }
+  await element.updateComplete;
+  const control = element.shadowRoot?.querySelector(".buttons ha-button, .buttons ha-icon-button");
+  if (!control) return;
+  const label = panel._hass?.localize?.("ui.panel.config.automation.editor.conditions.add") || "Add condition";
+  control.setAttribute("aria-label", label);
+  control.label = label;
+  await control.updateComplete;
+  control.shadowRoot?.querySelector("button")?.setAttribute("aria-label", label);
 }
 
 export function renameResultReferences(value, oldAlias, newAlias) {

@@ -113,6 +113,7 @@ def _entry_and_subentry(config: dict | None = None):
 
 
 async def test_shareable_setup_reads_only_setup_state_and_round_trips_ha_llm_reference(
+    hass,
     monkeypatch,
 ) -> None:
     reference = {
@@ -145,7 +146,7 @@ async def test_shareable_setup_reads_only_setup_state_and_round_trips_ha_llm_ref
         monkeypatch.setattr(transfer, name, forbidden)
 
     result = await transfer.async_create_setup_export(
-        SimpleNamespace(), entry, subentry
+        hass, entry, subentry
     )
     document = result["document"]
     assert set(document["sections"]) == transfer.SETUP_SECTIONS
@@ -156,7 +157,7 @@ async def test_shareable_setup_reads_only_setup_state_and_round_trips_ha_llm_ref
     assert prepared.request_rules == RequestRules.validate_backup_data(_rules_backup())
 
 
-async def test_custom_export_reads_only_selected_sections(monkeypatch) -> None:
+async def test_custom_export_reads_only_selected_sections(hass, monkeypatch) -> None:
     entry, subentry = _entry_and_subentry()
     memory = SimpleNamespace(async_backup_data=AsyncMock(return_value={"memories": []}))
 
@@ -178,7 +179,7 @@ async def test_custom_export_reads_only_selected_sections(monkeypatch) -> None:
         monkeypatch.setattr(transfer, name, forbidden)
 
     document = await transfer.async_collect_transfer_snapshot(
-        SimpleNamespace(),
+        hass,
         entry,
         subentry,
         mode="custom",
@@ -530,7 +531,7 @@ def test_section_selection_rejects_ambiguous_types(sections, message) -> None:
         transfer.validate_section_selection(sections)
 
 
-async def test_custom_snapshot_collects_every_selected_manager(monkeypatch) -> None:
+async def test_custom_snapshot_collects_every_selected_manager(hass, monkeypatch) -> None:
     entry, subentry = _entry_and_subentry()
     monkeypatch.setattr(transfer, "agent_config_snapshot", lambda value: dict(value))
     payloads = {
@@ -558,7 +559,7 @@ async def test_custom_snapshot_collects_every_selected_manager(monkeypatch) -> N
         monkeypatch.setattr(transfer, getter_name, getter)
 
     result = await transfer.async_collect_transfer_snapshot(
-        SimpleNamespace(),
+        hass,
         entry,
         subentry,
         mode="custom",
@@ -878,3 +879,41 @@ def test_future_transfer_version_is_rejected_cleanly() -> None:
 
     with pytest.raises(backup.BackupError, match="newer unsupported format"):
         transfer.inspect_transfer(document, "target-agent")
+
+
+async def test_setup_export_reads_manifest_outside_event_loop(
+    hass, monkeypatch
+) -> None:
+    import asyncio
+    from pathlib import Path
+    import threading
+
+    hass.async_add_executor_job.side_effect = asyncio.to_thread
+    event_loop_thread = threading.get_ident()
+    original_read = Path.read_text
+    reads = []
+
+    def read_text(path, *args, **kwargs):
+        if path.name == "manifest.json":
+            assert threading.get_ident() != event_loop_thread
+            reads.append(path)
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    monkeypatch.setattr(
+        transfer,
+        "async_get_request_rules",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                async_backup_data=AsyncMock(return_value=_rules_backup())
+            )
+        ),
+    )
+    entry, subentry = _entry_and_subentry()
+    result = await transfer.async_create_setup_export(hass, entry, subentry)
+    assert len(reads) == 1
+    assert (
+        result["document"]["integration_version"]
+        == json.loads(original_read(reads[0]))["version"]
+    )
+    assert set(result["document"]["sections"]) == transfer.SETUP_SECTIONS

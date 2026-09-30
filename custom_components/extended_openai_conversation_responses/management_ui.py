@@ -2363,18 +2363,13 @@ async def async_knowledge_command(request: _ManagementRequest) -> dict[str, Any]
         update_live_subentry(
             request.hass, request.entry, request.subentry, data=persisted
         )
-        stats = library.stats()
-        source_count = 0
-        if isinstance(stats, Mapping):
-            with suppress(TypeError, ValueError):
-                source_count = int(stats.get("source_count", 0))
         return {
             "revision": saved_agent_config_revision(
                 request.subentry, persisted, request.subentry.title
             ),
             "knowledge_enabled": bool(persisted.get(CONF_KNOWLEDGE_ENABLED, False)),
             "feature_status": management_feature_status(
-                persisted, knowledge_source_count=source_count
+                persisted, knowledge_source_count=library.total_source_count
             )["knowledge"],
         }
     if action == "get":

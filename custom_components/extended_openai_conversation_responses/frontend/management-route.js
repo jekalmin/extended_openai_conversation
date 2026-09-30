@@ -1,3 +1,4 @@
+import {updateRequestRuleEmptyState} from "./request-rule-empty-state.js";
 import {ensureGuideModule} from "./guide-page.js";
 import {ensureOverviewModule, startOverviewDetailReads} from "./overview-page.js";
 import {SECTION_CACHE_TTL_MS} from "./management-cache.js";
@@ -309,7 +310,10 @@ export function applyRequestRuleSearch(panel, root = panel?.shadowRoot) {
 
   const list = root.querySelector(".rule-list");
   const empty = list?.querySelector("[data-eoc-rule-search-empty]");
-  if (empty) empty.hidden = visible > 0 || !rules.length;
+  if (empty) {
+    updateRequestRuleEmptyState(empty, query, panel._ruleGroupFilter);
+    empty.hidden = visible > 0 || !rules.length && (panel._ruleGroupFilter || "all") === "all" && !normalized;
+  }
 
   const count = root.querySelector(".rule-toolbar .count");
   if (count) {
