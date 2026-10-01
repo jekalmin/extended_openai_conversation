@@ -272,7 +272,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         DOMAIN,
         SERVICE_QUERY_IMAGE,
         query_image,
-        schema=QUERY_IMAGE_SCHEMA,
+        schema=QUERY_IMAGE_SCHEMA,  # type: ignore[arg-type]
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -280,14 +280,14 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         DOMAIN,
         "change_config",
         change_config,
-        schema=CHANGE_CONFIG_SCHEMA,
+        schema=CHANGE_CONFIG_SCHEMA,  # type: ignore[arg-type]
     )
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_RELOAD_SKILLS,
         reload_skills,
-        schema=RELOAD_SKILLS_SCHEMA,
+        schema=RELOAD_SKILLS_SCHEMA,  # type: ignore[arg-type]
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -295,7 +295,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         DOMAIN,
         SERVICE_DOWNLOAD_SKILL,
         download_skill,
-        schema=DOWNLOAD_SKILL_SCHEMA,
+        schema=DOWNLOAD_SKILL_SCHEMA,  # type: ignore[arg-type]
         supports_response=SupportsResponse.ONLY,
     )
 
