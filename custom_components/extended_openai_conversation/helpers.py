@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Any
 
-from openai import AsyncAzureOpenAI, AsyncClient, AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from homeassistant.components import conversation
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
@@ -135,24 +135,24 @@ async def get_authenticated_client(
     organization: str | None,
     api_provider: str | None,
     skip_authentication: bool = False,
-) -> AsyncClient:
+) -> AsyncOpenAI:
     """Validate OpenAI authentication."""
 
-    client: AsyncClient
+    client: AsyncOpenAI
     if base_url and (is_azure_url(base_url) or api_provider == "azure"):
-        client = AsyncAzureOpenAI(
+        client = AsyncAzureOpenAI(  # type: ignore[call-overload]
             api_key=api_key,
             azure_endpoint=base_url,
             api_version=api_version,
             organization=organization,
-            http_client=get_async_client(hass),
+            http_client=get_async_client(hass),  # type: ignore[arg-type]
         )
     else:
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
             organization=organization,
-            http_client=get_async_client(hass),
+            http_client=get_async_client(hass),  # type: ignore[arg-type]
         )
 
     if skip_authentication:
