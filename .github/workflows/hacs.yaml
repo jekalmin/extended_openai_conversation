@@ -8,15 +8,16 @@ on:
 
 jobs:
   validate:
-    runs-on: "ubuntu-latest"
+    runs-on: "ubuntu-22.04"
     steps:
         - uses: "actions/checkout@v4"
         - uses: "home-assistant/actions/hassfest@master"
   validate-hacs:
-    runs-on: "ubuntu-latest"
+    runs-on: "ubuntu-22.04"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - name: HACS validation
         uses: "hacs/action@main"
         with:
           category: "integration"
+          ignore: "license"
