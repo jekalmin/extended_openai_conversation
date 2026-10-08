@@ -63,6 +63,43 @@ _LOGGER = logging.getLogger(__name__)
 MAX_TOOL_ITERATIONS = 20
 
 
+def _tool_result_data(content: conversation.ToolResultContent) -> Any:
+    """Return the data of a tool result across Home Assistant versions.
+
+    Home Assistant 2026.10 replaced ``ToolResultContent.tool_result`` with
+    ``ToolResultContent.result`` (an ``llm.ToolResult``) and deprecated the old
+    attribute.
+    """
+    result = getattr(content, "result", None)
+    if result is not None:
+        return result.data
+    return content.tool_result
+
+
+def _make_tool_result_content(
+    agent_id: str, tool_call_id: str, tool_name: str, data: dict[str, Any]
+) -> conversation.ToolResultContent:
+    """Build a ToolResultContent across Home Assistant versions.
+
+    Home Assistant 2026.10 requires ``result=llm.ToolResult(...)`` and no longer
+    accepts the ``tool_result`` keyword.
+    """
+    if hasattr(llm, "ToolResult"):
+        return conversation.ToolResultContent(
+            agent_id=agent_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            result=llm.ToolResult(data=data),
+        )
+    # Home Assistant before 2026.10
+    return conversation.ToolResultContent(  # type: ignore[call-arg]
+        agent_id=agent_id,
+        tool_call_id=tool_call_id,
+        tool_name=tool_name,
+        tool_result=data,
+    )
+
+
 def _shorten_tool_call_id(tool_call_id: str) -> str:
     """Shorten tool call ID to exactly 9 alphanumeric characters as Mistral requires."""
     import hashlib
@@ -153,7 +190,7 @@ def _convert_content_to_param(
                     "tool_call_id": _shorten_tool_call_id(content.tool_call_id)
                     if shorten_tool_call_id
                     else content.tool_call_id,
-                    "content": orjson.dumps(content.tool_result).decode(),
+                    "content": orjson.dumps(_tool_result_data(content)).decode(),
                 }
             )
 
@@ -485,11 +522,11 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                 self.hass, function_config, arguments, llm_context, exposed_entities
             )
 
-        return conversation.ToolResultContent(
+        return _make_tool_result_content(
             agent_id=self.entity_id,
             tool_call_id=tool_input.id,
             tool_name=tool_input.tool_name,
-            tool_result={"result": str(result)},
+            data={"result": str(result)},
         )
 
     def should_run_in_background(self, arguments: dict[str, Any]) -> bool:
