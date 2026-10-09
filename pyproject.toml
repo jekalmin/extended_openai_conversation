@@ -54,6 +54,7 @@ voluptuous = "vol"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "-p homeassistant.const"
 
 [tool.mypy]
 python_version = "3.14"
