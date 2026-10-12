@@ -26,6 +26,7 @@ from homeassistant.const import ATTR_NAME, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import (
+    area_registry as ar,
     device_registry as dr,
     entity_registry as er,
     intent,
@@ -268,6 +269,8 @@ class ExtendedOpenAIAgentEntity(
             if async_should_expose(self.hass, conversation.DOMAIN, state.entity_id)
         ]
         entity_registry = er.async_get(self.hass)
+        device_registry = dr.async_get(self.hass)
+        area_registry = ar.async_get(self.hass)
         exposed_entities = []
         for state in states:
             entity_id = state.entity_id
@@ -277,12 +280,28 @@ class ExtendedOpenAIAgentEntity(
             if entity and entity.aliases:
                 aliases = entity.aliases
 
+            area_id = None
+            if entity:
+                area_id = entity.area_id
+                if area_id is None and entity.device_id:
+                    device = device_registry.async_get(entity.device_id)
+                    if device:
+                        area_id = device.area_id
+
+            area_name = ""
+            if area_id:
+                area = area_registry.async_get_area(area_id)
+                if area:
+                    area_name = area.name
+
             exposed_entities.append(
                 {
                     "entity_id": entity_id,
                     "name": state.name,
                     "state": self.hass.states.get(entity_id).state,
                     "aliases": aliases,
+                    "area_id": area_id or "",
+                    "area_name": area_name,
                 }
             )
         return exposed_entities
