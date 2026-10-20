@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -229,7 +230,7 @@ class ExtendedOpenAIAgentEntity(
             function_tools: list[dict[str, Any]] | None = (
                 yaml.safe_load(function_tools_config)
                 if function_tools_config
-                else DEFAULT_CONF_FUNCTION_TOOLS
+                else deepcopy(DEFAULT_CONF_FUNCTION_TOOLS)
             )
             if function_tools:
                 for function_tool in function_tools:

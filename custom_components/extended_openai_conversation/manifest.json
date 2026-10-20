@@ -19,6 +19,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/jekalmin/extended_openai_conversation/issues",
   "requirements": [
+    "mcp>=1.26.0,<3",
     "openai>=2.21.0",
     "voluptuous-openapi>=0.4.1"
   ],

@@ -27,3 +27,5 @@ types-PyYAML>=6.0
 # HTTP client
 httpx>=0.25.0
 aiohttp>=3.9.0
+# Match the integration's MCP client requirement.
+mcp>=1.26.0,<3

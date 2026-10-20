@@ -8,6 +8,7 @@ from .bash import BashFunction
 from .composite import CompositeFunction
 from .file import EditFileFunction, ReadFileFunction, WriteFileFunction
 from .native import NativeFunction
+from .parallel import ParallelFunction
 from .script import ScriptFunction
 from .sqlite import SqliteFunction
 from .template import TemplateFunction
@@ -19,6 +20,7 @@ __all__ = [
     "EditFileFunction",
     "Function",
     "NativeFunction",
+    "ParallelFunction",
     "ReadFileFunction",
     "RestFunction",
     "ScrapeFunction",
@@ -31,6 +33,7 @@ __all__ = [
 
 FUNCTIONS: dict[str, Function] = {
     "native": NativeFunction(),
+    "parallel": ParallelFunction(),
     "script": ScriptFunction(),
     "template": TemplateFunction(),
     "rest": RestFunction(),

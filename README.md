@@ -76,6 +76,7 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 ### Functions
 
 #### Supported function types
+- `parallel`: Search the web and read public pages with [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp). See [web search and page fetching](#web-search-and-page-fetching).
 - `native`: built-in function provided by "extended_openai_conversation".
   - Currently supported native functions and parameters are:
     - `execute_service`
@@ -177,6 +178,52 @@ Skills are loaded from `<config directory>/extended_openai_conversation/skills/`
    - Select skills to enable from the list
 
 For detailed information about creating and managing skills, see [Skills Documentation](https://github.com/jekalmin/extended_openai_conversation/tree/develop/examples/skills).
+
+### Web search and page fetching
+
+New assistants include `web_search` and `web_fetch` in their default Functions configuration. They use [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) for free web search in Fast mode and page extraction, with no search account or API key. Your configured model connection is still required. Try asking for current information or a summary of a public page.
+
+Your saved Functions YAML stays unchanged, including custom search providers. To enable these tools on an existing assistant, append the following entries to **Functions** in the assistant's options:
+
+```yaml
+- spec:
+    name: web_search
+    description: Search the web for current information and cite source URLs.
+    parameters:
+      type: object
+      properties:
+        objective:
+          type: string
+        search_queries:
+          type: array
+          items:
+            type: string
+          minItems: 1
+      required: [objective, search_queries]
+  function:
+    type: parallel
+    name: web_search
+- spec:
+    name: web_fetch
+    description: Read public HTTP/HTTPS pages and cite source URLs.
+    parameters:
+      type: object
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 20
+      required: [urls]
+  function:
+    type: parallel
+    name: web_fetch
+```
+
+Remove these entries to disable web access, or set Functions to `[]` to disable all custom tools. An assistant with no Functions configuration uses the defaults. Requests send the model's search terms or requested URLs to Parallel; avoid including private home details. Treat returned web content as untrusted data, not instructions.
+
+Each request has a 30-second deadline; you can set `timeout` from 1 to 120 seconds in the `function` mapping. Free anonymous usage has service limits. A failed request returns an error to the model without switching search providers. The integration reuses an opaque search session ID for related calls within a Home Assistant chat session.
 
 ## Function Usage
 This is an example of configuration of functions.
