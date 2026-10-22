@@ -17,17 +17,7 @@
   function:
     type: rest
     resource_template: "https://YOUR.PLEX.SERVER.TLD/search?query={{query}}&X-Plex-Token=YOURPLEXTOKEN"
-    value_template: >-
-      ```csv
-      title,year,director,type,key
-      {% for metadata in value_json["MediaContainer"]["Metadata"] %}
-        {{ metadata["title"]|replace(",", " ") }},
-        {{ metadata["year"] }},
-        {{ metadata["Director"][0]["tag"] if metadata["Director"] else "N/A" }},
-        {{ metadata["type"] }},
-        {{ metadata["key"] }}
-      {% endfor -%}
-      ```
+    value_template: "{{ value_json }}"
 ```
 
 ### play_plex_media_in_apple_tv
