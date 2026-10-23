@@ -44,6 +44,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
+from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
@@ -267,12 +268,20 @@ class NativeFunctionExecutor(FunctionExecutor):
 
         if isinstance(entity_id, str):
             entity_id = [e.strip() for e in entity_id.split(",")]
-        service_data["entity_id"] = entity_id
 
-        if entity_id is None and area_id is None and device_id is None:
-            raise CallServiceError(domain, service, service_data)
         if not hass.services.has_service(domain, service):
             raise ServiceNotFound(domain, service)
+
+        if entity_id is None and area_id is None and device_id is None:
+            # Some services (e.g. ones identifying their target via a custom
+            # field like a VIN, or legacy notify services) don't accept an
+            # entity/area/device target at all -- only require one if the
+            # service actually declares support for it.
+            if await self.service_supports_target(hass, domain, service):
+                raise CallServiceError(domain, service, service_data)
+        else:
+            service_data["entity_id"] = entity_id
+
         self.validate_entity_ids(hass, entity_id or [], exposed_entities)
 
         try:
@@ -285,6 +294,14 @@ class NativeFunctionExecutor(FunctionExecutor):
         except HomeAssistantError as e:
             _LOGGER.error(e)
             return {"error": str(e)}
+
+    @staticmethod
+    async def service_supports_target(
+        hass: HomeAssistant, domain: str, service: str
+    ) -> bool:
+        """Return True if the service declares support for an entity/area/device target."""
+        descriptions = await async_get_all_descriptions(hass)
+        return bool(descriptions.get(domain, {}).get(service, {}).get("target"))
 
     async def execute_service(
         self,
