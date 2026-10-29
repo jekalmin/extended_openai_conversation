@@ -72,6 +72,44 @@ from .helpers import get_function_executor
 
 _LOGGER = logging.getLogger(__name__)
 
+# Phrases that indicate the LLM is asking a follow-up question and the
+# conversation should continue listening. Keep entries lowercase.
+FOLLOW_UP_PHRASES = [
+    "which one",
+    "would you like",
+    "do you want",
+    "would you prefer",
+    "which do you",
+    "what would you",
+    "shall i",
+    "should i",
+    "choose from",
+    "select from",
+    "pick from",
+    # Chinese follow-up question patterns
+    "哪个",
+    "哪些",
+    "哪台",
+    "哪种",
+    "要不要",
+    "想让我",
+    "要我帮",
+    "你需要",
+    "你想",
+    "你要",
+    "还是",
+]
+
+# Question marks that end a follow-up question (ASCII and full-width CJK).
+FOLLOW_UP_QUESTION_MARKS = ("?", "？")
+
+
+def _is_follow_up_question(text: str) -> bool:
+    """Detect if the LLM response asks a follow-up question."""
+    return text.rstrip().endswith(FOLLOW_UP_QUESTION_MARKS) or any(
+        phrase in text.lower() for phrase in FOLLOW_UP_PHRASES
+    )
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -214,23 +252,7 @@ class ExtendedOpenAIAgentEntity(
         intent_response.async_set_speech(query_response.message.content)
 
         # Detect if LLM is asking a follow-up question to enable continued conversation
-        response_text = query_response.message.content or ""
-        should_continue = response_text.rstrip().endswith("?") or any(
-            phrase in response_text.lower()
-            for phrase in [
-                "which one",
-                "would you like",
-                "do you want",
-                "would you prefer",
-                "which do you",
-                "what would you",
-                "shall i",
-                "should i",
-                "choose from",
-                "select from",
-                "pick from",
-            ]
-        )
+        should_continue = _is_follow_up_question(query_response.message.content or "")
 
         return conversation.ConversationResult(
             response=intent_response,
