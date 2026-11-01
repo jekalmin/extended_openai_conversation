@@ -248,6 +248,7 @@ CONF_EXTRA_BODY = "extra_body"
 DEFAULT_REASONING_EFFORT = "low"
 DEFAULT_EXTRA_BODY = ""
 REASONING_EFFORT_OPTIONS = ["low", "medium", "high"]
+LUNA_REASONING_EFFORT_OPTIONS = ["none", "low", "medium", "high", "xhigh", "max"]
 
 SERVICE_QUERY_IMAGE = "query_image"
 
@@ -272,6 +273,18 @@ DEFAULT_MODEL_CONFIG = {
 # Each entry: {"pattern": regex_string, "config": config_dict}
 # Patterns are matched in order; first match wins
 MODEL_CONFIG_PATTERNS = [
+    {
+        "pattern": r"^gpt-6-luna$",
+        "config": {
+            "supports_top_p": False,
+            "supports_temperature": False,
+            "supports_max_tokens": False,
+            "supports_max_completion_tokens": False,
+            "supports_reasoning_effort": True,
+            "supports_service_tier": True,
+            "uses_responses": True,
+        },
+    },
     # Reasoning models (o1, o3, o4, gpt-5, etc.)
     {
         "pattern": r"^o[1-4]|^gpt-5",

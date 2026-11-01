@@ -79,10 +79,13 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DOMAIN,
-    REASONING_EFFORT_OPTIONS,
     SERVICE_TIER_OPTIONS,
 )
-from .helpers import get_authenticated_client, get_model_config
+from .helpers import (
+    get_authenticated_client,
+    get_model_config,
+    get_reasoning_effort_options,
+)
 from .skills import SkillManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -267,6 +270,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             # Check if advanced options is enabled
+            user_input = {**self.options, **user_input}
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
                 # Store data and move to advanced step
                 self._temp_data = user_input
@@ -358,7 +362,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=opt, label=opt.capitalize())
-                        for opt in REASONING_EFFORT_OPTIONS
+                        for opt in get_reasoning_effort_options(chat_model)
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
                 )
@@ -530,6 +534,7 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             # Check if advanced options is enabled
+            user_input = {**self.options, **user_input}
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
                 # Store data and move to advanced step
                 self._temp_data = user_input
@@ -635,7 +640,7 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=opt, label=opt.capitalize())
-                        for opt in REASONING_EFFORT_OPTIONS
+                        for opt in get_reasoning_effort_options(chat_model)
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
                 )

@@ -15,12 +15,13 @@ from openai.types.chat import (
     ChatCompletionToolParam,
 )
 import orjson
+import probatio
 import voluptuous as vol
-from voluptuous_openapi import convert
+from voluptuous_openapi import UNSUPPORTED, convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.exceptions import TemplateError
+from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import device_registry as dr, llm, template
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
@@ -53,6 +54,7 @@ from .const import (
 from .exceptions import FunctionNotFound, ParseArgumentsFailed, TokenLengthExceededError
 from .functions import get_function
 from .helpers import get_model_config
+from .responses import request_parameters, response_input, transform_stream
 
 if TYPE_CHECKING:
     from . import ExtendedOpenAIConfigEntry
@@ -133,15 +135,23 @@ def _adjust_schema(schema: dict[str, Any]) -> None:
 
 
 def _format_structured_output(
-    schema: vol.Schema, llm_api: llm.APIInstance | None
+    schema: vol.Schema | probatio.Schema, llm_api: llm.APIInstance | None
 ) -> dict[str, Any]:
     """Format the schema to be compatible with OpenAI API."""
-    result: dict[str, Any] = convert(
-        schema,
-        custom_serializer=(
-            llm_api.custom_serializer if llm_api else llm.selector_serializer
-        ),
-    )
+    serializer = llm_api.custom_serializer if llm_api else llm.selector_serializer
+    result: dict[str, Any]
+    if isinstance(schema, probatio.Schema):
+        result = probatio.to_openapi(schema, custom_serializer=serializer)
+    else:
+        # HA now returns probatio's UNSUPPORTED sentinel; the legacy converter
+        # requires its own sentinel to continue converting ordinary validators.
+        def legacy_serializer(value: Any) -> Any:
+            if serializer is None:
+                return UNSUPPORTED
+            converted = serializer(value)
+            return converted if isinstance(converted, dict) else UNSUPPORTED
+
+        result = convert(schema, custom_serializer=legacy_serializer)
 
     _adjust_schema(result)
 
@@ -230,7 +240,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
         exposed_entities: list[dict[str, Any]],
         llm_context: llm.LLMContext | None = None,
         structure_name: str | None = None,
-        structure: vol.Schema | None = None,
+        structure: vol.Schema | probatio.Schema | None = None,
     ) -> None:
         """Generate an answer for the chat log with streaming support."""
         options = self.subentry.data
@@ -246,6 +256,7 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
         # Get model-specific configuration
         model_config = get_model_config(model)
+        uses_responses = model_config.get("uses_responses", False)
 
         messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
 
@@ -328,32 +339,63 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             tool_kwargs["tools"] = tools
             tool_kwargs["tool_choice"] = "auto"
 
+        if uses_responses:
+            api_kwargs = request_parameters(
+                model,
+                options,
+                function_tools,
+                api_kwargs.get("response_format", {}).get("json_schema"),
+            )
+            tool_kwargs = {}
+            if "tool_choice" in api_kwargs:
+                tool_kwargs["tool_choice"] = api_kwargs.pop("tool_choice")
+        executed_calls = 0
+        response_stats: dict[str, int] = {}
+        stream: Any
+        deltas: AsyncGenerator[
+            conversation.AssistantContentDeltaDict
+            | conversation.ToolResultContentDeltaDict
+        ]
+
         # To prevent infinite loops, we limit the number of iterations
         for n_requests in range(MAX_TOOL_ITERATIONS):
             # Update tool_choice based on function call count
             # -1 means unlimited function calls
-            if tools and 0 <= max_function_calls <= n_requests:
+            call_count = executed_calls if uses_responses else n_requests
+            if tools and 0 <= max_function_calls <= call_count:
                 tool_kwargs["tool_choice"] = "none"
 
-            _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
-
-            stream = await self._client.chat.completions.create(
-                messages=messages,
-                **api_kwargs,
-                **tool_kwargs,
-            )
+            if uses_responses:
+                stream = await self._client.responses.create(
+                    input=response_input(chat_log, model),
+                    **api_kwargs,
+                    **tool_kwargs,
+                )
+                deltas = transform_stream(stream, model, max_tokens, response_stats)
+            else:
+                _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+                stream = await self._client.chat.completions.create(
+                    messages=messages,
+                    **api_kwargs,
+                    **tool_kwargs,
+                )
+                deltas = self._transform_stream(chat_log, stream)
 
             # Process stream and collect tool calls
             pending_tool_calls: list[llm.ToolInput] = []
 
-            async for content in chat_log.async_add_delta_content_stream(
-                self.entity_id, self._transform_stream(chat_log, stream)
-            ):
-                if (
-                    isinstance(content, conversation.AssistantContent)
-                    and content.tool_calls
+            try:
+                async for content in chat_log.async_add_delta_content_stream(
+                    self.entity_id, deltas
                 ):
-                    pending_tool_calls.extend(content.tool_calls)
+                    if (
+                        isinstance(content, conversation.AssistantContent)
+                        and content.tool_calls
+                    ):
+                        pending_tool_calls.extend(content.tool_calls)
+            finally:
+                if uses_responses:
+                    await stream.close()
 
             if pending_tool_calls:
                 _LOGGER.info("Response Tool Calls %s", pending_tool_calls)
@@ -361,6 +403,9 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             # Execute custom functions
             for tool_input in pending_tool_calls:
                 try:
+                    if uses_responses and 0 <= max_function_calls <= executed_calls:
+                        raise HomeAssistantError("Maximum function call count reached")
+                    executed_calls += 1
                     function_tool = next(
                         (
                             f
@@ -397,7 +442,24 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             # Check if we need to continue (if there are pending tool results)
             if not chat_log.unresponded_tool_results:
+                if uses_responses and response_stats:
+                    chat_log.async_trace(
+                        {
+                            "stats": {
+                                key: value
+                                for key, value in response_stats.items()
+                                if key != "total_tokens"
+                            }
+                        }
+                    )
+                    if response_stats["total_tokens"] > options.get(
+                        CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
+                    ):
+                        await self._truncate_message_history(chat_log)
                 break
+        else:
+            if uses_responses:
+                raise HomeAssistantError("Maximum Responses API iterations reached")
 
     async def _transform_stream(
         self,

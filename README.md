@@ -1,9 +1,27 @@
 # Extended OpenAI Conversation
+
 This is custom component of Home Assistant.
 
 Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) with some new features such as call-service.
 
 📚 **[Documentation](https://extended-openai-conversation.mintlify.app)**
+
+## GPT-6 Luna
+
+Set the conversation or AI Task model to `gpt-6-luna` and enable Advanced
+Options to choose reasoning effort (`none`, `low`, `medium`, `high`, `xhigh`,
+or `max`; integration default: `low`). Luna automatically uses the Responses
+API, including streaming and custom functions. Other models continue to use
+Chat Completions.
+
+The existing output-token setting maps to `max_output_tokens` for Luna and
+includes reasoning tokens. An exhausted budget is reported as an incomplete
+response; the integration never silently lowers reasoning effort or changes
+models. Non-empty `extra_body` is rejected explicitly on this transport.
+
+Responses use `store: false`. Encrypted reasoning items remain only in the
+Home Assistant session's native message history and are discarded with that
+history or on integration unload. Existing function YAML does not need changes.
 
 ## Additional Features
 - Ability to call service of Home Assistant
