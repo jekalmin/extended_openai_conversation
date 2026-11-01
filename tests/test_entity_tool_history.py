@@ -103,13 +103,20 @@ async def handle_log(log, execute):
 async def test_failed_service_answers_all_calls() -> None:
     execute = AsyncMock(side_effect=ServiceNotFound("cover", "close"))
     log = FakeChatLog([], [tool_call("a"), tool_call("b")])
-    create = await handle_log(log, execute)
+    message = "Action cover.close not found"
+    # HA normally translates this exception using its running instance.
+    with patch.object(ServiceNotFound, "__str__", return_value=message):
+        create = await handle_log(log, execute)
     assert execute.await_count == 2
     assert create.await_count == 2
     results = [item for item in log.content if item.role == "tool_result"]
     assert [entity._tool_result_data(item)["error"] for item in results] == [
         "ServiceNotFound",
         "ServiceNotFound",
+    ]
+    assert [entity._tool_result_data(item)["message"] for item in results] == [
+        message,
+        message,
     ]
     assert_valid_messages(log.content)
 
