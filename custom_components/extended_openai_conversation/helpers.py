@@ -23,10 +23,11 @@ from .const import (
     DEFAULT_FOLLOW_REDIRECTS,
     DEFAULT_MODEL_CONFIG,
     DEFAULT_TOKEN_PARAM,
-    LUNA_REASONING_EFFORT_OPTIONS,
     MODEL_CONFIG_PATTERNS,
     MODEL_TOKEN_PARAMETER_SUPPORT,
     REASONING_EFFORT_OPTIONS,
+    RESPONSES_MODEL_CONFIG,
+    RESPONSES_MODEL_REASONING_EFFORT_OPTIONS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,9 +35,12 @@ _LOGGER = logging.getLogger(__name__)
 
 def get_reasoning_effort_options(model: str) -> list[str]:
     """Return reasoning levels supported by the selected transport and model."""
-    if get_model_config(model).get("uses_responses"):
-        return list(LUNA_REASONING_EFFORT_OPTIONS)
-    return list(REASONING_EFFORT_OPTIONS)
+    return list(
+        RESPONSES_MODEL_REASONING_EFFORT_OPTIONS.get(
+            model.lower(),
+            REASONING_EFFORT_OPTIONS,
+        )
+    )
 
 
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
@@ -44,6 +48,8 @@ AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azur
 
 def get_model_config(model: str) -> dict[str, bool]:
     """Get model-specific parameter configuration."""
+    if model.lower() in RESPONSES_MODEL_REASONING_EFFORT_OPTIONS:
+        return dict(RESPONSES_MODEL_CONFIG)
     # Check patterns in order; first match wins
     for entry in MODEL_CONFIG_PATTERNS:
         pattern = str(entry["pattern"])

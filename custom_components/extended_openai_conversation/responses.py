@@ -1,4 +1,4 @@
-"""Stateless Responses API transport for GPT-6 Luna.
+"""Stateless Responses API transport for supported GPT-6 and GPT-6.1 models.
 
 Provider output (including encrypted reasoning) lives in AssistantContent.native,
 not a process-global cache or persisted conversation. HA owns its lifetime.
@@ -27,9 +27,9 @@ from .const import (
     DEFAULT_REASONING_EFFORT,
     DEFAULT_SERVICE_TIER,
     DOMAIN,
-    LUNA_REASONING_EFFORT_OPTIONS,
 )
 from .exceptions import ParseArgumentsFailed, TokenLengthExceededError
+from .helpers import get_reasoning_effort_options
 
 NATIVE_KEY = f"{DOMAIN}.responses"
 
@@ -124,7 +124,7 @@ def request_parameters(
 ) -> dict[str, Any]:
     """Build Responses parameters without changing existing YAML tool schemas."""
     effort = options.get(CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT)
-    if effort not in LUNA_REASONING_EFFORT_OPTIONS:
+    if effort not in get_reasoning_effort_options(model):
         raise HomeAssistantError(f"Unsupported reasoning effort for {model}: {effort}")
     # extra_body is a Chat Completions/backend escape hatch. It must not silently
     # override store, reasoning, model or input on this new transport.

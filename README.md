@@ -6,15 +6,28 @@ Derived from [OpenAI Conversation](https://www.home-assistant.io/integrations/op
 
 📚 **[Documentation](https://extended-openai-conversation.mintlify.app)**
 
-## GPT-6 Luna
+## GPT-6 and GPT-6.1
 
-Set the conversation or AI Task model to `gpt-6-luna` and enable Advanced
-Options to choose reasoning effort (`none`, `low`, `medium`, `high`, `xhigh`,
-or `max`; integration default: `low`). Luna automatically uses the Responses
-API, including streaming and custom functions. Other models continue to use
-Chat Completions.
+The following conversation and AI Task models automatically use the Responses
+API, including streaming and custom functions. Enable Advanced Options to
+choose reasoning effort; the integration default is `low`.
 
-The existing output-token setting maps to `max_output_tokens` for Luna and
+| Model ID | Reasoning effort |
+| --- | --- |
+| `gpt-6-astra` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-6-sol` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-6-luna` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-6.1-sol` | `low`, `medium`, `high`, `xhigh`, `max` |
+| `gpt-6.1-terra` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
+
+Use the exact model IDs above. Other models retain the Chat Completions path.
+See [OpenAI's GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model)
+for model capabilities and API restrictions. When switching from a model using
+`none` to Astra or GPT-6.1 Sol, the configuration form suggests `low`; saving
+the form confirms the new effort. Unsupported runtime values are reported as
+errors instead of silently changing reasoning effort.
+
+The existing output-token setting maps to `max_output_tokens` for these models and
 includes reasoning tokens. An exhausted budget is reported as an incomplete
 response; the integration never silently lowers reasoning effort or changes
 models. Non-empty `extra_body` is rejected explicitly on this transport.

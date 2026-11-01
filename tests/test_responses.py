@@ -12,7 +12,7 @@ import voluptuous as vol
 
 from custom_components.extended_openai_conversation import entity, responses
 from custom_components.extended_openai_conversation.const import (
-    LUNA_REASONING_EFFORT_OPTIONS,
+    RESPONSES_MODEL_REASONING_EFFORT_OPTIONS,
 )
 from custom_components.extended_openai_conversation.exceptions import (
     ParseArgumentsFailed,
@@ -130,10 +130,17 @@ async def run(instance, client, log, tools=None, **kwargs):
         await instance._async_handle_chat_log(log, tools or [], [], **kwargs)
 
 
-@pytest.mark.parametrize("effort", LUNA_REASONING_EFFORT_OPTIONS)
-def test_parameters(effort):
+@pytest.mark.parametrize(
+    "model,effort",
+    [
+        (model, effort)
+        for model, levels in RESPONSES_MODEL_REASONING_EFFORT_OPTIONS.items()
+        for effort in levels
+    ],
+)
+def test_parameters(model, effort):
     params = responses.request_parameters(
-        MODEL,
+        model,
         {
             "reasoning_effort": effort,
             "max_tokens": 3000,
@@ -144,6 +151,7 @@ def test_parameters(effort):
         TOOLS,
     )
     assert params["reasoning"] == {"effort": effort}
+    assert params["model"] == model
     assert params["max_output_tokens"] == 3000
     assert params["service_tier"] == "auto"
     assert params["store"] is False
@@ -158,11 +166,21 @@ def test_parameters(effort):
 
 
 def test_model_routing_and_levels():
-    assert get_model_config(MODEL)["uses_responses"]
-    assert get_reasoning_effort_options(MODEL) == LUNA_REASONING_EFFORT_OPTIONS
-    for model in ("gpt-5-mini", "gpt-4o", "gpt-6-sol", "custom-model"):
+    for model, levels in RESPONSES_MODEL_REASONING_EFFORT_OPTIONS.items():
+        assert get_model_config(model)["uses_responses"]
+        assert get_reasoning_effort_options(model) == levels
+        assert get_model_config(model.upper())["uses_responses"]
+        assert get_reasoning_effort_options(model.upper()) == levels
+    for model in ("gpt-5-mini", "gpt-4o", "gpt-6.1-unknown", "custom-model"):
         assert not get_model_config(model).get("uses_responses")
         assert get_reasoning_effort_options(model) == ["low", "medium", "high"]
+
+
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+def test_none_is_rejected_for_models_that_require_reasoning(model):
+    assert "none" not in get_reasoning_effort_options(model)
+    with pytest.raises(HomeAssistantError, match="Unsupported reasoning effort"):
+        responses.request_parameters(model, {"reasoning_effort": "none"}, TOOLS)
 
 
 def test_bad_effort_and_extra_body_are_explicit_errors():
@@ -196,10 +214,11 @@ async def test_real_chatlog_stream_and_native_history(hass):
     assert stats == {"input_tokens": 40, "output_tokens": 20, "total_tokens": 60}
 
 
-async def test_functions_and_error_results_share_existing_executor(hass):
+@pytest.mark.parametrize("model", RESPONSES_MODEL_REASONING_EFFORT_OPTIONS)
+async def test_functions_and_error_results_share_existing_executor(hass, model):
     first = Stream([completed(reasoning(), call(), call("call_b"))])
     second = Stream([text(), completed()])
-    instance, client = make_entity([first, second])
+    instance, client = make_entity([first, second], {"chat_model": model})
     log = make_log(hass)
 
     async def execute(config, tool, *unused):
@@ -213,6 +232,7 @@ async def test_functions_and_error_results_share_existing_executor(hass):
         await run(instance, client, log, TOOLS)
     assert mock.call_count == 2
     request = client.responses.create.call_args_list[1].kwargs
+    assert request["model"] == model
     outputs = [
         item for item in request["input"] if item.get("type") == "function_call_output"
     ]

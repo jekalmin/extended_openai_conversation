@@ -330,6 +330,11 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
+        suggested_options = dict(self.options)
+        if model_config.get("uses_responses") and suggested_options.get(
+            CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
+        ) not in get_reasoning_effort_options(chat_model):
+            suggested_options[CONF_REASONING_EFFORT] = DEFAULT_REASONING_EFFORT
 
         schema: dict[Any, Any] = {}
 
@@ -406,7 +411,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(schema), self.options
+                vol.Schema(schema), suggested_options
             ),
         )
 
@@ -608,6 +613,11 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
+        suggested_options = dict(self.options)
+        if model_config.get("uses_responses") and suggested_options.get(
+            CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
+        ) not in get_reasoning_effort_options(chat_model):
+            suggested_options[CONF_REASONING_EFFORT] = DEFAULT_REASONING_EFFORT
 
         schema: dict[Any, Any] = {}
 
@@ -684,6 +694,6 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(schema), self.options
+                vol.Schema(schema), suggested_options
             ),
         )
