@@ -360,24 +360,35 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             # Execute custom functions
             for tool_input in pending_tool_calls:
-                function_tool = next(
-                    (
-                        f
-                        for f in (function_tools)
-                        if f["spec"]["name"] == tool_input.tool_name
-                    ),
-                    None,
-                )
+                try:
+                    function_tool = next(
+                        (
+                            f
+                            for f in (function_tools)
+                            if f["spec"]["name"] == tool_input.tool_name
+                        ),
+                        None,
+                    )
 
-                if function_tool is None:
-                    raise FunctionNotFound(tool_input.tool_name)
+                    if function_tool is None:
+                        raise FunctionNotFound(tool_input.tool_name)
 
-                tool_result_content = await self._execute_function_tool(
-                    function_tool,
-                    tool_input,
-                    llm_context,
-                    exposed_entities,
-                )
+                    tool_result_content = await self._execute_function_tool(
+                        function_tool,
+                        tool_input,
+                        llm_context,
+                        exposed_entities,
+                    )
+                except Exception as err:
+                    # Each advertised call needs a result, including failed calls.
+                    # asyncio.CancelledError is a BaseException and still propagates.
+                    _LOGGER.exception("Custom tool %s failed", tool_input.tool_name)
+                    tool_result_content = _make_tool_result_content(
+                        agent_id=self.entity_id,
+                        tool_call_id=tool_input.id,
+                        tool_name=tool_input.tool_name,
+                        data={"error": type(err).__name__, "message": str(err)},
+                    )
 
                 chat_log.async_add_assistant_content_without_tools(tool_result_content)
 
