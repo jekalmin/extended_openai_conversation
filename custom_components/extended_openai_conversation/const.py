@@ -248,6 +248,14 @@ CONF_EXTRA_BODY = "extra_body"
 DEFAULT_REASONING_EFFORT = "low"
 DEFAULT_EXTRA_BODY = ""
 REASONING_EFFORT_OPTIONS = ["low", "medium", "high"]
+RESPONSES_REASONING_EFFORT_OPTIONS = ["none", "low", "medium", "high", "xhigh", "max"]
+RESPONSES_MODEL_REASONING_EFFORT_OPTIONS = {
+    "gpt-6-astra": RESPONSES_REASONING_EFFORT_OPTIONS[1:],
+    "gpt-6-sol": RESPONSES_REASONING_EFFORT_OPTIONS,
+    "gpt-6-luna": RESPONSES_REASONING_EFFORT_OPTIONS,
+    "gpt-6.1-sol": RESPONSES_REASONING_EFFORT_OPTIONS[1:],
+    "gpt-6.1-terra": RESPONSES_REASONING_EFFORT_OPTIONS,
+}
 
 SERVICE_QUERY_IMAGE = "query_image"
 
@@ -271,6 +279,16 @@ DEFAULT_MODEL_CONFIG = {
 # Pattern-based model configurations
 # Each entry: {"pattern": regex_string, "config": config_dict}
 # Patterns are matched in order; first match wins
+RESPONSES_MODEL_CONFIG = {
+    "supports_top_p": False,
+    "supports_temperature": False,
+    "supports_max_tokens": False,
+    "supports_max_completion_tokens": False,
+    "supports_reasoning_effort": True,
+    "supports_service_tier": True,
+    "uses_responses": True,
+}
+
 MODEL_CONFIG_PATTERNS = [
     # Reasoning models (o1, o3, o4, gpt-5, etc.)
     {

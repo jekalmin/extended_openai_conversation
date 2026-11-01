@@ -79,10 +79,13 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DOMAIN,
-    REASONING_EFFORT_OPTIONS,
     SERVICE_TIER_OPTIONS,
 )
-from .helpers import get_authenticated_client, get_model_config
+from .helpers import (
+    get_authenticated_client,
+    get_model_config,
+    get_reasoning_effort_options,
+)
 from .skills import SkillManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -267,6 +270,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             # Check if advanced options is enabled
+            user_input = {**self.options, **user_input}
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
                 # Store data and move to advanced step
                 self._temp_data = user_input
@@ -326,6 +330,11 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
+        suggested_options = dict(self.options)
+        if model_config.get("uses_responses") and suggested_options.get(
+            CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
+        ) not in get_reasoning_effort_options(chat_model):
+            suggested_options[CONF_REASONING_EFFORT] = DEFAULT_REASONING_EFFORT
 
         schema: dict[Any, Any] = {}
 
@@ -358,7 +367,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=opt, label=opt.capitalize())
-                        for opt in REASONING_EFFORT_OPTIONS
+                        for opt in get_reasoning_effort_options(chat_model)
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
                 )
@@ -402,7 +411,7 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(schema), self.options
+                vol.Schema(schema), suggested_options
             ),
         )
 
@@ -530,6 +539,7 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             # Check if advanced options is enabled
+            user_input = {**self.options, **user_input}
             if user_input.get(CONF_ADVANCED_OPTIONS, False):
                 # Store data and move to advanced step
                 self._temp_data = user_input
@@ -603,6 +613,11 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
         model_config = get_model_config(chat_model)
+        suggested_options = dict(self.options)
+        if model_config.get("uses_responses") and suggested_options.get(
+            CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
+        ) not in get_reasoning_effort_options(chat_model):
+            suggested_options[CONF_REASONING_EFFORT] = DEFAULT_REASONING_EFFORT
 
         schema: dict[Any, Any] = {}
 
@@ -635,7 +650,7 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=opt, label=opt.capitalize())
-                        for opt in REASONING_EFFORT_OPTIONS
+                        for opt in get_reasoning_effort_options(chat_model)
                     ],
                     mode=SelectSelectorMode.DROPDOWN,
                 )
@@ -679,6 +694,6 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         return self.async_show_form(
             step_id="advanced",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(schema), self.options
+                vol.Schema(schema), suggested_options
             ),
         )

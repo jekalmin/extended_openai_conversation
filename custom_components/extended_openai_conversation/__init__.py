@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -27,6 +27,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import get_authenticated_client
+from .responses import clear_native_history
 from .services import async_setup_services
 from .template import async_setup_templates, async_unload_templates
 
@@ -83,7 +84,15 @@ async def async_setup_entry(
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload OpenAI."""
     await async_unload_templates(hass)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    entity_registry = er.async_get(hass)
+    agent_ids = {
+        entity.entity_id
+        for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id)
+    }
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        clear_native_history(hass, agent_ids)
+    return unloaded
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
