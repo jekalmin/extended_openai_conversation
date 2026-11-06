@@ -14,7 +14,8 @@ dev = [
     "pytest",
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.2.0",
-    "pytest-homeassistant-custom-component>=0.13.0",
+    "pytest-homeassistant==2026.11.0",
+    "jsonpath-python==1.1.6",
 ]
 
 [tool.ruff]
@@ -52,9 +53,10 @@ voluptuous = "vol"
 "homeassistant.util.dt" = "dt_util"
 
 [tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-p homeassistant.const"
+addopts = "-p no:respx -p homeassistant.const"
 
 [tool.mypy]
 python_version = "3.14"

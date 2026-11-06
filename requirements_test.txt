@@ -5,7 +5,7 @@
 # Component dependencies installed dynamically from HA core:
 # - openai_conversation: openai
 # - conversation: hassil, home-assistant-intents
-# - rest: xmltodict
+# - rest: xmltodict (JSONPath dependency declared below)
 # - scrape: beautifulsoup4, lxml
 
 # Testing frameworks
@@ -13,7 +13,11 @@ pytest>=8.0.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
 pytest-timeout>=2.2.0
-pytest-homeassistant-custom-component>=0.12.0
+pytest-homeassistant==2026.11.0
+
+# Required by the REST integration imported by the tests; no longer supplied
+# transitively by pytest-homeassistant-custom-component.
+jsonpath-python==1.1.6
 
 # Schema validation
 voluptuous>=0.13.0
