@@ -15,6 +15,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-timeout>=2.2.0",
     "pytest-homeassistant==2026.11.0",
+    "jsonpath-python==1.1.6",
 ]
 
 [tool.ruff]
