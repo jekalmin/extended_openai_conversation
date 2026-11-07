@@ -84,7 +84,7 @@ DEFAULT_CHAT_MODEL = "gpt-5-mini"
 
 MODEL_TOKEN_PARAMETER_SUPPORT = (
     {
-        "pattern": r"(^|-)(gpt-4o|gpt-5|o1|o3|o4)",
+        "pattern": r"(^|-)(gpt-4o|gpt-5|gpt-6|o1|o3|o4)",
         "token_param": "max_completion_tokens",
     },
 )
@@ -242,12 +242,25 @@ CONF_SERVICE_TIER = "service_tier"
 DEFAULT_SERVICE_TIER = "flex"
 SERVICE_TIER_OPTIONS = ["auto", "default", "flex", "priority"]
 
-# Reasoning Effort options (for o1, o3, o4, gpt-5 models)
+# Reasoning Effort options (for o1, o3, o4, gpt-5, gpt-6 models)
+# Supported values are model dependent (e.g. "none", "xhigh" and "max" are GPT-6 only)
 CONF_REASONING_EFFORT = "reasoning_effort"
 CONF_EXTRA_BODY = "extra_body"
 DEFAULT_REASONING_EFFORT = "low"
 DEFAULT_EXTRA_BODY = ""
-REASONING_EFFORT_OPTIONS = ["low", "medium", "high"]
+REASONING_EFFORT_OPTIONS = ["none", "low", "medium", "high", "xhigh", "max"]
+
+# Model type override, for deployment names that don't match MODEL_CONFIG_PATTERNS
+CONF_MODEL_TYPE = "model_type"
+MODEL_TYPE_AUTO = "auto"
+MODEL_TYPE_STANDARD = "standard"
+MODEL_TYPE_REASONING = "reasoning"
+MODEL_TYPES = [
+    {"key": MODEL_TYPE_AUTO, "label": "Auto-detect from model name"},
+    {"key": MODEL_TYPE_STANDARD, "label": "Standard"},
+    {"key": MODEL_TYPE_REASONING, "label": "Reasoning"},
+]
+DEFAULT_MODEL_TYPE = MODEL_TYPE_AUTO
 
 SERVICE_QUERY_IMAGE = "query_image"
 
@@ -268,6 +281,16 @@ DEFAULT_MODEL_CONFIG = {
     "supports_service_tier": False,
 }
 
+# Configuration for reasoning models (no sampling parameters)
+REASONING_MODEL_CONFIG = {
+    "supports_top_p": False,
+    "supports_temperature": False,
+    "supports_max_tokens": False,
+    "supports_max_completion_tokens": True,
+    "supports_reasoning_effort": True,
+    "supports_service_tier": False,
+}
+
 # Pattern-based model configurations
 # Each entry: {"pattern": regex_string, "config": config_dict}
 # Patterns are matched in order; first match wins
@@ -283,6 +306,11 @@ MODEL_CONFIG_PATTERNS = [
             "supports_reasoning_effort": True,
             "supports_service_tier": True,
         },
+    },
+    # GPT-6 reasoning models (gpt-6, gpt-6.1, gpt-6-luna, etc.)
+    {
+        "pattern": r"^gpt-6",
+        "config": REASONING_MODEL_CONFIG,
     },
 ]
 

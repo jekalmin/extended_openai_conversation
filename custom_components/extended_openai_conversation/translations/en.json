@@ -39,9 +39,12 @@
                         "attach_username": "Attach Username to Message",
                         "context_threshold": "Context Threshold",
                         "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+                        "model_type": "Model type",
                         "advanced_options": "Advanced Options"
                     },
-                    "data_description": {}
+                    "data_description": {
+                        "model_type": "Auto-detect uses the model name. Choose Reasoning or Standard when the name is not recognized, e.g. an Azure deployment name."
+                    }
                 },
                 "advanced": {
                     "title": "Advanced Options",
@@ -70,8 +73,12 @@
                     "data": {
                         "name": "[%key:common::config_flow::data::name%]",
                         "chat_model": "Model",
+                        "model_type": "Model type",
                         "max_tokens": "Maximum tokens to return in response",
                         "advanced_options": "Advanced options"
+                    },
+                    "data_description": {
+                        "model_type": "Auto-detect uses the model name. Choose Reasoning or Standard when the name is not recognized, e.g. an Azure deployment name."
                     }
                 },
                 "advanced": {

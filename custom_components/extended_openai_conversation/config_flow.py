@@ -46,6 +46,7 @@ from .const import (
     CONF_FUNCTION_TOOLS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
+    CONF_MODEL_TYPE,
     CONF_ORGANIZATION,
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
@@ -70,6 +71,7 @@ from .const import (
     DEFAULT_FOLLOW_REDIRECTS,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_TYPE,
     DEFAULT_NAME,
     DEFAULT_PROMPT,
     DEFAULT_REASONING_EFFORT,
@@ -79,6 +81,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
     DOMAIN,
+    MODEL_TYPES,
     REASONING_EFFORT_OPTIONS,
     SERVICE_TIER_OPTIONS,
 )
@@ -110,6 +113,16 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
             )
         ),
     }
+)
+
+MODEL_TYPE_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            SelectOptionDict(value=model_type["key"], label=model_type["label"])
+            for model_type in MODEL_TYPES
+        ],
+        mode=SelectSelectorMode.DROPDOWN,
+    )
 )
 
 DEFAULT_CONF_FUNCTION_TOOLS_STR = yaml.dump(
@@ -325,7 +338,8 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
 
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
-        model_config = get_model_config(chat_model)
+        model_type = (self._temp_data or {}).get(CONF_MODEL_TYPE, DEFAULT_MODEL_TYPE)
+        model_config = get_model_config(chat_model, model_type)
 
         schema: dict[Any, Any] = {}
 
@@ -437,6 +451,10 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
                 CONF_CHAT_MODEL,
                 default=DEFAULT_CHAT_MODEL,
             ): str,
+            vol.Optional(
+                CONF_MODEL_TYPE,
+                default=DEFAULT_MODEL_TYPE,
+            ): MODEL_TYPE_SELECTOR,
             vol.Optional(
                 CONF_MAX_TOKENS,
                 default=DEFAULT_MAX_TOKENS,
@@ -562,6 +580,10 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
                     default=DEFAULT_CHAT_MODEL,
                 ): str,
                 vol.Optional(
+                    CONF_MODEL_TYPE,
+                    default=DEFAULT_MODEL_TYPE,
+                ): MODEL_TYPE_SELECTOR,
+                vol.Optional(
                     CONF_MAX_TOKENS,
                     default=DEFAULT_MAX_TOKENS,
                 ): int,
@@ -602,7 +624,8 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
 
         # Build schema for advanced options based on selected model
         chat_model = (self._temp_data or {}).get(CONF_CHAT_MODEL, DEFAULT_CHAT_MODEL)
-        model_config = get_model_config(chat_model)
+        model_type = (self._temp_data or {}).get(CONF_MODEL_TYPE, DEFAULT_MODEL_TYPE)
+        model_config = get_model_config(chat_model, model_type)
 
         schema: dict[Any, Any] = {}
 

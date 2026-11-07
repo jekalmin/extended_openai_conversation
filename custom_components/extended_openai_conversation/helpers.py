@@ -22,9 +22,13 @@ from homeassistant.helpers.template import Template
 from .const import (
     DEFAULT_FOLLOW_REDIRECTS,
     DEFAULT_MODEL_CONFIG,
+    DEFAULT_MODEL_TYPE,
     DEFAULT_TOKEN_PARAM,
     MODEL_CONFIG_PATTERNS,
     MODEL_TOKEN_PARAMETER_SUPPORT,
+    MODEL_TYPE_REASONING,
+    MODEL_TYPE_STANDARD,
+    REASONING_MODEL_CONFIG,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,8 +37,16 @@ _LOGGER = logging.getLogger(__name__)
 AZURE_DOMAIN_PATTERN = r"\.(openai\.azure\.com|azure-api\.net|services\.ai\.azure\.com)"
 
 
-def get_model_config(model: str) -> dict[str, bool]:
+def get_model_config(
+    model: str, model_type: str = DEFAULT_MODEL_TYPE
+) -> dict[str, bool]:
     """Get model-specific parameter configuration."""
+    # Explicit override for model names that patterns can't detect (e.g. Azure deployments)
+    if model_type == MODEL_TYPE_STANDARD:
+        return DEFAULT_MODEL_CONFIG
+    if model_type == MODEL_TYPE_REASONING:
+        return dict(REASONING_MODEL_CONFIG)
+
     # Check patterns in order; first match wins
     for entry in MODEL_CONFIG_PATTERNS:
         pattern = str(entry["pattern"])

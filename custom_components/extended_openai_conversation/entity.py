@@ -32,6 +32,7 @@ from .const import (
     CONF_EXTRA_BODY,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
+    CONF_MODEL_TYPE,
     CONF_REASONING_EFFORT,
     CONF_SERVICE_TIER,
     CONF_SHORTEN_TOOL_CALL_ID,
@@ -43,6 +44,7 @@ from .const import (
     DEFAULT_EXTRA_BODY,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_TYPE,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_SERVICE_TIER,
     DEFAULT_SHORTEN_TOOL_CALL_ID,
@@ -245,7 +247,9 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
         )
 
         # Get model-specific configuration
-        model_config = get_model_config(model)
+        model_config = get_model_config(
+            model, options.get(CONF_MODEL_TYPE, DEFAULT_MODEL_TYPE)
+        )
 
         messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
 
