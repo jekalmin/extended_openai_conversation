@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from custom_components.extended_openai_conversation import helpers
 
 
@@ -88,3 +90,34 @@ class TestGetAuthenticatedClient:
 
         mock_create.assert_called_once_with(hass, follow_redirects=True)
         assert mock_azure.call_args.kwargs["http_client"] is redirect_client
+
+
+class TestGetModelConfig:
+    """Test model parameter configuration."""
+
+    @pytest.mark.parametrize("model", ["gpt-6", "gpt-6.1-sol", "gpt-6-luna"])
+    def test_gpt6_is_reasoning_model(self, model):
+        """GPT-6 models use reasoning parameters."""
+        config = helpers.get_model_config(model)
+
+        assert config["supports_max_completion_tokens"]
+        assert config["supports_reasoning_effort"]
+        assert not config["supports_max_tokens"]
+        assert not config["supports_temperature"]
+        assert not config["supports_top_p"]
+
+    def test_model_type_reasoning_overrides_name(self):
+        """A custom deployment name can be forced to reasoning parameters."""
+        assert helpers.get_model_config("my-deployment", "reasoning") == (
+            helpers.get_model_config("gpt-6")
+        )
+
+    def test_model_type_standard_overrides_name(self):
+        """A reasoning model name can be forced to standard parameters."""
+        assert helpers.get_model_config("gpt-5", "standard") == (
+            helpers.get_model_config("gpt-4o")
+        )
+
+    def test_get_token_param_for_gpt6(self):
+        """GPT-6 uses max_completion_tokens for query_image."""
+        assert helpers.get_token_param_for_model("gpt-6.1") == "max_completion_tokens"
