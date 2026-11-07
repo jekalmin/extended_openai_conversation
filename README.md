@@ -66,6 +66,8 @@ Options include [OpenAI Conversation](https://www.home-assistant.io/integrations
 - `Functions`: A list of mappings of function spec to function.
   - `spec`: Function which would be passed to [functions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-functions) of [chat API](https://platform.openai.com/docs/api-reference/chat/create).
   - `function`: function that will be called.
+- `Model Type`: `auto` (default) detects reasoning models (o1, o3, o4, gpt-5, gpt-6) from the model name. Choose `reasoning` or `standard` when the name isn't recognized, e.g. an Azure deployment name.
+- `API Mode` (Advanced Options): `Chat Completions` (default) or `Responses`. Use `Responses` for models that only allow function calling with reasoning on the [Responses API](https://platform.openai.com/docs/api-reference/responses), such as GPT-6 reasoning models on Azure OpenAI (e.g. `API Mode`: `Responses`, `Reasoning Effort`: `none` for fast voice control). See [Configuration](docs/configuration.mdx) for details.
 
 
 | Edit Assist                                                                                                                                  | Options                                                                                                                                                                       |

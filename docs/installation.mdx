@@ -110,7 +110,7 @@ description: "Install Extended OpenAI Conversation via HACS or manually"
     **Recommended models:** `gpt-4o-mini` (balanced), `gpt-4o` (capable), `gpt-5-mini` (default)
 
     <Note>
-    Reasoning models (o1, o3, o4, gpt-5) do not support `temperature` or `top_p`. Those fields are hidden automatically and replaced with `Reasoning Effort`.
+    Reasoning models (o1, o3, o4, gpt-5, gpt-6) do not support `temperature` or `top_p`. Those fields are hidden automatically and replaced with `Reasoning Effort`.
     </Note>
   </Tab>
 
@@ -160,6 +160,22 @@ description: "Install Extended OpenAI Conversation via HACS or manually"
 
     <Note>
     Azure API Management domains (`azure-api.net`, `services.ai.azure.com`) are also supported in addition to `cognitiveservices.azure.com`.
+    </Note>
+
+    #### Example: GPT-6 reasoning models
+
+    GPT-6 reasoning deployments (e.g. `gpt-6.1-sol`) reject function calling on Chat Completions while reasoning is enabled. Use the Responses API instead:
+
+    | Field | Value |
+    |---|---|
+    | API Version | `2025-04-01-preview` or later |
+    | Model | Your deployment name (e.g. `gpt-6-luna`) |
+    | Model Type | `auto` if the deployment name starts with `gpt-6`, otherwise `reasoning` |
+    | Advanced Options → API Mode | `Responses` |
+    | Advanced Options → Reasoning Effort | `none` for fast voice control, `low` or higher for complex requests |
+
+    <Note>
+    `none` is only accepted by some models (e.g. `gpt-6-luna`, `gpt-6.1-terra`). For models that reject it, such as `gpt-6.1-sol`, use `low`. Reasoning tokens count toward **Max Tokens**, so increase it (e.g. `2000`) when using higher reasoning effort.
     </Note>
   </Tab>
 

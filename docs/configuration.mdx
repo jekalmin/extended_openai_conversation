@@ -111,6 +111,23 @@ Connection settings (API key, base URL, and similar) live on the main integratio
     - Custom models from compatible providers
   </Accordion>
 
+  <Accordion title="Model Type">
+    **Type**: Select
+
+    **Default**: `auto`
+
+    **Options**: `auto`, `standard`, `reasoning`
+
+    Controls which model parameters are sent and shown in Advanced Options:
+    - `auto`: Detect from the model name. Names starting with `o1`, `o3`, `o4`, `gpt-5` or `gpt-6` are reasoning models.
+    - `standard`: Send `max_tokens`, `temperature` and `top_p`.
+    - `reasoning`: Send `max_completion_tokens` and `reasoning_effort` instead.
+
+    <Tip>
+    Azure OpenAI deployment names are arbitrary. If your deployment name doesn't start with the model name (e.g. `voice-assistant` for a `gpt-6.1` deployment), set this to `reasoning`.
+    </Tip>
+  </Accordion>
+
   <Accordion title="Max Tokens">
     **Type**: Integer
 
@@ -119,7 +136,7 @@ Connection settings (API key, base URL, and similar) live on the main integratio
     Maximum number of tokens in the AI response. Controls response length and API costs.
 
     <Note>
-    For o1/o3/o4/gpt-5 models, this becomes `max_completion_tokens`.
+    For o1/o3/o4/gpt-5/gpt-6 models, this becomes `max_completion_tokens`. In the Responses API mode, it is sent as `max_output_tokens`.
     </Note>
   </Accordion>
 
@@ -195,6 +212,24 @@ Connection settings (API key, base URL, and similar) live on the main integratio
 Enable **Advanced Options** in the configuration to access these model-specific parameters. The available options depend on the selected model.
 
 <AccordionGroup>
+  <Accordion title="API Mode">
+    **Type**: Select
+
+    **Default**: `Chat Completions`
+
+    **Options**: `Chat Completions`, `Responses`
+
+    Selects the OpenAI API used for requests:
+    - `Chat Completions`: Calls `/chat/completions`. Works with OpenAI, Azure OpenAI and most OpenAI-compatible servers.
+    - `Responses`: Calls the [Responses API](https://platform.openai.com/docs/api-reference/responses) (`/responses`) with streaming and function calling. Requests are sent with `store=false` and the conversation history is sent on every request, just like Chat Completions.
+
+    Use `Responses` for models that only allow function calling with reasoning on the Responses API, such as GPT-6 reasoning models on Azure OpenAI, which otherwise fail with `Use /v1/responses or set reasoning_effort to none`.
+
+    <Note>
+    Functions, skills, history truncation and events work the same in both modes. Most OpenAI-compatible servers only implement Chat Completions.
+    </Note>
+  </Accordion>
+
   <Accordion title="Top P">
     **Type**: Number (0-1, step 0.05)
 
@@ -205,7 +240,7 @@ Enable **Advanced Options** in the configuration to access these model-specific 
     Nucleus sampling parameter. Controls diversity via nucleus sampling. Lower values make responses more focused and deterministic.
 
     <Info>
-    Not available for reasoning models (o1, o3, o4, gpt-5).
+    Not available for reasoning models (o1, o3, o4, gpt-5, gpt-6).
     </Info>
   </Accordion>
 
@@ -223,7 +258,7 @@ Enable **Advanced Options** in the configuration to access these model-specific 
     - `2.0` - Maximum creativity
 
     <Info>
-    Not available for reasoning models (o1, o3, o4, gpt-5).
+    Not available for reasoning models (o1, o3, o4, gpt-5, gpt-6).
     </Info>
   </Accordion>
 
@@ -232,17 +267,19 @@ Enable **Advanced Options** in the configuration to access these model-specific 
 
     **Default**: `low`
 
-    **Options**: `low`, `medium`, `high`
+    **Options**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
 
-    **Available for**: Reasoning models (o1, o3, o4, gpt-5)
+    **Available for**: Reasoning models (o1, o3, o4, gpt-5, gpt-6)
 
     Controls the reasoning depth for reasoning models:
+    - `none`: No reasoning, fastest responses
     - `low`: Faster responses, basic reasoning
     - `medium`: Balanced reasoning depth
     - `high`: Deep reasoning, slower responses
+    - `xhigh`, `max`: Deepest reasoning, slowest responses
 
     <Note>
-    Higher effort increases response time and token usage.
+    Higher effort increases response time and token usage. Supported values depend on the model: `none`, `xhigh` and `max` are only accepted by some GPT-6 models (e.g. `gpt-6-luna` and `gpt-6.1-terra` accept `none`, `gpt-6.1-sol` does not).
     </Note>
   </Accordion>
 
