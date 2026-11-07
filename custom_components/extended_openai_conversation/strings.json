@@ -49,6 +49,7 @@
         "advanced": {
           "title": "Advanced Options",
           "data": {
+            "api_mode": "API mode",
             "temperature": "Temperature",
             "top_p": "Top P",
             "reasoning_effort": "Reasoning effort",
@@ -57,6 +58,7 @@
             "shorten_tool_call_id": "Shorten tool call IDs"
           },
           "data_description": {
+            "api_mode": "Chat Completions is the default. Use Responses for models that only support function calling with reasoning on the Responses API (e.g. GPT-6 reasoning models on Azure).",
             "shorten_tool_call_id": "Required for Mistral AI cloud API compatibility. Enable only if your provider requires short (9-character) tool call IDs. Keep disabled for OpenAI and most other providers."
           }
         }
@@ -84,6 +86,7 @@
         "advanced": {
           "title": "Advanced options",
           "data": {
+            "api_mode": "API mode",
             "temperature": "Temperature",
             "top_p": "Top P",
             "reasoning_effort": "Reasoning effort",
@@ -92,6 +95,7 @@
             "shorten_tool_call_id": "Shorten tool call IDs"
           },
           "data_description": {
+            "api_mode": "Chat Completions is the default. Use Responses for models that only support function calling with reasoning on the Responses API (e.g. GPT-6 reasoning models on Azure).",
             "shorten_tool_call_id": "Required for Mistral AI cloud API compatibility. Enable only if your provider requires short (9-character) tool call IDs. Keep disabled for OpenAI and most other providers."
           }
         }

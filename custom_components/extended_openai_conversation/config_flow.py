@@ -33,8 +33,10 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    API_MODES,
     API_PROVIDERS,
     CONF_ADVANCED_OPTIONS,
+    CONF_API_MODE,
     CONF_API_PROVIDER,
     CONF_API_VERSION,
     CONF_BASE_URL,
@@ -60,6 +62,7 @@ from .const import (
     DEFAULT_ADVANCED_OPTIONS,
     DEFAULT_AI_TASK_NAME,
     DEFAULT_AI_TASK_OPTIONS,
+    DEFAULT_API_MODE,
     DEFAULT_API_PROVIDER,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_BASE_URL,
@@ -342,6 +345,22 @@ class ExtendedOpenAISubentryFlowHandler(ConfigSubentryFlow):
         model_config = get_model_config(chat_model, model_type)
 
         schema: dict[Any, Any] = {}
+
+        # Add API mode (Chat Completions or Responses API)
+        schema[
+            vol.Optional(
+                CONF_API_MODE,
+                default=DEFAULT_API_MODE,
+            )
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(value=api_mode["key"], label=api_mode["label"])
+                    for api_mode in API_MODES
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
 
         # Add top_p if supported
         if model_config["supports_top_p"]:
@@ -628,6 +647,22 @@ class ExtendedOpenAIAITaskSubentryFlowHandler(ConfigSubentryFlow):
         model_config = get_model_config(chat_model, model_type)
 
         schema: dict[Any, Any] = {}
+
+        # Add API mode (Chat Completions or Responses API)
+        schema[
+            vol.Optional(
+                CONF_API_MODE,
+                default=DEFAULT_API_MODE,
+            )
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    SelectOptionDict(value=api_mode["key"], label=api_mode["label"])
+                    for api_mode in API_MODES
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
 
         # Add top_p if supported
         if model_config["supports_top_p"]:

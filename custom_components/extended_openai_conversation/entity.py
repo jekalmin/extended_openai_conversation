@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from openai import AsyncClient, AsyncStream
 from openai.types.chat import (
@@ -14,18 +14,35 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionToolParam,
 )
+from openai.types.responses import (
+    EasyInputMessageParam,
+    FunctionToolParam,
+    ResponseCompletedEvent,
+    ResponseErrorEvent,
+    ResponseFailedEvent,
+    ResponseFunctionToolCall,
+    ResponseFunctionToolCallParam,
+    ResponseIncompleteEvent,
+    ResponseInputParam,
+    ResponseOutputItemDoneEvent,
+    ResponseStreamEvent,
+    ResponseTextDeltaEvent,
+)
+from openai.types.responses.response_input_param import FunctionCallOutput
 import orjson
 import voluptuous as vol
 from voluptuous_openapi import convert
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.exceptions import TemplateError
+from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import device_registry as dr, llm, template
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
 from .const import (
+    API_MODE_RESPONSES,
+    CONF_API_MODE,
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
@@ -38,6 +55,7 @@ from .const import (
     CONF_SHORTEN_TOOL_CALL_ID,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    DEFAULT_API_MODE,
     DEFAULT_CHAT_MODEL,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
@@ -199,6 +217,68 @@ def _convert_content_to_param(
     return messages
 
 
+def _convert_content_to_responses_input(
+    chat_content: list[conversation.Content],
+    shorten_tool_call_id: bool = False,
+) -> tuple[str | None, ResponseInputParam]:
+    """Convert chat log content to Responses API instructions and input items."""
+    instructions: list[str] = []
+    items: ResponseInputParam = []
+
+    for content in chat_content:
+        if content.role == "system":
+            if content.content:
+                instructions.append(content.content)
+        elif content.role == "user":
+            items.append(
+                EasyInputMessageParam(
+                    type="message", role="user", content=content.content
+                )
+            )
+        elif content.role == "assistant":
+            if content.content:
+                items.append(
+                    EasyInputMessageParam(
+                        type="message", role="assistant", content=content.content
+                    )
+                )
+            items.extend(
+                ResponseFunctionToolCallParam(
+                    type="function_call",
+                    call_id=_shorten_tool_call_id(tool_call.id)
+                    if shorten_tool_call_id
+                    else tool_call.id,
+                    name=tool_call.tool_name,
+                    arguments=json.dumps(tool_call.tool_args),
+                )
+                for tool_call in content.tool_calls or []
+            )
+        elif content.role == "tool_result":
+            items.append(
+                FunctionCallOutput(
+                    type="function_call_output",
+                    call_id=_shorten_tool_call_id(content.tool_call_id)
+                    if shorten_tool_call_id
+                    else content.tool_call_id,
+                    output=orjson.dumps(_tool_result_data(content)).decode(),
+                )
+            )
+
+    return "\n\n".join(instructions) or None, items
+
+
+def _format_responses_tool(spec: dict[str, Any]) -> FunctionToolParam:
+    """Convert a Chat Completions function spec to a Responses API function tool."""
+    # Responses API function tools are strict by default, Chat Completions are not
+    tool = {
+        "parameters": {"type": "object", "properties": {}},
+        "strict": False,
+        **spec,
+        "type": "function",
+    }
+    return cast(FunctionToolParam, tool)
+
+
 class ExtendedOpenAIBaseLLMEntity(Entity):
     """Extended OpenAI base entity."""
 
@@ -251,27 +331,42 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             model, options.get(CONF_MODEL_TYPE, DEFAULT_MODEL_TYPE)
         )
 
-        messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
+        use_responses_api = (
+            options.get(CONF_API_MODE, DEFAULT_API_MODE) == API_MODE_RESPONSES
+        )
 
         # Build functions list from custom functions
-        tools: list[ChatCompletionToolParam] = [
-            ChatCompletionToolParam(
-                type="function",
-                function=func_spec["spec"],
-            )
-            for func_spec in function_tools
-        ]
+        tools: list[ChatCompletionToolParam] | list[FunctionToolParam]
+        if use_responses_api:
+            tools = [
+                _format_responses_tool(func_spec["spec"])
+                for func_spec in function_tools
+            ]
+        else:
+            tools = [
+                ChatCompletionToolParam(
+                    type="function",
+                    function=func_spec["spec"],
+                )
+                for func_spec in function_tools
+            ]
 
         # Build API parameters based on model configuration
         api_kwargs: dict[str, Any] = {
             "model": model,
             "stream": True,
-            "stream_options": {"include_usage": True},
         }
+        if use_responses_api:
+            # The full conversation is sent on every request
+            api_kwargs["store"] = False
+        else:
+            api_kwargs["stream_options"] = {"include_usage": True}
 
         # Add token limit parameter based on model support
         max_tokens = options.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
-        if model_config["supports_max_completion_tokens"]:
+        if use_responses_api:
+            api_kwargs["max_output_tokens"] = max_tokens
+        elif model_config["supports_max_completion_tokens"]:
             api_kwargs["max_completion_tokens"] = max_tokens
         elif model_config["supports_max_tokens"]:
             api_kwargs["max_tokens"] = max_tokens
@@ -286,11 +381,15 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
                 CONF_TEMPERATURE, DEFAULT_TEMPERATURE
             )
 
-        # Add reasoning_effort if supported (o1, o3, o4, gpt-5 models)
+        # Add reasoning_effort if supported (o1, o3, o4, gpt-5, gpt-6 models)
         if model_config.get("supports_reasoning_effort"):
-            api_kwargs["reasoning_effort"] = options.get(
+            reasoning_effort = options.get(
                 CONF_REASONING_EFFORT, DEFAULT_REASONING_EFFORT
             )
+            if use_responses_api:
+                api_kwargs["reasoning"] = {"effort": reasoning_effort}
+            else:
+                api_kwargs["reasoning_effort"] = reasoning_effort
 
         # Add service_tier if supported (o3, o4, gpt-5 models)
         if model_config.get("supports_service_tier"):
@@ -317,14 +416,18 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
         # Add structured output format if provided
         if structure is not None:
-            api_kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": slugify(structure_name),
-                    "strict": True,
-                    "schema": _format_structured_output(structure, chat_log.llm_api),
-                },
+            json_schema = {
+                "name": slugify(structure_name),
+                "strict": True,
+                "schema": _format_structured_output(structure, chat_log.llm_api),
             }
+            if use_responses_api:
+                api_kwargs["text"] = {"format": {"type": "json_schema", **json_schema}}
+            else:
+                api_kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": json_schema,
+                }
 
         # Add tools if available
         tool_kwargs: dict[str, Any] = {}
@@ -339,19 +442,46 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if tools and 0 <= max_function_calls <= n_requests:
                 tool_kwargs["tool_choice"] = "none"
 
-            _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+            deltas: AsyncGenerator[
+                conversation.AssistantContentDeltaDict
+                | conversation.ToolResultContentDeltaDict
+            ]
+            if use_responses_api:
+                instructions, input_items = _convert_content_to_responses_input(
+                    chat_log.content, shorten_tool_call_id
+                )
+                _LOGGER.info(
+                    "Prompt for %s: %s",
+                    model,
+                    json.dumps({"instructions": instructions, "input": input_items}),
+                )
+                if instructions:
+                    api_kwargs["instructions"] = instructions
 
-            stream = await self._client.chat.completions.create(
-                messages=messages,
-                **api_kwargs,
-                **tool_kwargs,
-            )
+                responses_stream = await self._client.responses.create(
+                    input=input_items,
+                    **api_kwargs,
+                    **tool_kwargs,
+                )
+                deltas = self._transform_responses_stream(chat_log, responses_stream)
+            else:
+                messages = _convert_content_to_param(
+                    chat_log.content, shorten_tool_call_id
+                )
+                _LOGGER.info("Prompt for %s: %s", model, json.dumps(messages))
+
+                stream = await self._client.chat.completions.create(
+                    messages=messages,
+                    **api_kwargs,
+                    **tool_kwargs,
+                )
+                deltas = self._transform_stream(chat_log, stream)
 
             # Process stream and collect tool calls
             pending_tool_calls: list[llm.ToolInput] = []
 
             async for content in chat_log.async_add_delta_content_stream(
-                self.entity_id, self._transform_stream(chat_log, stream)
+                self.entity_id, deltas
             ):
                 if (
                     isinstance(content, conversation.AssistantContent)
@@ -385,9 +515,6 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
                 chat_log.async_add_assistant_content_without_tools(tool_result_content)
 
-            # Update messages for next iteration
-            messages = _convert_content_to_param(chat_log.content, shorten_tool_call_id)
-
             # Check if we need to continue (if there are pending tool results)
             if not chat_log.unresponded_tool_results:
                 break
@@ -414,18 +541,12 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
             if not chunk.choices:
                 # Track usage from final chunk if available
                 if chunk.usage:
-                    chat_log.async_trace(
-                        {
-                            "stats": {
-                                "input_tokens": chunk.usage.prompt_tokens,
-                                "output_tokens": chunk.usage.completion_tokens,
-                            }
-                        }
+                    await self._async_handle_usage(
+                        chat_log,
+                        chunk.usage.prompt_tokens,
+                        chunk.usage.completion_tokens,
+                        chunk.usage.total_tokens,
                     )
-                    if chunk.usage.total_tokens > self.subentry.data.get(
-                        CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
-                    ):
-                        await self._truncate_message_history(chat_log)
                 continue
 
             choice = chunk.choices[0]
@@ -491,6 +612,91 @@ class ExtendedOpenAIBaseLLMEntity(Entity):
 
             if choice.finish_reason == "stop":
                 break
+
+    async def _transform_responses_stream(
+        self,
+        chat_log: conversation.ChatLog,
+        result: AsyncStream[ResponseStreamEvent],
+    ) -> AsyncGenerator[
+        conversation.AssistantContentDeltaDict | conversation.ToolResultContentDeltaDict
+    ]:
+        """Transform OpenAI Responses API stream to Home Assistant format."""
+        first_event = True
+
+        async for event in result:
+            _LOGGER.debug("Received event: %s", event)
+
+            # Signal new assistant message on first event
+            if first_event:
+                yield {"role": "assistant"}
+                first_event = False
+
+            if isinstance(event, ResponseTextDeltaEvent):
+                if event.delta:
+                    yield {"content": event.delta}
+            elif isinstance(event, ResponseOutputItemDoneEvent):
+                if isinstance(event.item, ResponseFunctionToolCall):
+                    arguments = event.item.arguments or "{}"
+                    try:
+                        args = json.loads(arguments)
+                    except json.JSONDecodeError as err:
+                        raise ParseArgumentsFailed(arguments) from err
+                    yield {
+                        "tool_calls": [
+                            llm.ToolInput(
+                                id=event.item.call_id,
+                                tool_name=event.item.name,
+                                tool_args=args,
+                                external=True,  # Mark as external so ChatLog doesn't try to execute
+                            )
+                        ]
+                    }
+            elif isinstance(event, ResponseCompletedEvent | ResponseIncompleteEvent):
+                if event.response.usage:
+                    await self._async_handle_usage(
+                        chat_log,
+                        event.response.usage.input_tokens,
+                        event.response.usage.output_tokens,
+                        event.response.usage.total_tokens,
+                    )
+                if isinstance(event, ResponseIncompleteEvent):
+                    details = event.response.incomplete_details
+                    reason = details.reason if details else None
+                    if reason == "max_output_tokens":
+                        raise TokenLengthExceededError(
+                            self.subentry.data.get(CONF_MAX_TOKENS, DEFAULT_MAX_TOKENS)
+                        )
+                    raise HomeAssistantError(
+                        f"OpenAI response incomplete: {reason or 'unknown reason'}"
+                    )
+            elif isinstance(event, ResponseFailedEvent):
+                error = event.response.error
+                raise HomeAssistantError(
+                    f"OpenAI response failed: {error.message if error else 'unknown reason'}"
+                )
+            elif isinstance(event, ResponseErrorEvent):
+                raise HomeAssistantError(f"OpenAI response error: {event.message}")
+
+    async def _async_handle_usage(
+        self,
+        chat_log: conversation.ChatLog,
+        input_tokens: int,
+        output_tokens: int,
+        total_tokens: int,
+    ) -> None:
+        """Trace token usage and truncate history above the context threshold."""
+        chat_log.async_trace(
+            {
+                "stats": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                }
+            }
+        )
+        if total_tokens > self.subentry.data.get(
+            CONF_CONTEXT_THRESHOLD, DEFAULT_CONTEXT_THRESHOLD
+        ):
+            await self._truncate_message_history(chat_log)
 
     async def _execute_function_tool(
         self,

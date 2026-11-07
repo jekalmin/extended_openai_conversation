@@ -262,6 +262,16 @@ MODEL_TYPES = [
 ]
 DEFAULT_MODEL_TYPE = MODEL_TYPE_AUTO
 
+# API mode (Chat Completions or Responses API)
+CONF_API_MODE = "api_mode"
+API_MODE_CHAT_COMPLETIONS = "chat_completions"
+API_MODE_RESPONSES = "responses"
+API_MODES = [
+    {"key": API_MODE_CHAT_COMPLETIONS, "label": "Chat Completions"},
+    {"key": API_MODE_RESPONSES, "label": "Responses"},
+]
+DEFAULT_API_MODE = API_MODE_CHAT_COMPLETIONS
+
 SERVICE_QUERY_IMAGE = "query_image"
 
 CONF_PAYLOAD_TEMPLATE = "payload_template"
