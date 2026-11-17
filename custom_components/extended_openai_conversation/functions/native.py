@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from functools import partial
 import logging
 import os
 import time
@@ -262,7 +263,9 @@ class NativeFunction(Function):
         start_time = dt_util.as_utc(start_time_parsed)
         end_time = dt_util.as_utc(end_time_parsed)
 
-        return await recorder.get_instance(hass).async_add_executor_job(
+        instance = recorder.get_instance(hass)
+
+        statistics = await instance.async_add_executor_job(
             recorder.statistics.statistics_during_period,
             hass,
             start_time,
@@ -272,6 +275,27 @@ class NativeFunction(Function):
             arguments.get("units"),
             arguments.get("types", {"change"}),
         )
+
+        metadata = await instance.async_add_executor_job(
+            partial(
+                recorder.statistics.get_metadata,
+                hass,
+                statistic_ids=set(statistic_ids),
+            )
+        )
+
+        # Inject unit_of_measurement into each entry so the LLM knows the
+        # actual unit (Wh, kWh, etc.) instead of assuming kWh by default.
+        result: dict[str, Any] = {}
+        for statistic_id, entries in statistics.items():
+            unit: str | None = None
+            if statistic_id in metadata:
+                unit = metadata[statistic_id][1]["unit_of_measurement"]
+            result[statistic_id] = [
+                {**entry, "unit_of_measurement": unit} for entry in entries
+            ]
+
+        return result
 
     def as_utc(
         self, value: str | None, default_value: Any, parse_error_message: str
