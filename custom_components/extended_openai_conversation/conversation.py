@@ -16,13 +16,11 @@ from homeassistant.components.conversation import (
     ConversationEntityFeature,
     ConversationInput,
     ConversationResult,
-    async_get_chat_log,
 )
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import intent, llm, template
-from homeassistant.helpers.chat_session import async_get_chat_session
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
@@ -102,14 +100,6 @@ class ExtendedOpenAIAgentEntity(
         """When entity will be removed from Home Assistant."""
         conversation.async_unset_agent(self.hass, self.entry)
         await super().async_will_remove_from_hass()
-
-    async def async_process(self, user_input: ConversationInput) -> ConversationResult:
-        """Process a sentence."""
-        with (
-            async_get_chat_session(self.hass, user_input.conversation_id) as session,
-            async_get_chat_log(self.hass, session, user_input) as chat_log,
-        ):
-            return await self._async_handle_message(user_input, chat_log)
 
     async def _async_handle_message(
         self,
